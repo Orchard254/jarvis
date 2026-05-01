@@ -130,10 +130,10 @@ class CoreMemory:
         
         # Get relevant episodic memories if query provided
         if query:
-            context['episodic'] = self.episodic.search_similar(query, limit=limit)
+            context['episodic'] = self.episodic.search_sessions(query)[:limit]
             
             # Get relevant semantic memories
-            context['semantic'] = self.semantic.search(query, limit=limit)
+            context['semantic'] = self.semantic.search(query, top_k=limit)
             
             # Get relevant procedural memories (simplified - just return procedure names)
             context['procedural'] = [{'name': name} for name in self.procedural.list_procedures()[:limit]]
@@ -263,24 +263,36 @@ class CoreMemory:
         Returns:
             List of relevant memories
         """
-        semantic_results = self.semantic.search(query, limit=limit)
-        episodic_results = self.episodic.search_similar(query, limit=limit)
+        semantic_results = self.semantic.search(query, top_k=limit)
+        episodic_results = self.episodic.search_sessions(query)[:limit]
         
         # Combine and rank results
         all_results = []
         for r in semantic_results:
-            all_results.append({
-                'type': 'semantic',
-                'content': r.get('fact', r.get('text', '')),
-                'relevance': r.get('similarity', 0.0)
-            })
-        
+            # semantic.search returns list of (fact_dict, score) tuples
+            if isinstance(r, tuple):
+                fact_dict, score = r
+                all_results.append({
+                    'type': 'semantic',
+                    'content': fact_dict.get('content', fact_dict.get('fact', '')),
+                    'relevance': score
+                })
+            else:
+                all_results.append({
+                    'type': 'semantic',
+                    'content': r.get('fact', r.get('text', r.get('content', ''))),
+                    'relevance': r.get('similarity', r.get('score', 0.0))
+                })
+
         for r in episodic_results:
-            all_results.append({
-                'type': 'episodic',
-                'content': r.get('summary', r.get('goal', '')),
-                'relevance': r.get('similarity', 0.0)
-            })
+            # episodic.search_sessions returns list of dicts with 'session', 'match_count', 'relevance'
+            if isinstance(r, dict):
+                session_data = r.get('full_session', r.get('session', {}))
+                all_results.append({
+                    'type': 'episodic',
+                    'content': session_data.get('summary', r.get('goal', '')),
+                    'relevance': r.get('relevance', 0.0)
+                })
         
         # Sort by relevance
         all_results.sort(key=lambda x: x['relevance'], reverse=True)
@@ -349,7 +361,7 @@ class CoreMemory:
         return {
             'working': {
                 'message_count': len(self.working.messages),
-                'token_estimate': self.working._estimate_tokens()
+                'token_estimate': self.working.get_stats()['estimated_tokens']
             },
             'episodic': {
                 'session_count': len(self.episodic.sessions),
