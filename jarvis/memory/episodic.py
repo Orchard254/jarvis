@@ -16,16 +16,20 @@ class EpisodicMemory:
     Each session is saved as a separate file for easy retrieval.
     """
     
-    def __init__(self, storage_dir: str = None):
+    def __init__(self, storage_dir: str = None, data_dir: str = None):
         """
         Initialize episodic memory storage.
         
         Args:
             storage_dir: Directory to store session files. Defaults to jarvis/memory/episodes
+            data_dir: Alternative way to specify storage directory (for compatibility)
         """
         if storage_dir is None:
-            base_dir = Path(__file__).parent.parent
-            storage_dir = base_dir / 'memory' / 'episodes'
+            if data_dir is not None:
+                storage_dir = Path(data_dir) / 'episodes'
+            else:
+                base_dir = Path(__file__).parent.parent
+                storage_dir = base_dir / 'memory' / 'episodes'
         
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)

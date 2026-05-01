@@ -85,17 +85,17 @@ class Orchestrator:
         # Initialize core components
         logger.info("Initializing JARVIS orchestrator...")
         
-        # Tool registry
-        self.tool_registry = ToolRegistry(config)
+        # Tool registry (singleton, doesn't take config)
+        self.tool_registry = ToolRegistry.get_instance()
         self.tool_registry.load_all_tools()
         
         # Skill registry
-        self.skill_registry = SkillRegistry(config)
+        self.skill_registry = SkillRegistry()
         self.skill_registry.load_skills()
         
         # Safety systems
-        self.tool_guard = ToolGuard(config)
-        self.audit_log = AuditLog(config)
+        self.tool_guard = ToolGuard()
+        self.audit_log = AuditLog()
         
         # Memory system
         self.memory = CoreMemory(config)

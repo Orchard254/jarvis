@@ -15,9 +15,13 @@ import argparse
 import logging
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.absolute()
-sys.path.insert(0, str(project_root))
+# Add project root to path correctly
+current_file = Path(__file__).resolve()
+project_root = current_file.parent  # This is the jarvis directory
+parent_dir = project_root.parent    # This is the parent of jarvis
+
+# Insert parent directory so we can import 'jarvis' as a package
+sys.path.insert(0, str(parent_dir))
 
 from jarvis.core.orchestrator import Orchestrator, run_orchestrator
 from jarvis.config.config import get_config
