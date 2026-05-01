@@ -208,6 +208,10 @@ class SkillRegistry:
         
         return result
     
+    def load_skills(self) -> int:
+        """Load all built-in skills. Alias for load_builtin_skills."""
+        return self.load_builtin_skills()
+    
     def get_status(self) -> Dict[str, Any]:
         """Get registry status."""
         active_count = sum(

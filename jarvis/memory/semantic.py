@@ -17,16 +17,20 @@ class SemanticMemory:
     Uses simple TF-IDF-like scoring for retrieval (no external dependencies).
     """
     
-    def __init__(self, storage_file: str = None):
+    def __init__(self, storage_file: str = None, data_dir: str = None):
         """
         Initialize semantic memory.
         
         Args:
             storage_file: Path to store facts. Defaults to jarvis/memory/semantic.json
+            data_dir: Alternative way to specify storage directory (for compatibility)
         """
         if storage_file is None:
-            base_dir = Path(__file__).parent.parent
-            storage_file = base_dir / 'memory' / 'semantic.json'
+            if data_dir is not None:
+                storage_file = Path(data_dir) / 'semantic.json'
+            else:
+                base_dir = Path(__file__).parent.parent
+                storage_file = base_dir / 'memory' / 'semantic.json'
         
         self.storage_file = Path(storage_file)
         self.storage_file.parent.mkdir(parents=True, exist_ok=True)

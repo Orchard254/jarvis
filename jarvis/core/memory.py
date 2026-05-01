@@ -37,7 +37,7 @@ class CoreMemory:
         # Initialize memory components
         self.working = WorkingMemory(
             max_messages=config.get('working_memory_max_messages', 20),
-            max_tokens=config.get('working_memory_max_tokens', 4000)
+            max_tokens_estimate=config.get('working_memory_max_tokens', 4000)
         )
         
         data_dir = config.get('data_dir', 'jarvis_data')
@@ -47,7 +47,8 @@ class CoreMemory:
         self.manager = MemoryManagerImpl(
             working=self.working,
             episodic=self.episodic,
-            semantic=self.semantic
+            semantic=self.semantic,
+            procedural=None  # Will be created internally
         )
         
         logger.info("Core memory system initialized")
