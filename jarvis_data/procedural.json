@@ -59,7 +59,117 @@
       "success_rate": 1.0,
       "created_at": "2026-05-01T17:32:52.366703",
       "usage_count": 0
+    },
+    "successful_pattern_1205": {
+      "name": "successful_pattern_1205",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:27:20.893703",
+      "usage_count": 0
+    },
+    "successful_pattern_1721": {
+      "name": "successful_pattern_1721",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:31:07.995576",
+      "usage_count": 0
+    },
+    "successful_pattern_9292": {
+      "name": "successful_pattern_9292",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:31:21.482334",
+      "usage_count": 0
+    },
+    "successful_pattern_5251": {
+      "name": "successful_pattern_5251",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:32:45.601230",
+      "usage_count": 0
+    },
+    "successful_pattern_2050": {
+      "name": "successful_pattern_2050",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:33:08.877180",
+      "usage_count": 0
     }
   },
-  "updated_at": "2026-05-01T17:32:52.366708"
+  "updated_at": "2026-05-01T21:33:08.877186"
 }

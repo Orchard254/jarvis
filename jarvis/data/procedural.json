@@ -1,0 +1,28 @@
+{
+  "open_browser": {
+    "name": "open_browser",
+    "steps": [
+      {
+        "tool": "find_app",
+        "params": {
+          "name": "chrome"
+        }
+      },
+      {
+        "tool": "launch_app",
+        "params": {
+          "app": "chrome"
+        }
+      }
+    ],
+    "context": {
+      "goal": "open application",
+      "app_type": "browser"
+    },
+    "success_count": 0,
+    "failure_count": 0,
+    "last_used": "2026-05-01T21:33:08.874945",
+    "created_at": "2026-05-01T21:33:08.874946",
+    "confidence": 0.5
+  }
+}

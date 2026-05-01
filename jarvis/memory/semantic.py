@@ -56,9 +56,14 @@ class SemanticMemory:
     
     def _save(self) -> None:
         """Save facts to disk."""
+        # Convert sets to lists for JSON serialization
+        vocab_to_save = self.vocabulary
+        if isinstance(vocab_to_save, set):
+            vocab_to_save = list(vocab_to_save)
+        
         data = {
             'facts': self.facts,
-            'vocabulary': self.vocabulary,
+            'vocabulary': vocab_to_save,
             'idf_scores': self.idf_scores,
             'updated_at': datetime.now().isoformat()
         }

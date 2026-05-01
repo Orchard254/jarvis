@@ -1,0 +1,83 @@
+{
+  "facts": {
+    "f17e8c6919da": {
+      "id": "f17e8c6919da",
+      "content": "The user prefers dark mode",
+      "category": "preferences",
+      "metadata": {},
+      "created_at": "2026-05-01T21:33:08.873769",
+      "updated_at": "2026-05-01T21:33:08.873776",
+      "access_count": 0,
+      "last_accessed": null
+    },
+    "94bcaa5331e6": {
+      "id": "94bcaa5331e6",
+      "content": "Python is a programming language",
+      "category": "knowledge",
+      "metadata": {},
+      "created_at": "2026-05-01T21:33:08.874156",
+      "updated_at": "2026-05-01T21:33:08.874162",
+      "access_count": 0,
+      "last_accessed": null
+    },
+    "a26af56450c8": {
+      "id": "a26af56450c8",
+      "content": "User drinks coffee in the morning",
+      "category": "habits",
+      "metadata": {},
+      "created_at": "2026-05-01T21:33:08.877594",
+      "updated_at": "2026-05-01T21:33:08.877599",
+      "access_count": 0,
+      "last_accessed": null
+    },
+    "64c939625264": {
+      "id": "64c939625264",
+      "content": "User drinks coffee",
+      "category": "habits",
+      "metadata": {},
+      "created_at": "2026-05-01T21:31:37.203002",
+      "updated_at": "2026-05-01T21:31:37.203006",
+      "access_count": 0,
+      "last_accessed": null
+    }
+  },
+  "vocabulary": [
+    "programming",
+    "prefers",
+    "in",
+    "the",
+    "user",
+    "a",
+    "dark",
+    "preferences",
+    "is",
+    "python",
+    "language",
+    "coffee",
+    "morning",
+    "drinks",
+    "habits",
+    "knowledge",
+    "mode"
+  ],
+  "idf_scores": {
+    "prefers": 2.386294361119891,
+    "user": 1.2876820724517808,
+    "the": 1.6931471805599454,
+    "dark": 2.386294361119891,
+    "preferences": 2.386294361119891,
+    "mode": 2.386294361119891,
+    "programming": 2.386294361119891,
+    "a": 2.386294361119891,
+    "is": 2.386294361119891,
+    "python": 2.386294361119891,
+    "language": 2.386294361119891,
+    "knowledge": 2.386294361119891,
+    "in": 2.386294361119891,
+    "coffee": 1.6931471805599454,
+    "morning": 2.386294361119891,
+    "drinks": 1.6931471805599454,
+    "habits": 1.6931471805599454
+  },
+  "updated_at": "2026-05-01T21:33:08.877641"
+}
