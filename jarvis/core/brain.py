@@ -257,7 +257,7 @@ class Brain:
         Returns:
             True if tool exists
         """
-        return tool_name in self.tool_registry.tools
+        return self.tool_registry.has_tool(tool_name)
     
     def get_available_tool_names(self) -> List[str]:
         """
@@ -266,7 +266,7 @@ class Brain:
         Returns:
             List of tool names
         """
-        return list(self.tool_registry.tools.keys())
+        return self.tool_registry.get_tool_names()
     
     def _prepare_messages(self, messages: List[Dict], 
                          system_prompt: Optional[str]) -> List[Dict]:
