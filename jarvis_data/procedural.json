@@ -44,7 +44,22 @@
       "success_rate": 1.0,
       "created_at": "2026-05-01T15:20:16.629781",
       "usage_count": 0
+    },
+    "successful_pattern_3901": {
+      "name": "successful_pattern_3901",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T17:32:52.366703",
+      "usage_count": 0
     }
   },
-  "updated_at": "2026-05-01T15:20:16.629789"
+  "updated_at": "2026-05-01T17:32:52.366708"
 }

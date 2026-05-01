@@ -194,11 +194,19 @@ class Brain:
                 tool_results.append(result)
                 
                 # Add tool result to conversation
+                # Handle both Ollama format (nested in 'function') and direct format
+                if 'function' in tool_call:
+                    tool_name = tool_call['function'].get('name', 'unknown')
+                    tool_id = tool_call.get('id', '')
+                else:
+                    tool_name = tool_call.get('name', 'unknown')
+                    tool_id = tool_call.get('id', '')
+                    
                 self.conversation_history.append({
                     'role': 'tool',
-                    'name': tool_call.get('name', 'unknown'),
+                    'name': tool_name,
                     'content': str(result.get('output', result.get('error', 'No output'))),
-                    'tool_call_id': tool_call.get('id', '')
+                    'tool_call_id': tool_id
                 })
             
             # Notify callback
@@ -351,8 +359,16 @@ class Brain:
         Returns:
             Tool execution result
         """
-        tool_name = tool_call.get('name', '')
-        arguments = tool_call.get('arguments', {})
+        # Ollama returns tool_calls in format: {'function': {'name': ..., 'arguments': ...}, 'id': ..., 'type': ...}
+        # But we need to handle both formats
+        if 'function' in tool_call:
+            # Ollama format
+            tool_name = tool_call['function'].get('name', '')
+            arguments = tool_call['function'].get('arguments', {})
+        else:
+            # Direct format
+            tool_name = tool_call.get('name', '')
+            arguments = tool_call.get('arguments', {})
         
         # Validate tool exists
         if not self.validate_tool_name(tool_name):
@@ -368,8 +384,13 @@ class Brain:
         # Execute the tool
         try:
             result = self.tool_registry.execute(tool_name, **arguments)
-            logger.info(f"Executed tool {tool_name}: success={result.get('success', False)}")
-            return result
+            # Convert ToolResult to dict if needed
+            if hasattr(result, 'to_dict'):
+                result_dict = result.to_dict()
+            else:
+                result_dict = result
+            logger.info(f"Executed tool {tool_name}: success={result_dict.get('success', False)}")
+            return result_dict
         except Exception as e:
             logger.error(f"Tool execution failed for {tool_name}: {e}")
             return {
