@@ -367,7 +367,7 @@ class OllamaClient:
 _client: Optional[OllamaClient] = None
 
 
-def get_client(
+def get_ollama_client(
     cloud_url: str = "https://api.ollama.com/api/chat",
     local_url: str = "http://localhost:11434/api/chat",
     api_key: str = "",
@@ -383,3 +383,7 @@ def get_client(
             model=model,
         )
     return _client
+
+
+# Alias for backwards compatibility
+get_client = get_ollama_client
