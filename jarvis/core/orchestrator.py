@@ -19,8 +19,7 @@ from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillRegistry
-from jarvis.safety.tool_guard import ToolGuard
-from jarvis.safety.audit_log import AuditLog
+from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
 from jarvis.perception.intent_classifier import IntentClassifier
 from jarvis.perception.vision import VisionAnalyzer
 from jarvis.reasoning.planner import TaskPlanner
@@ -93,7 +92,9 @@ class Orchestrator:
         self.skill_registry = SkillRegistry()
         self.skill_registry.load_skills()
         
-        # Safety systems
+        # Safety systems - Phase 3 Integration
+        self.input_filter = InputFilter()
+        self.plan_validator = PlanValidator()
         self.tool_guard = ToolGuard()
         self.audit_log = AuditLog()
         
@@ -198,6 +199,28 @@ class Orchestrator:
         self.state['current_activity'] = 'processing_command'
         
         try:
+            # Phase 3 Safety: Input filtering (first safety layer)
+            filter_result = self.input_filter.check(command)
+            if not filter_result.is_safe:
+                logger.warning(f"Input blocked by filter: {filter_result.reason}")
+                self.audit_log.log_security_event(
+                    event_type='input_blocked',
+                    details={
+                        'reason': filter_result.reason,
+                        'blocked_patterns': filter_result.blocked_patterns,
+                        'original_input_length': len(command)
+                    }
+                )
+                return {
+                    'success': False,
+                    'error': 'Input blocked by safety filter',
+                    'response': f"I cannot process that request: {filter_result.reason}",
+                    'safety_blocked': True
+                }
+            
+            # Use sanitized input
+            command = filter_result.sanitized_input
+            
             # Add to memory
             self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
@@ -375,26 +398,85 @@ class Orchestrator:
         
         plan = plan_result.get('plan', [])
         
-        # Review plan
+        # Phase 3 Safety: Plan validation (second safety layer)
+        plan_validation = self.plan_validator.review(plan)
+        
+        if not plan_validation.is_valid:
+            logger.warning(f"Plan blocked by validator: {plan_validation.warnings}")
+            self.audit_log.log_security_event(
+                event_type='plan_blocked',
+                details={
+                    'goal': command,
+                    'risk_level': plan_validation.risk_level.value,
+                    'warnings': plan_validation.warnings,
+                    'blocked_steps': plan_validation.blocked_steps
+                }
+            )
+            
+            # Return with explanation
+            response_text = f"I cannot execute this plan due to safety concerns: {'; '.join(plan_validation.warnings[:2])}"
+            if plan_validation.suggestions:
+                response_text += f". Suggestions: {'; '.join(plan_validation.suggestions[:2])}"
+            
+            return {
+                'success': False,
+                'error': 'Plan blocked by safety validator',
+                'response': response_text,
+                'mode': 'agent',
+                'strategy': 'plan',
+                'actions': [],
+                'safety_blocked': True,
+                'validation': {
+                    'is_valid': False,
+                    'risk_level': plan_validation.risk_level.value,
+                    'warnings': plan_validation.warnings,
+                    'suggestions': plan_validation.suggestions
+                }
+            }
+        
+        # Log plan review even if it passes
+        if plan_validation.requires_confirmation or plan_validation.warnings:
+            logger.info(f"Plan validated with warnings: {plan_validation.warnings}")
+            self.audit_log.log_security_event(
+                event_type='plan_reviewed',
+                details={
+                    'goal': command,
+                    'risk_level': plan_validation.risk_level.value,
+                    'warnings': plan_validation.warnings,
+                    'requires_confirmation': plan_validation.requires_confirmation
+                }
+            )
+        
+        # Review plan (LLM-based critique)
         critique = self.critic.review_plan(plan, command)
         
-        # Execute plan steps
+        # Execute plan steps with safety validation
         executed_steps = []
-        for step in plan:
+        for idx, step in enumerate(plan):
             tool_name = step.get('tool')
             arguments = step.get('arguments', {})
             
-            # Validate with tool guard
+            # Phase 3 Safety: Tool guard validation (third safety layer)
             validation = self.tool_guard.validate_tool_call(tool_name, arguments)
             if not validation.get('allowed', True):
-                logger.warning(f"Tool call blocked by guard: {tool_name}")
+                logger.warning(f"Tool call blocked by guard at step {idx}: {tool_name} - {validation.get('reason', 'Unknown')}")
+                self.audit_log.log_security_event(
+                    event_type='tool_blocked',
+                    details={
+                        'step_index': idx,
+                        'tool': tool_name,
+                        'reason': validation.get('reason', 'Unknown'),
+                        'parameters': arguments
+                    }
+                )
                 continue
             
             # Execute
             result = self.tool_registry.execute(tool_name, **arguments)
             executed_steps.append({
                 'step': step,
-                'result': result
+                'result': result,
+                'validated': True
             })
             
             # Add to memory

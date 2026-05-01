@@ -113,6 +113,18 @@ class AuditLog:
         """
         self.log(action_type, details, session_id=session_id)
     
+    def log_security_event(self, event_type: str, details: Dict[str, Any],
+                           session_id: str = None) -> None:
+        """
+        Log a security-related event (input blocked, validation failed, etc.).
+        
+        Args:
+            event_type: Type of security event
+            details: Event details
+            session_id: Session identifier
+        """
+        self.log(f'security_{event_type}', details, session_id=session_id)
+    
     def log_decision(self, decision_type: str, reasoning: str,
                      alternatives: List[str] = None, session_id: str = None) -> None:
         """
