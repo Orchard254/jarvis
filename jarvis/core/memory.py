@@ -60,12 +60,11 @@ class CoreMemory:
             message: The user's message text
             metadata: Optional metadata (timestamp, source, etc.)
         """
-        self.working.add_message({
-            'role': 'user',
-            'content': message,
-            'timestamp': datetime.now().isoformat(),
-            **(metadata or {})
-        })
+        self.working.add_message(
+            role='user',
+            content=message,
+            metadata=metadata
+        )
         logger.debug(f"Added user message to working memory: {message[:50]}...")
     
     def add_assistant_message(self, message: str, metadata: Optional[Dict] = None) -> None:
@@ -76,12 +75,11 @@ class CoreMemory:
             message: The assistant's response text
             metadata: Optional metadata (tool_calls, execution_results, etc.)
         """
-        self.working.add_message({
-            'role': 'assistant',
-            'content': message,
-            'timestamp': datetime.now().isoformat(),
-            **(metadata or {})
-        })
+        self.working.add_message(
+            role='assistant',
+            content=message,
+            metadata=metadata
+        )
         logger.debug(f"Added assistant message to working memory: {message[:50]}...")
     
     def add_system_message(self, message: str) -> None:
@@ -91,11 +89,11 @@ class CoreMemory:
         Args:
             message: The system message text
         """
-        self.working.add_message({
-            'role': 'system',
-            'content': message,
-            'timestamp': datetime.now().isoformat()
-        })
+        self.working.add_message(
+            role='system',
+            content=message,
+            metadata=None
+        )
     
     def add_tool_result(self, tool_name: str, result: Dict[str, Any]) -> None:
         """
@@ -105,13 +103,7 @@ class CoreMemory:
             tool_name: Name of the tool that was executed
             result: Tool execution result dict
         """
-        self.working.add_message({
-            'role': 'tool',
-            'name': tool_name,
-            'content': str(result.get('output', result.get('error', 'No output'))),
-            'result': result,
-            'timestamp': datetime.now().isoformat()
-        })
+        self.working.add_tool_result(tool_name, result)
         logger.debug(f"Added tool result for {tool_name} to working memory")
     
     def retrieve_context(self, query: Optional[str] = None, 
