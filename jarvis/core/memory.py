@@ -8,11 +8,12 @@ Provides unified interface for storing and retrieving memories before each LLM c
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from pathlib import Path
 
 from jarvis.memory.working import WorkingMemory
 from jarvis.memory.episodic import EpisodicMemory
 from jarvis.memory.semantic import SemanticMemory
-from jarvis.memory.manager import MemoryManager as MemoryManagerImpl
+from jarvis.memory.manager import ProceduralMemory
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +45,9 @@ class CoreMemory:
         self.episodic = EpisodicMemory(data_dir=data_dir)
         self.semantic = SemanticMemory(data_dir=data_dir)
         
-        self.manager = MemoryManagerImpl(
-            working=self.working,
-            episodic=self.episodic,
-            semantic=self.semantic,
-            procedural=None  # Will be created internally
+        # Create procedural memory instance
+        self.procedural = ProceduralMemory(
+            storage_file=str(Path(data_dir) / 'procedural.json')
         )
         
         logger.info("Core memory system initialized")
@@ -144,8 +143,8 @@ class CoreMemory:
             # Get relevant semantic memories
             context['semantic'] = self.semantic.search(query, limit=limit)
             
-            # Get relevant procedural memories
-            context['procedural'] = self.manager.get_procedural_memories(query, limit=limit)
+            # Get relevant procedural memories (simplified - just return procedure names)
+            context['procedural'] = [{'name': name} for name in self.procedural.list_procedures()[:limit]]
         
         logger.debug(f"Retrieved context: {len(context['working'])} working, "
                     f"{len(context['episodic'])} episodic, "
@@ -224,14 +223,14 @@ class CoreMemory:
         # Create procedural memory entry
         pattern_key = f"successful_pattern_{hash(goal) % 10000}"
         
-        self.manager.store_procedural_memory(
-            key=pattern_key,
-            data={
+        self.procedural.store_procedure(
+            name=pattern_key,
+            steps=[{
                 'goal_pattern': goal[:100],  # Truncate for indexing
                 'action_sequence': action_types,
                 'full_actions': actions,
                 'success_count': 1
-            }
+            }]
         )
     
     def remember_fact(self, fact: str, category: Optional[str] = None) -> bool:
@@ -294,7 +293,7 @@ class CoreMemory:
         Returns:
             List of conversation messages
         """
-        return self.working.get_messages(include_tool_results=include_tool_results)
+        return self.working.get_messages(include_system=True)
     
     def clear_working_memory(self) -> None:
         """Clear the working memory buffer."""
@@ -311,7 +310,7 @@ class CoreMemory:
         Returns:
             Session ID
         """
-        session_id = self.episodic.start_session(session_name=session_name)
+        session_id = self.episodic.start_session()
         logger.info(f"Started new memory session: {session_id}")
         return session_id
     
@@ -325,7 +324,13 @@ class CoreMemory:
         Returns:
             Session ID that was ended, or None if no active session
         """
-        session_id = self.episodic.end_session(summary=summary)
+        # Get current conversation messages
+        messages = self.get_conversation_history()
+        session_id = self.episodic.end_session(
+            session_id=datetime.now().strftime('%Y%m%d_%H%M%S'),
+            messages=messages,
+            summary=summary
+        )
         if session_id:
             logger.info(f"Ended memory session: {session_id}")
         return session_id
@@ -352,6 +357,6 @@ class CoreMemory:
                 'embedding_dimensions': 768  # Using TF-IDF, not actual embeddings
             },
             'procedural': {
-                'pattern_count': len(self.manager.procedural_memories)
+                'pattern_count': len(self.procedural.procedures)
             }
         }

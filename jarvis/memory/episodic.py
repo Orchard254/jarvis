@@ -119,6 +119,30 @@ class EpisodicMemory:
         
         return str(filepath)
     
+    def start_session(self, session_id: str = None) -> str:
+        """Start a new session and return its ID."""
+        if session_id is None:
+            session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return session_id
+    
+    def end_session(self, session_id: str, messages: List[Dict[str, Any]] = None,
+                    summary: str = None) -> str:
+        """
+        End a session by saving it.
+        
+        Args:
+            session_id: Session identifier
+            messages: Optional messages to save
+            summary: Optional summary
+            
+        Returns:
+            Session ID
+        """
+        if messages:
+            metadata = {'summary': summary} if summary else {}
+            self.save_session(session_id, messages, metadata)
+        return session_id
+    
     def load_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Load a session from episodic memory.

@@ -116,14 +116,14 @@ class Orchestrator:
         )
         
         # Perception
-        self.intent_classifier = IntentClassifier(config, self.brain)
-        self.vision_analyzer = VisionAnalyzer(config, self.brain)
+        self.intent_classifier = IntentClassifier(self.brain.client)
+        self.vision_analyzer = VisionAnalyzer(self.brain.client)
         
         # Reasoning
-        self.planner = TaskPlanner(config, self.brain)
-        self.critic = PlanCritic(config, self.brain)
-        self.reflector = OutcomeReflector(config, self.brain)
-        self.strategy_selector = StrategySelector(config)
+        self.planner = TaskPlanner(ollama_client=self.brain.client, tool_registry=self.tool_registry)
+        self.critic = PlanCritic(ollama_client=self.brain.client)
+        self.reflector = OutcomeReflector(ollama_client=self.brain.client, memory_manager=self.memory)
+        self.strategy_selector = StrategySelector()
         
         # Output
         self.tts = TTSManager(config)
