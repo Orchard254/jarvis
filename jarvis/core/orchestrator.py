@@ -25,10 +25,40 @@ from jarvis.perception.intent_classifier import IntentClassifier
 from jarvis.perception.vision import VisionAnalyzer
 from jarvis.reasoning.planner import TaskPlanner
 from jarvis.reasoning.critic import PlanCritic
-from jarvis.reasoning.reflector import OutcomeReflector
+from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector
-from jarvis.output.tts import TTSManager
-from jarvis.config.prompts.jarvis_prompt import get_system_prompt
+# TTS Manager - use simple wrapper for now
+class TTSManager:
+    """Simple TTS wrapper that delegates to the existing tts module."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize TTS manager."""
+        self.config = config
+        self.enabled = config.get('tts_enabled', True)
+        
+    def speak(self, text: str) -> None:
+        """
+        Speak text using TTS.
+        
+        Args:
+            text: Text to speak
+        """
+        if not self.enabled:
+            return
+            
+        try:
+            # Import here to avoid circular imports
+            from jarvis.output.tts import speak as tts_speak
+            tts_speak(text)
+        except (ImportError, Exception) as e:
+            logger.warning(f"TTS not available: {e}")
+            print(f"JARVIS: {text}")
+
+
+def get_system_prompt(mode: str = 'agent', **kwargs) -> str:
+    """Get the system prompt for JARVIS."""
+    from jarvis.config.prompts.jarvis_prompt import get_system_prompt as build_prompt
+    return build_prompt(mode, **kwargs)
 
 logger = logging.getLogger(__name__)
 
