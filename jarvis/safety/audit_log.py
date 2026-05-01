@@ -101,6 +101,18 @@ class AuditLog:
             'duration_ms': duration_ms
         }, session_id=session_id)
     
+    def log_action(self, action_type: str, details: Dict[str, Any],
+                   session_id: str = None) -> None:
+        """
+        Log a general action (alias for log with better naming).
+        
+        Args:
+            action_type: Type of action
+            details: Action details
+            session_id: Session identifier
+        """
+        self.log(action_type, details, session_id=session_id)
+    
     def log_decision(self, decision_type: str, reasoning: str,
                      alternatives: List[str] = None, session_id: str = None) -> None:
         """
