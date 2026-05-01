@@ -64,19 +64,18 @@ class TaskPlanner:
         # Get available tools
         available_tools = []
         if self.tool_registry:
-            tools = self.tool_registry.list_tools()
-            available_tools = [
-                {
-                    'name': t['name'],
-                    'description': t['description'],
-                    'params': list(t.get('parameters', {}).keys())
-                }
-                for t in tools
-            ]
+            # Use get_all_tools and build schema info
+            all_tools = self.tool_registry.get_all_tools()
+            for tool in all_tools.values():
+                available_tools.append({
+                    'name': tool.name,
+                    'description': tool.description,
+                    'parameters': tool.parameters
+                })
         
         # Build planning prompt
         tools_str = "\n".join([
-            f"- {t['name']}: {t['description']} (params: {', '.join(t['params'])})"
+            f"- {t['name']}: {t['description']} (params: {', '.join(t['parameters'].keys()) if t['parameters'] else 'none'})"
             for t in available_tools[:30]  # Limit to prevent token overflow
         ])
         
@@ -119,7 +118,7 @@ Limit to {max_steps} steps maximum. If the goal requires more, note that in reas
         try:
             response = self.ollama_client.chat(
                 messages=[{'role': 'user', 'content': prompt}],
-                response_format='json'
+                
             )
             
             content = response.get('content', '{}')
@@ -226,7 +225,7 @@ Provide an improved plan in the same JSON format as the original."""
         try:
             response = self.ollama_client.chat(
                 messages=[{'role': 'user', 'content': prompt}],
-                response_format='json'
+                
             )
             
             import json
@@ -280,7 +279,7 @@ Respond in JSON format with the new plan."""
             try:
                 response = self.ollama_client.chat(
                     messages=[{'role': 'user', 'content': prompt}],
-                    response_format='json'
+                    
                 )
                 
                 import json

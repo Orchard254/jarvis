@@ -5,15 +5,35 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Logs and temp files
-*.log
-*.tmp
+# Data files that might be generated
+jarvis/memory/semantic.json
+jarvis_data/
 
-# Environment
+# Dependencies
+.venv/
+venv/
+env/
 .env
 .env.local
 *.env.*
 
-# Data directories that might contain temporary/generated content
-jarvis_data/episodes/*.json
+# Logs
+*.log
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
 ```

@@ -257,7 +257,22 @@
       "success_rate": 1.0,
       "created_at": "2026-05-01T21:36:06.933757",
       "usage_count": 0
+    },
+    "successful_pattern_515": {
+      "name": "successful_pattern_515",
+      "steps": [
+        {
+          "goal_pattern": "What time is it?",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:56:39.712151",
+      "usage_count": 0
     }
   },
-  "updated_at": "2026-05-01T21:36:06.933766"
+  "updated_at": "2026-05-01T21:56:39.712158"
 }
