@@ -125,6 +125,22 @@ class EpisodicMemory:
             session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
         return session_id
     
+    def store_session(self, session_id: str, messages: List[Dict[str, Any]],
+                      metadata: Dict[str, Any] = None) -> str:
+        """
+        Store a complete session (alias for save_session with better naming).
+        
+        Args:
+            session_id: Unique session identifier
+            messages: List of conversation messages
+            metadata: Optional session metadata
+            
+        Returns:
+            Session ID
+        """
+        self.save_session(session_id, messages, metadata or {})
+        return session_id
+    
     def end_session(self, session_id: str, messages: List[Dict[str, Any]] = None,
                     summary: str = None) -> str:
         """
@@ -140,7 +156,7 @@ class EpisodicMemory:
         """
         if messages:
             metadata = {'summary': summary} if summary else {}
-            self.save_session(session_id, messages, metadata)
+            self.store_session(session_id, messages, metadata)
         return session_id
     
     def load_session(self, session_id: str) -> Optional[Dict[str, Any]]:

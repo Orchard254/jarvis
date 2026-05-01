@@ -1,0 +1,35 @@
+{
+  "procedures": {
+    "successful_pattern_3789": {
+      "name": "successful_pattern_3789",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T15:09:10.232664",
+      "usage_count": 0
+    },
+    "successful_pattern_4791": {
+      "name": "successful_pattern_4791",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T15:09:35.911835",
+      "usage_count": 0
+    }
+  },
+  "updated_at": "2026-05-01T15:09:35.911843"
+}

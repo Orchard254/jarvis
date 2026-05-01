@@ -159,11 +159,23 @@ class CoreMemory:
         Returns:
             Session ID for the stored experience
         """
+        # Build messages from the interaction
+        messages = [
+            {'role': 'user', 'content': goal},
+            {'role': 'assistant', 'content': f"Actions: {actions}\nOutcome: {outcome}"}
+        ]
+        
+        metadata = {
+            'goal': goal,
+            'actions': actions,
+            'outcome': outcome,
+            'success': success
+        }
+        
         session_id = self.episodic.store_session(
-            goal=goal,
-            actions=actions,
-            outcome=outcome,
-            success=success
+            session_id=datetime.now().strftime('%Y%m%d_%H%M%S'),
+            messages=messages,
+            metadata=metadata
         )
         
         # Extract facts for semantic memory
