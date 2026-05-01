@@ -41,9 +41,16 @@
       "created_at": "2026-05-01T15:20:16.711744",
       "message_count": 2,
       "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_173252",
+      "filename": "session_20260501_173252.json",
+      "created_at": "2026-05-01T17:32:52.426383",
+      "message_count": 2,
+      "first_message_preview": "hello"
     }
   ],
-  "total_sessions": 6,
+  "total_sessions": 7,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-01T15:20:16.712048"
+  "updated_at": "2026-05-01T17:32:52.426562"
 }
