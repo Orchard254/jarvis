@@ -1,0 +1,16 @@
+sounddevice
+numpy
+requests>=2.28.0
+SpeechRecognition
+openwakeword
+psutil
+Pillow
+mss
+wikipedia
+yfinance
+ollama>=0.4.0
+soundfile
+edge-tts
+pydub
+webrtcvad
+noisereduce
