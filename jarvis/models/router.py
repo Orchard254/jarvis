@@ -5,7 +5,10 @@ Determines which model, temperature, and token limits to use based on task type.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .ollama_client import OllamaClient
 
 
 @dataclass
@@ -172,3 +175,46 @@ def create_client_for_task(task_type: str = "default"):
         model=config.model,
         timeout=config.timeout,
     )
+
+
+class ModelRouter:
+    """Routes tasks to appropriate model configurations and creates clients."""
+    
+    def __init__(self):
+        self._client_cache: dict[str, "OllamaClient"] = {}
+    
+    def get_config(self, task_type: str = "default") -> ModelConfig:
+        """Get model configuration for a task type."""
+        return get_config(task_type)
+    
+    def route_task(self, task_description: str) -> tuple[str, ModelConfig]:
+        """Automatically route a task to the appropriate model config."""
+        return route_task(task_description)
+    
+    def get_client(self, task_type: str = "default") -> "OllamaClient":
+        """Get or create a cached OllamaClient for a task type."""
+        if task_type not in self._client_cache:
+            self._client_cache[task_type] = create_client_for_task(task_type)
+        return self._client_cache[task_type]
+    
+    def chat(self, messages: list, task_type: str = "default", **kwargs):
+        """Send chat request using client configured for task type."""
+        client = self.get_client(task_type)
+        return client.chat(messages, **kwargs)
+    
+    def stream_chat(self, messages: list, task_type: str = "streaming", **kwargs):
+        """Stream chat response using client configured for task type."""
+        client = self.get_client(task_type)
+        return client.stream_chat(messages, **kwargs)
+
+
+# Global router instance
+_router: Optional[ModelRouter] = None
+
+
+def get_model_router() -> ModelRouter:
+    """Get or create global ModelRouter instance."""
+    global _router
+    if _router is None:
+        _router = ModelRouter()
+    return _router
