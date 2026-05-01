@@ -363,11 +363,7 @@ class CoreMemory:
                 'message_count': len(self.working.messages),
                 'token_estimate': self.working.get_stats()['estimated_tokens']
             },
-            'episodic': {
-                'session_count': len(self.episodic.sessions),
-                'total_entries': sum(len(s.get('entries', [])) 
-                                    for s in self.episodic.sessions.values())
-            },
+            'episodic': self.episodic.get_memory_stats(),
             'semantic': {
                 'fact_count': len(self.semantic.facts),
                 'embedding_dimensions': 768  # Using TF-IDF, not actual embeddings

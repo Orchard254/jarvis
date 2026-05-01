@@ -169,7 +169,95 @@
       "success_rate": 1.0,
       "created_at": "2026-05-01T21:33:08.877180",
       "usage_count": 0
+    },
+    "successful_pattern_1942": {
+      "name": "successful_pattern_1942",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:06.341258",
+      "usage_count": 0
+    },
+    "successful_pattern_8399": {
+      "name": "successful_pattern_8399",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:50.854011",
+      "usage_count": 0
+    },
+    "successful_pattern_1287": {
+      "name": "successful_pattern_1287",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:56.380849",
+      "usage_count": 0
+    },
+    "successful_pattern_8718": {
+      "name": "successful_pattern_8718",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:36:06.933757",
+      "usage_count": 0
     }
   },
-  "updated_at": "2026-05-01T21:33:08.877186"
+  "updated_at": "2026-05-01T21:36:06.933766"
 }
