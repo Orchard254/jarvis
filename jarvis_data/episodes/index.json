@@ -111,9 +111,37 @@
       "created_at": "2026-05-01T21:33:08.876637",
       "message_count": 2,
       "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213506",
+      "filename": "session_20260501_213506.json",
+      "created_at": "2026-05-01T21:35:06.340827",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213550",
+      "filename": "session_20260501_213550.json",
+      "created_at": "2026-05-01T21:35:50.856159",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260501_213556",
+      "filename": "session_20260501_213556.json",
+      "created_at": "2026-05-01T21:35:56.394137",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260501_213606",
+      "filename": "session_20260501_213606.json",
+      "created_at": "2026-05-01T21:36:06.935947",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
     }
   ],
-  "total_sessions": 16,
+  "total_sessions": 20,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-01T21:33:08.876941"
+  "updated_at": "2026-05-01T21:36:06.936118"
 }

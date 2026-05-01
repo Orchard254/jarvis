@@ -110,7 +110,7 @@ def test_episodic_memory():
     print("✓ Ended session with summary")
     
     # Test session stats
-    stats = em.get_all_stats()
+    stats = em.get_memory_stats()
     print(f"✓ Total sessions: {stats.get('total_sessions', len(sessions))}")
     
     print("\n✅ Episodic Memory: ALL TESTS PASSED")

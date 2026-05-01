@@ -339,28 +339,13 @@ class EpisodicMemory:
         except Exception:
             return "Unknown"
     
-    def get_all_stats(self) -> Dict[str, Any]:
-        """Get aggregate statistics across all sessions."""
-        total_messages = 0
-        total_tools_used = 0
-        oldest_session = None
-        newest_session = None
-        
-        for session_meta in self.index['sessions']:
-            total_messages += session_meta.get('message_count', 0)
-            
-            created = session_meta.get('created_at')
-            if created:
-                if not oldest_session or created < oldest_session:
-                    oldest_session = created
-                if not newest_session or created > newest_session:
-                    newest_session = created
-        
+    def get_memory_stats(self) -> Dict[str, Any]:
+        """Get statistics about memory usage."""
         return {
-            'total_sessions': self.index['total_sessions'],
-            'total_messages': total_messages,
-            'oldest_session': oldest_session,
-            'newest_session': newest_session,
+            'session_count': self.index['total_sessions'],
+            'total_messages': sum(
+                s.get('message_count', 0) for s in self.index['sessions']
+            ),
             'storage_location': str(self.storage_dir)
         }
     
