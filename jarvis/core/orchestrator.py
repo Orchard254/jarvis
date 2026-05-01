@@ -445,10 +445,42 @@ class Orchestrator:
             self.tts.speak(text)
     
     def _interaction_loop(self) -> None:
-        """Main interaction loop for voice commands."""
-        # This would integrate with STT and wake word detection
-        # For now, it's a placeholder for the voice input pipeline
-        logger.info("Interaction loop started (waiting for voice input integration)")
+        """Main interaction loop for text/voice commands."""
+        logger.info("Interaction loop started - type commands or 'quit' to exit")
+        print("\n" + "="*60)
+        print("JARVIS Ready! Type commands or 'quit' to exit")
+        print("="*60)
+        
+        while self.running:
+            try:
+                # Get user input
+                command = input("\nYou: ").strip()
+                
+                if not command:
+                    continue
+                
+                if command.lower() in ['quit', 'exit', 'bye', 'goodbye']:
+                    logger.info("User requested shutdown")
+                    break
+                
+                # Process command
+                result = self.process_command(command, voice=False)
+                
+                # Show result
+                if result.get('success'):
+                    print(f"\nJARVIS: {result.get('response', '')}")
+                else:
+                    print(f"\nJARVIS: [Error] {result.get('error', 'Unknown error')}")
+                
+            except KeyboardInterrupt:
+                logger.info("Received interrupt signal")
+                break
+            except EOFError:
+                logger.info("EOF received")
+                break
+            except Exception as e:
+                logger.error(f"Interaction loop error: {e}", exc_info=True)
+                print(f"\nError: {e}")
     
     def _monitoring_loop(self) -> None:
         """Background monitoring loop."""
