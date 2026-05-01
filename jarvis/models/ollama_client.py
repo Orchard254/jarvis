@@ -1,0 +1,383 @@
+"""
+models/ollama_client.py — Ollama LLM client wrapper with cloud/local fallback
+
+Handles all LLM communication with:
+- Automatic cloud/local endpoint fallback
+- Exponential backoff retry logic
+- Streaming support for TTS
+- Tool calling support
+- Vision/multimodal support
+"""
+
+import json
+import logging
+import time
+from typing import Callable, Generator, Optional, List, Dict, Any
+
+import requests
+
+log = logging.getLogger("ollama_client")
+
+
+class OllamaClient:
+    """Ollama API client with automatic fallback and retry logic."""
+    
+    def __init__(
+        self,
+        cloud_url: str = "https://api.ollama.com/api/chat",
+        local_url: str = "http://localhost:11434/api/chat",
+        api_key: str = "",
+        model: str = "nemotron-3-nano:30b-cloud",
+        timeout: int = 180,
+        max_retries: int = 3,
+        base_backoff: float = 1.0,
+    ):
+        self.cloud_url = cloud_url
+        self.local_url = local_url
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.base_backoff = base_backoff
+        
+        # Track which endpoint is working
+        self._preferred_endpoint = "cloud"  # Start with cloud
+    
+    def _get_endpoints(self) -> List[tuple]:
+        """Return list of (url, headers, name) tuples to try in order."""
+        endpoints = []
+        
+        # Try preferred endpoint first
+        if self._preferred_endpoint == "cloud":
+            if self.cloud_url:
+                endpoints.append((
+                    self.cloud_url,
+                    {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    "cloud"
+                ))
+            endpoints.append((self.local_url, {"Content-Type": "application/json"}, "local"))
+        else:
+            endpoints.append((self.local_url, {"Content-Type": "application/json"}, "local"))
+            if self.cloud_url:
+                endpoints.append((
+                    self.cloud_url,
+                    {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    "cloud"
+                ))
+        
+        return endpoints
+    
+    def _request_with_retry(
+        self,
+        url: str,
+        headers: dict,
+        payload: dict,
+        endpoint_name: str,
+        stream: bool = False,
+    ) -> Optional[requests.Response]:
+        """Make request with exponential backoff retry."""
+        last_error = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                resp = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    stream=stream,
+                    timeout=self.timeout,
+                )
+                resp.raise_for_status()
+                
+                if attempt > 0:
+                    log.info(f"[OLLAMA] Success on attempt {attempt + 1} ({endpoint_name})")
+                
+                # Update preferred endpoint on success
+                self._preferred_endpoint = endpoint_name
+                
+                return resp
+                
+            except requests.exceptions.HTTPError as e:
+                last_error = e
+                log.warning(f"[OLLAMA] {endpoint_name} HTTP error (attempt {attempt + 1}): {e}")
+                if resp.status_code >= 500:  # Server error, retry
+                    if attempt < self.max_retries - 1:
+                        backoff = self.base_backoff * (2 ** attempt)
+                        log.info(f"[OLLAMA] Retrying in {backoff:.1f}s...")
+                        time.sleep(backoff)
+                    continue
+                else:
+                    break  # Client error, don't retry
+                    
+            except requests.exceptions.ConnectionError as e:
+                last_error = e
+                log.warning(f"[OLLAMA] {endpoint_name} connection error (attempt {attempt + 1}): {e}")
+                if attempt < self.max_retries - 1:
+                    backoff = self.base_backoff * (2 ** attempt)
+                    log.info(f"[OLLAMA] Retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                continue
+                
+            except Exception as e:
+                last_error = e
+                log.warning(f"[OLLAMA] {endpoint_name} error (attempt {attempt + 1}): {e}")
+                if attempt < self.max_retries - 1:
+                    backoff = self.base_backoff * (2 ** attempt)
+                    log.info(f"[OLLAMA] Retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                continue
+        
+        log.error(f"[OLLAMA] All retries failed for {endpoint_name}: {last_error}")
+        return None
+    
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[dict]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Send chat request to Ollama.
+        
+        Args:
+            messages: List of message dicts with role/content
+            tools: Optional list of tool definitions for function calling
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+            stream: Whether to stream response
+            
+        Returns:
+            Dict with keys: content, tool_calls, done, error
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": stream,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+        
+        if tools:
+            payload["tools"] = tools
+        
+        for url, headers, name in self._get_endpoints():
+            log.info(f"[OLLAMA] Calling {name} endpoint: {url}")
+            
+            resp = self._request_with_retry(url, headers, payload, name, stream=False)
+            
+            if resp is None:
+                continue
+            
+            try:
+                data = resp.json()
+                msg = data.get("message", {})
+                
+                return {
+                    "content": (msg.get("content") or "").strip(),
+                    "tool_calls": msg.get("tool_calls") or [],
+                    "done": data.get("done", True),
+                    "error": None,
+                    "endpoint": name,
+                }
+                
+            except json.JSONDecodeError as e:
+                log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
+                continue
+        
+        # All endpoints failed
+        return {
+            "content": "",
+            "tool_calls": [],
+            "done": True,
+            "error": "All Ollama endpoints failed",
+            "endpoint": None,
+        }
+    
+    def stream_chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+    ) -> Generator[str, None, None]:
+        """
+        Stream chat response sentence-by-sentence for TTS.
+        
+        Yields:
+            Complete sentences as they are generated
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+        
+        buffer = ""
+        yielded_text = ""
+        
+        # Common abbreviations that shouldn't split sentences
+        abbreviations = {
+            "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "etc", "vs",
+            "e.g", "i.e", "u.s", "u.k", "a.m", "p.m",
+        }
+        
+        def is_sentence_end(buf: str, pos: int) -> bool:
+            if buf[pos] not in ".!?":
+                return False
+            word_start = pos - 1
+            while word_start >= 0 and buf[word_start].isalpha():
+                word_start -= 1
+            word = buf[word_start + 1 : pos].lower()
+            if word in abbreviations:
+                return False
+            if pos + 1 < len(buf) and buf[pos + 1] == " ":
+                return True
+            return False
+        
+        for url, headers, name in self._get_endpoints():
+            log.info(f"[OLLAMA] Streaming from {name} endpoint")
+            
+            resp = self._request_with_retry(url, headers, payload, name, stream=True)
+            
+            if resp is None:
+                continue
+            
+            try:
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    
+                    token = chunk.get("message", {}).get("content", "")
+                    buffer += token
+                    
+                    while True:
+                        found = False
+                        for i, ch in enumerate(buffer):
+                            if is_sentence_end(buffer, i) and i + 1 < len(buffer) and buffer[i + 1] == " ":
+                                sentence = buffer[: i + 1].strip()
+                                buffer = buffer[i + 2 :]
+                                if sentence:
+                                    yield sentence
+                                    yielded_text += sentence + " "
+                                found = True
+                                break
+                        if not found:
+                            break
+                    
+                    if chunk.get("done"):
+                        break
+                
+                break  # Success, don't try other endpoints
+                
+            except Exception as e:
+                log.error(f"[OLLAMA] Streaming error from {name}: {e}")
+                continue
+        
+        # Flush remaining buffer
+        if buffer.strip():
+            yield buffer.strip()
+    
+    def chat_with_vision(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> Dict[str, Any]:
+        """
+        Send chat request with image support (multimodal).
+        
+        Args:
+            messages: List of message dicts. Images should be base64 in content
+                      or as separate image field
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+            
+        Returns:
+            Dict with keys: content, tool_calls, done, error
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+        
+        for url, headers, name in self._get_endpoints():
+            log.info(f"[OLLAMA] Vision call to {name} endpoint")
+            
+            resp = self._request_with_retry(url, headers, payload, name, stream=False)
+            
+            if resp is None:
+                continue
+            
+            try:
+                data = resp.json()
+                msg = data.get("message", {})
+                
+                return {
+                    "content": (msg.get("content") or "").strip(),
+                    "tool_calls": msg.get("tool_calls") or [],
+                    "done": data.get("done", True),
+                    "error": None,
+                    "endpoint": name,
+                }
+                
+            except json.JSONDecodeError as e:
+                log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
+                continue
+        
+        return {
+            "content": "",
+            "tool_calls": [],
+            "done": True,
+            "error": "All Ollama endpoints failed for vision call",
+            "endpoint": None,
+        }
+    
+    def is_available(self) -> bool:
+        """Check if any Ollama endpoint is available."""
+        for url, headers, name in self._get_endpoints():
+            try:
+                resp = requests.get(url.replace("/chat", "/tags"), headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    log.info(f"[OLLAMA] {name} endpoint is available")
+                    return True
+            except Exception:
+                pass
+        return False
+
+
+# Global client instance (lazy initialization)
+_client: Optional[OllamaClient] = None
+
+
+def get_client(
+    cloud_url: str = "https://api.ollama.com/api/chat",
+    local_url: str = "http://localhost:11434/api/chat",
+    api_key: str = "",
+    model: str = "nemotron-3-nano:30b-cloud",
+) -> OllamaClient:
+    """Get or create global OllamaClient instance."""
+    global _client
+    if _client is None:
+        _client = OllamaClient(
+            cloud_url=cloud_url,
+            local_url=local_url,
+            api_key=api_key,
+            model=model,
+        )
+    return _client
