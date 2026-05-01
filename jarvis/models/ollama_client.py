@@ -24,24 +24,26 @@ class OllamaClient:
     
     def __init__(
         self,
-        cloud_url: str = "https://api.ollama.com/api/chat",
+        cloud_url: Optional[str] = None,
         local_url: str = "http://localhost:11434/api/chat",
-        api_key: str = "",
-        model: str = "nemotron-3-nano:30b-cloud",
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
         timeout: int = 180,
         max_retries: int = 3,
         base_backoff: float = 1.0,
     ):
-        self.cloud_url = cloud_url
+        # Load from environment if not provided (for .env compatibility)
+        import os
+        self.cloud_url = cloud_url or os.environ.get('OLLAMA_CLOUD_URL', 'https://api.ollama.com/api/chat')
         self.local_url = local_url
-        self.api_key = api_key
-        self.model = model
-        self.timeout = timeout
+        self.api_key = api_key or os.environ.get('OLLAMA_API_KEY', '')
+        self.model = model or os.environ.get('OLLAMA_MODEL', 'nemotron-3-nano:30b-cloud')
+        self.timeout = timeout or int(os.environ.get('OLLAMA_TIMEOUT', '180'))
         self.max_retries = max_retries
         self.base_backoff = base_backoff
         
         # Track which endpoint is working
-        self._preferred_endpoint = "cloud"  # Start with cloud
+        self._preferred_endpoint = "cloud" if self.api_key else "local"
     
     def _get_endpoints(self) -> List[tuple]:
         """Return list of (url, headers, name) tuples to try in order."""
