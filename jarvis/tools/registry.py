@@ -125,6 +125,10 @@ class ToolRegistry:
         """Get Ollama function calling schemas for all tools."""
         return [tool.get_schema() for tool in self._tools.values()]
     
+    def get_all_schemas(self) -> List[dict]:
+        """Get Ollama function calling schemas for all tools (alias for get_schemas)."""
+        return self.get_schemas()
+    
     def get_schema_for_tool(self, name: str) -> Optional[dict]:
         """Get schema for a specific tool."""
         tool = self.get(name)

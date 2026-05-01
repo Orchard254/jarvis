@@ -1,15 +1,11 @@
-# Compiled Python files
-*.pyc
-__pycache__/
+```
+# Data files
+jarvis_data/
 
-# Environment variables
+# Environment
 .env
 .env.local
-*.env.*
-
-# IDE specific
-.vscode/
-.idea/
+.env.*
 
 # Logs
 *.log
@@ -19,16 +15,29 @@ __pycache__/
 *.swp
 *.swo
 
-# Coverage reports
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
 .coverage
-coverage/
-htmlcov/
-
-# Python cache
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/
 .mypy_cache/
 .pytest_cache/
-
-# Distribution artifacts
-dist/
-build/
-*.egg-info/
+.hypothesis/
+```
