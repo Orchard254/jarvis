@@ -4,8 +4,41 @@ Skills are specialized capabilities with their own prompts and state management.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+from enum import Enum
+from dataclasses import dataclass
+
+
+class RecoveryAction(Enum):
+    """Actions that can be taken during error recovery."""
+    RETRY = "retry"
+    SKIP = "skip"
+    ABORT = "abort"
+    ALTERNATIVE = "alternative"
+
+
+@dataclass
+class SkillStep:
+    """Represents a single step in a skill's execution plan."""
+    id: str
+    name: str
+    action: str
+    params: Dict[str, Any]
+    completed: bool = False
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class Recovery:
+    """Represents a recovery strategy after a step failure."""
+    action: RecoveryAction
+    message: str
+    retry_count: int = 0
+    max_retries: int = 3
+    alternative_step: Optional[SkillStep] = None
+    skip_to_step: Optional[str] = None
 
 
 class BaseSkill(ABC):
@@ -34,6 +67,8 @@ class BaseSkill(ABC):
         self.history = []
         self.created_at = datetime.now()
         self.last_used = None
+        self.executed_steps: List[SkillStep] = []
+        self.rollback_stack: List[Tuple[str, Any]] = []
     
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -46,32 +81,134 @@ class BaseSkill(ABC):
         pass
     
     @abstractmethod
-    def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> bool:
+    def can_handle(self, task: str) -> float:
         """
         Check if this skill can handle the given request.
         
         Args:
-            user_input: User's request
-            context: Additional context
+            task: User's request/task description
             
         Returns:
-            True if skill can handle the request
+            Confidence score from 0.0 to 1.0
         """
         pass
     
     @abstractmethod
-    def execute(self, user_input: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def plan(self, task: str) -> List[SkillStep]:
         """
-        Execute the skill.
+        Create an ordered plan of steps to accomplish the task.
         
         Args:
-            user_input: User's request
-            context: Additional context
+            task: User's request/task description
+            
+        Returns:
+            Ordered list of SkillStep objects
+        """
+        pass
+    
+    @abstractmethod
+    def execute(self, plan: List[SkillStep]) -> Dict[str, Any]:
+        """
+        Execute the skill with state tracking.
+        
+        Args:
+            plan: List of SkillStep objects to execute
             
         Returns:
             Result dictionary with success, output, error keys
         """
         pass
+    
+    @abstractmethod
+    def handle_failure(self, step: SkillStep, error: Exception) -> Recovery:
+        """
+        Handle a failure during step execution.
+        
+        Args:
+            step: The step that failed
+            error: The exception that occurred
+            
+        Returns:
+            Recovery object with action (RETRY, SKIP, ABORT, or ALTERNATIVE)
+        """
+        pass
+    
+    @abstractmethod
+    def rollback(self) -> Dict[str, Any]:
+        """
+        Undo completed steps in reverse order.
+        
+        Returns:
+            Result dictionary describing what was rolled back
+        """
+        pass
+    
+    @abstractmethod
+    def summarize(self) -> str:
+        """
+        Provide a one-sentence summary of what was accomplished.
+        
+        Returns:
+            One sentence summary string
+        """
+        pass
+    
+    def _execute_step(self, step: SkillStep) -> Dict[str, Any]:
+        """
+        Execute a single step with error handling.
+        
+        Args:
+            step: The step to execute
+            
+        Returns:
+            Step result dictionary
+        """
+        try:
+            # Mark step as in progress
+            step.completed = False
+            
+            # Execute the step (to be implemented by subclass)
+            result = self._run_step_action(step)
+            
+            # Mark as completed
+            step.completed = True
+            step.result = result
+            
+            # Add to rollback stack if the step made changes
+            if result.get('makes_changes', False):
+                self.rollback_stack.append((step.id, result.get('undo_data')))
+            
+            return {
+                'success': True,
+                'step_id': step.id,
+                'result': result
+            }
+            
+        except Exception as e:
+            step.error = str(e)
+            
+            # Get recovery strategy
+            recovery = self.handle_failure(step, e)
+            
+            return {
+                'success': False,
+                'step_id': step.id,
+                'error': str(e),
+                'recovery': recovery
+            }
+    
+    def _run_step_action(self, step: SkillStep) -> Dict[str, Any]:
+        """
+        Run the actual action for a step. Override in subclasses.
+        
+        Args:
+            step: The step to run
+            
+        Returns:
+            Action result dictionary
+        """
+        # Default implementation - should be overridden
+        return {'output': f'Step {step.name} executed', 'makes_changes': False}
     
     def initialize(self, context: Dict[str, Any] = None) -> None:
         """
@@ -86,6 +223,8 @@ class BaseSkill(ABC):
             'step': 0,
             'context': context or {}
         }
+        self.executed_steps = []
+        self.rollback_stack = []
     
     def cleanup(self) -> None:
         """
@@ -97,7 +236,8 @@ class BaseSkill(ABC):
         # Store in history
         self.history.append({
             'timestamp': self.last_used.isoformat(),
-            'state': self.state.copy()
+            'state': self.state.copy(),
+            'steps_executed': len(self.executed_steps)
         })
         
         # Keep history bounded
@@ -141,40 +281,6 @@ class BaseSkill(ABC):
             self.state[f'step_{step}_description'] = description
         self.state['last_updated'] = datetime.now().isoformat()
     
-    def rollback(self) -> Dict[str, Any]:
-        """
-        Rollback any changes made by this skill.
-        Override in subclasses that need custom rollback.
-        
-        Returns:
-            Result dictionary
-        """
-        return {
-            'success': True,
-            'output': f'Skill {self.name} rolled back successfully',
-            'error': None
-        }
-    
-    def recover_from_error(self, error: Exception, 
-                           context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Attempt to recover from an error.
-        Override in subclasses for custom error recovery.
-        
-        Args:
-            error: The exception that occurred
-            context: Error context
-            
-        Returns:
-            Recovery result dictionary
-        """
-        return {
-            'success': False,
-            'output': None,
-            'error': str(error),
-            'recovery_attempted': True
-        }
-    
     def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the skill.
@@ -188,12 +294,15 @@ class BaseSkill(ABC):
             'current_step': self.state.get('step', 0),
             'created_at': self.created_at.isoformat(),
             'last_used': self.last_used.isoformat() if self.last_used else None,
-            'history_length': len(self.history)
+            'history_length': len(self.history),
+            'steps_executed': len(self.executed_steps)
         }
     
     def reset(self) -> None:
         """Reset the skill state."""
         self.state = {}
+        self.executed_steps = []
+        self.rollback_stack = []
     
     def validate_input(self, user_input: str, 
                        context: Dict[str, Any] = None) -> tuple:

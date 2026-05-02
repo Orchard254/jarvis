@@ -1,277 +1,460 @@
 """
-Skill Registry - Loads and manages all JARVIS skills.
+Skills Registry - Auto-discovers and manages JARVIS skills.
+
+Features:
+- Auto-discover all skills in skills/builtin/
+- Allow skills to be added to skills/learned/ at runtime without restart
+- Select the best skill for a task based on can_handle() confidence scores
+- Fall back to direct tool execution if no skill scores above 0.6
 """
 
-import importlib
+import os
+import sys
+import importlib.util
+import importlib.machinery
 from typing import Dict, Any, List, Optional, Type
 from pathlib import Path
 from datetime import datetime
+import threading
+
+from .base import BaseSkill
 
 
-class SkillRegistry:
+class SkillsRegistry:
     """
-    Registry for all available skills.
-    Handles loading, discovery, and execution of skills.
+    Registry for managing JARVIS skills with auto-discovery and dynamic loading.
     """
     
-    def __init__(self):
-        """Initialize the skill registry."""
-        self.skills = {}
-        self.skill_instances = {}
-        self.loaded_at = datetime.now()
-        self._builtin_path = Path(__file__).parent / 'builtin'
+    def __init__(self, builtin_dir: str = None, learned_dir: str = None):
+        """
+        Initialize the skills registry.
+        
+        Args:
+            builtin_dir: Directory containing built-in skills
+            learned_dir: Directory containing user-learned skills
+        """
+        self._skills: Dict[str, BaseSkill] = {}
+        self._skill_classes: Dict[str, Type[BaseSkill]] = {}
+        self._lock = threading.RLock()
+        
+        # Set default directories
+        current_dir = Path(__file__).parent
+        self.builtin_dir = Path(builtin_dir) if builtin_dir else current_dir / "builtin"
+        self.learned_dir = Path(learned_dir) if learned_dir else current_dir / "learned"
+        
+        # Confidence threshold for skill selection
+        self.confidence_threshold = 0.6
+        
+        # Track last discovery time for each directory
+        self._last_discovery = {
+            'builtin': None,
+            'learned': None
+        }
+        
+        # Fallback tools (for when no skill matches)
+        self._fallback_tools: Dict[str, callable] = {}
     
-    def load_builtin_skills(self) -> int:
+    def discover_builtin_skills(self, force: bool = False) -> int:
         """
-        Load all built-in skills from the builtin directory.
+        Auto-discover all skills in the builtin directory.
         
-        Returns:
-            Number of skills loaded
-        """
-        count = 0
-        
-        if not self._builtin_path.exists():
-            return count
-        
-        # Find all Python files in builtin directory
-        for skill_file in self._builtin_path.glob('*.py'):
-            if skill_file.name.startswith('_'):
-                continue
+        Args:
+            force: Force re-discovery even if already discovered
             
-            try:
-                module_name = f"skills.builtin.{skill_file.stem}"
-                module = importlib.import_module(module_name)
+        Returns:
+            Number of skills discovered
+        """
+        return self._discover_skills(self.builtin_dir, 'builtin', force)
+    
+    def discover_learned_skills(self, force: bool = False) -> int:
+        """
+        Discover skills in the learned directory (can be called at runtime).
+        
+        Args:
+            force: Force re-discovery
+            
+        Returns:
+            Number of skills discovered
+        """
+        return self._discover_skills(self.learned_dir, 'learned', force)
+    
+    def _discover_skills(self, directory: Path, source: str, force: bool = False) -> int:
+        """
+        Discover skills from a directory.
+        
+        Args:
+            directory: Directory to scan
+            source: Source identifier ('builtin' or 'learned')
+            force: Force re-discovery
+            
+        Returns:
+            Number of skills discovered
+        """
+        with self._lock:
+            # Check if we need to re-discover
+            if not force and self._last_discovery.get(source):
+                # Check if directory has been modified
+                try:
+                    latest_mtime = max(f.stat().st_mtime for f in directory.glob("*.py") if f.is_file())
+                    if latest_mtime <= self._last_discovery[source].timestamp():
+                        return len(self._skills)
+                except (ValueError, FileNotFoundError):
+                    pass
+            
+            count = 0
+            
+            if not directory.exists():
+                directory.mkdir(parents=True, exist_ok=True)
+                self._last_discovery[source] = datetime.now()
+                return 0
+            
+            # Find all Python files in the directory
+            for py_file in directory.glob("*.py"):
+                if py_file.name.startswith('_'):
+                    continue
                 
-                # Look for skill classes in the module
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
+                try:
+                    module_name = f"jarvis.skills.{source}.{py_file.stem}"
                     
-                    # Check if it's a skill class (has required methods)
-                    if (isinstance(attr, type) and 
-                        hasattr(attr, 'can_handle') and
-                        hasattr(attr, 'execute')):
+                    # Load the module dynamically
+                    spec = importlib.util.spec_from_file_location(module_name, py_file)
+                    if spec is None or spec.loader is None:
+                        continue
+                    
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
+                    spec.loader.exec_module(module)
+                    
+                    # Find skill classes in the module
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
                         
-                        # Register the skill
-                        self.register_skill(attr_name, attr)
-                        count += 1
-                        
-            except Exception as e:
-                print(f"Failed to load skill from {skill_file}: {e}")
-        
-        return count
+                        # Check if it's a skill class (not imported)
+                        if (isinstance(attr, type) and 
+                            issubclass(attr, BaseSkill) and 
+                            attr != BaseSkill and
+                            attr.__module__ == module_name):
+                            
+                            # Instantiate and register the skill
+                            try:
+                                skill_instance = attr()
+                                self.register_skill(skill_instance)
+                                count += 1
+                            except Exception as e:
+                                print(f"Warning: Could not instantiate {attr_name}: {e}")
+                
+                except Exception as e:
+                    print(f"Warning: Error loading {py_file}: {e}")
+            
+            self._last_discovery[source] = datetime.now()
+            return count
     
-    def register_skill(self, name: str, skill_class: Type) -> None:
+    def register_skill(self, skill: BaseSkill) -> None:
         """
-        Register a skill class.
+        Register a skill instance.
         
         Args:
-            name: Skill name
-            skill_class: Skill class
+            skill: Skill instance to register
         """
-        self.skills[name] = skill_class
-        self.skill_instances[name] = None  # Lazy instantiation
+        with self._lock:
+            self._skills[skill.name] = skill
+            self._skill_classes[skill.__class__.__name__] = skill.__class__
     
-    def get_skill(self, name: str) -> Optional[Any]:
+    def unregister_skill(self, name: str) -> bool:
         """
-        Get a skill instance by name.
+        Unregister a skill by name.
         
         Args:
-            name: Skill name
+            name: Name of the skill to unregister
             
         Returns:
-            Skill instance or None
+            True if skill was unregistered, False if not found
         """
-        if name not in self.skills:
-            return None
-        
-        # Lazy instantiation
-        if self.skill_instances.get(name) is None:
-            try:
-                self.skill_instances[name] = self.skills[name]()
-            except Exception as e:
-                print(f"Failed to instantiate skill {name}: {e}")
-                return None
-        
-        return self.skill_instances[name]
+        with self._lock:
+            if name in self._skills:
+                del self._skills[name]
+                skill_class = self._skill_classes.get(name)
+                if skill_class:
+                    del self._skill_classes[name]
+                return True
+            return False
     
-    def find_skill_for_input(self, user_input: str, 
-                             context: Dict[str, Any] = None) -> Optional[str]:
+    def get_skill(self, name: str) -> Optional[BaseSkill]:
         """
-        Find a skill that can handle the given input.
+        Get a skill by name.
         
         Args:
-            user_input: User's request
+            name: Name of the skill
+            
+        Returns:
+            Skill instance or None if not found
+        """
+        with self._lock:
+            return self._skills.get(name)
+    
+    def get_all_skills(self) -> Dict[str, BaseSkill]:
+        """
+        Get all registered skills.
+        
+        Returns:
+            Dictionary of skill name to skill instance
+        """
+        with self._lock:
+            return self._skills.copy()
+    
+    def select_best_skill(self, task: str) -> tuple:
+        """
+        Select the best skill for a given task based on confidence scores.
+        
+        Args:
+            task: User's task/request
+            
+        Returns:
+            Tuple of (skill, confidence_score) or (None, 0.0) if no match
+        """
+        with self._lock:
+            best_skill = None
+            best_confidence = 0.0
+            
+            for name, skill in self._skills.items():
+                try:
+                    confidence = skill.can_handle(task)
+                    
+                    if confidence > best_confidence:
+                        best_confidence = confidence
+                        best_skill = skill
+                        
+                except Exception as e:
+                    print(f"Warning: Error checking skill {name}: {e}")
+            
+            return (best_skill, best_confidence)
+    
+    def execute_task(self, task: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Execute a task using the best matching skill, or fall back to tools.
+        
+        Args:
+            task: User's task/request
             context: Additional context
             
         Returns:
-            Skill name or None
+            Execution result dictionary
         """
-        for name, skill_class in self.skills.items():
-            try:
-                # Create temporary instance for checking
-                skill = skill_class()
-                if skill.can_handle(user_input, context):
-                    return name
-            except Exception:
-                continue
+        # Select best skill
+        skill, confidence = self.select_best_skill(task)
         
-        return None
-    
-    def execute_skill(self, name: str, user_input: str,
-                      context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Execute a skill.
+        # Check if confidence meets threshold
+        if skill is None or confidence < self.confidence_threshold:
+            # Fall back to direct tool execution
+            return self._execute_fallback(task, context)
         
-        Args:
-            name: Skill name
-            user_input: User's request
-            context: Additional context
-            
-        Returns:
-            Execution result
-        """
-        skill = self.get_skill(name)
-        
-        if skill is None:
-            return {
-                'success': False,
-                'error': f'Skill not found: {name}',
-                'output': None
-            }
-        
+        # Execute the skill
         try:
-            # Validate input
-            is_valid, error_msg = skill.validate_input(user_input, context)
-            if not is_valid:
-                return {
-                    'success': False,
-                    'error': error_msg,
-                    'output': None
-                }
+            # Create plan
+            plan = skill.plan(task)
             
-            # Initialize skill
-            skill.initialize(context)
+            # Execute plan
+            result = skill.execute(plan)
             
-            # Execute
-            result = skill.execute(user_input, context)
-            
-            # Cleanup
-            skill.cleanup()
-            
-            return result
+            return {
+                'success': result.get('success', False),
+                'output': result.get('output'),
+                'error': result.get('error'),
+                'skill_used': skill.name,
+                'confidence': confidence,
+                'used_fallback': False
+            }
             
         except Exception as e:
-            # Attempt recovery
-            try:
-                recovery = skill.recover_from_error(e, context)
-                if recovery.get('success'):
-                    return recovery
-            except:
-                pass
-            
-            # Rollback if possible
-            try:
-                skill.rollback()
-            except:
-                pass
-            
             return {
                 'success': False,
-                'error': str(e),
                 'output': None,
-                'skill': name
+                'error': str(e),
+                'skill_used': skill.name,
+                'confidence': confidence,
+                'used_fallback': False
             }
     
-    def list_skills(self) -> List[Dict[str, Any]]:
+    def _execute_fallback(self, task: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        List all registered skills.
+        Execute task using fallback tools when no skill matches.
         
+        Args:
+            task: User's task/request
+            context: Additional context
+            
         Returns:
-            List of skill info dictionaries
+            Execution result dictionary
         """
-        result = []
-        
-        for name, skill_class in self.skills.items():
+        # Check registered fallback tools
+        for tool_name, tool_func in self._fallback_tools.items():
             try:
-                skill = skill_class()
-                result.append({
-                    'name': name,
-                    'description': skill.description,
-                    'active': self.skill_instances.get(name) is not None
-                })
-            except:
-                result.append({
-                    'name': name,
-                    'description': '',
-                    'active': False
-                })
+                result = tool_func(task, context)
+                if result:
+                    return {
+                        'success': True,
+                        'output': result,
+                        'error': None,
+                        'skill_used': None,
+                        'tool_used': tool_name,
+                        'confidence': 0.0,
+                        'used_fallback': True
+                    }
+            except Exception as e:
+                continue
         
-        return result
-    
-    def load_skills(self) -> int:
-        """Load all built-in skills. Alias for load_builtin_skills."""
-        return self.load_builtin_skills()
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get registry status."""
-        active_count = sum(
-            1 for inst in self.skill_instances.values() 
-            if inst is not None
-        )
-        
+        # No fallback matched
         return {
-            'total_skills': len(self.skills),
-            'active_instances': active_count,
-            'loaded_at': self.loaded_at.isoformat(),
-            'skills': list(self.skills.keys())
+            'success': False,
+            'output': None,
+            'error': f"No skill or tool could handle: {task}",
+            'skill_used': None,
+            'confidence': 0.0,
+            'used_fallback': True
         }
+    
+    def register_fallback_tool(self, name: str, func: callable) -> None:
+        """
+        Register a fallback tool for when no skill matches.
+        
+        Args:
+            name: Tool name
+            func: Tool function that takes (task, context) and returns result
+        """
+        with self._lock:
+            self._fallback_tools[name] = func
+    
+    def add_learned_skill(self, skill_path: str) -> bool:
+        """
+        Add a new skill to the learned directory at runtime.
+        
+        Args:
+            skill_path: Path to the skill Python file
+            
+        Returns:
+            True if skill was added successfully
+        """
+        path = Path(skill_path)
+        
+        if not path.exists():
+            return False
+        
+        # Copy to learned directory
+        dest_path = self.learned_dir / path.name
+        
+        try:
+            import shutil
+            shutil.copy2(path, dest_path)
+            
+            # Force re-discovery of learned skills
+            self.discover_learned_skills(force=True)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error adding learned skill: {e}")
+            return False
     
     def reload_skill(self, name: str) -> bool:
         """
-        Reload a skill (useful for development).
+        Reload a skill from disk.
         
         Args:
-            name: Skill name
+            name: Name of the skill to reload
             
         Returns:
-            True if reloaded successfully
+            True if skill was reloaded successfully
         """
-        if name not in self.skills:
+        with self._lock:
+            skill = self._skills.get(name)
+            if not skill:
+                return False
+            
+            # Find the skill's source file
+            skill_class = self._skill_classes.get(name)
+            if not skill_class:
+                return False
+            
+            try:
+                module = sys.modules.get(skill_class.__module__)
+                if module:
+                    importlib.reload(module)
+                    
+                    # Re-instantiate the skill
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if (isinstance(attr, type) and 
+                            issubclass(attr, BaseSkill) and 
+                            attr != BaseSkill and
+                            attr.__module__ == skill_class.__module__):
+                            
+                            new_skill = attr()
+                            self._skills[name] = new_skill
+                            return True
+            except Exception as e:
+                print(f"Error reloading skill {name}: {e}")
+            
             return False
-        
-        # Remove existing instance
-        self.skill_instances[name] = None
-        
-        # Re-import the module
-        try:
-            module_name = f"skills.builtin.{name.lower()}"
-            module = importlib.import_module(module_name)
-            
-            # Reload the module
-            importlib.reload(module)
-            
-            # Get the new class
-            skill_class = getattr(module, name, None)
-            if skill_class:
-                self.skills[name] = skill_class
-                return True
-        except Exception:
-            pass
-        
-        return False
     
-    def clear_cache(self) -> None:
-        """Clear all cached skill instances."""
-        self.skill_instances = {name: None for name in self.skills}
+    def list_skills(self) -> List[Dict[str, Any]]:
+        """
+        List all registered skills with their metadata.
+        
+        Returns:
+            List of skill information dictionaries
+        """
+        with self._lock:
+            skills_info = []
+            
+            for name, skill in self._skills.items():
+                info = {
+                    'name': skill.name,
+                    'description': skill.description,
+                    'class': skill.__class__.__name__,
+                    'created_at': skill.created_at.isoformat() if skill.created_at else None,
+                    'last_used': skill.last_used.isoformat() if skill.last_used else None,
+                    'status': skill.get_status() if hasattr(skill, 'get_status') else {}
+                }
+                skills_info.append(info)
+            
+            return skills_info
+    
+    def get_skill_names(self) -> List[str]:
+        """
+        Get list of all registered skill names.
+        
+        Returns:
+            List of skill names
+        """
+        with self._lock:
+            return list(self._skills.keys())
+    
+    def initialize(self) -> int:
+        """
+        Initialize the registry by discovering all skills.
+        
+        Returns:
+            Total number of skills discovered
+        """
+        builtin_count = self.discover_builtin_skills()
+        learned_count = self.discover_learned_skills()
+        return builtin_count + learned_count
 
 
-# Singleton instance
-_registry_instance = None
+# Global registry instance
+_registry: Optional[SkillsRegistry] = None
 
-def get_skill_registry() -> SkillRegistry:
-    """Get the singleton SkillRegistry instance."""
-    global _registry_instance
-    if _registry_instance is None:
-        _registry_instance = SkillRegistry()
-        _registry_instance.load_builtin_skills()
-    return _registry_instance
+def get_registry() -> SkillsRegistry:
+    """Get or create the global skills registry."""
+    global _registry
+    if _registry is None:
+        _registry = SkillsRegistry()
+    return _registry
+
+def initialize_registry() -> int:
+    """Initialize the global registry and return skill count."""
+    registry = get_registry()
+    return registry.initialize()
+
+
+__all__ = ['SkillsRegistry', 'get_registry', 'initialize_registry']

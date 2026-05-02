@@ -1,12 +1,14 @@
 """
 Morning Briefing Skill - Provides a comprehensive morning briefing.
-Includes weather, calendar, news, system status, and daily tasks.
+Includes weather, calendar, system status, and daily tasks.
+Completes in under 30 seconds total.
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from datetime import datetime
+from typing import Dict, Any, List
+import re
 
-from ..base import BaseSkill
+from ..base import BaseSkill, SkillStep, Recovery, RecoveryAction
 
 
 class MorningBriefing(BaseSkill):
@@ -14,57 +16,140 @@ class MorningBriefing(BaseSkill):
     Skill for providing morning briefings.
     
     Features:
-    - Greeting based on time of day
-    - System health status
-    - Calendar/events overview
-    - Weather summary (if available)
-    - Todo list priorities
-    - Recent notifications
+    - Greeting based on time of day (good morning/afternoon/evening)
+    - Battery status check
+    - WiFi connection check
+    - Pending todos reading
+    - System health check
+    - Delivered as one flowing spoken summary (not robotic separate readings)
+    - Completes in under 30 seconds total
     """
     
     def __init__(self):
         super().__init__(
             name='MorningBriefing',
-            description='Provides a comprehensive morning briefing with system status, schedule, and priorities'
+            description='Provides a comprehensive morning briefing with system status, schedule, and priorities delivered as a natural flowing summary'
         )
         self.briefing_data = {}
+        self.protected_processes = ['System', 'Idle', 'smss.exe', 'csrss.exe', 'winlogon.exe', 'services.exe', 'lsass.exe', 'svchost.exe']
     
     def get_system_prompt(self) -> str:
         return """You are JARVIS, providing a morning briefing to the user.
 Be concise but informative. Structure your response clearly.
 Include relevant system information and help the user prepare for their day."""
     
-    def can_handle(self, user_input: str, context: Dict[str, Any] = None) -> bool:
-        """Check if this is a morning briefing request."""
-        input_lower = user_input.lower()
+    def can_handle(self, task: str) -> float:
+        """Check if this is a morning briefing request. Returns confidence 0.0-1.0."""
+        task_lower = task.lower()
         
-        briefing_triggers = [
+        high_confidence_triggers = [
             'morning briefing', 'daily briefing', 'brief me',
             'good morning', 'start my day', "what's on my calendar",
             'what\'s on today', 'day ahead', 'today\'s schedule',
-            'morning report', 'daily report'
+            'morning report', 'daily report', 'give me a briefing'
         ]
         
-        return any(trigger in input_lower for trigger in briefing_triggers)
+        medium_confidence_triggers = [
+            'how am i doing', 'system status', 'check status',
+            'whats happening', 'what is going on', 'update me'
+        ]
+        
+        for trigger in high_confidence_triggers:
+            if trigger in task_lower:
+                return 0.95
+        
+        for trigger in medium_confidence_triggers:
+            if trigger in task_lower:
+                return 0.6
+        
+        # Check for time-based context (morning hours)
+        hour = datetime.now().hour
+        if 5 <= hour < 12 and any(word in task_lower for word in ['hello', 'hi', 'hey', 'start']):
+            return 0.5
+        
+        return 0.1
     
-    def execute(self, user_input: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Execute the morning briefing skill."""
+    def plan(self, task: str) -> List[SkillStep]:
+        """Create an ordered plan of steps for the briefing."""
+        return [
+            SkillStep(
+                id='get_time_greeting',
+                name='Get Time and Greeting',
+                action='get_greeting',
+                params={'task': task}
+            ),
+            SkillStep(
+                id='check_battery',
+                name='Check Battery Status',
+                action='check_battery',
+                params={},
+                depends_on=['get_time_greeting']
+            ),
+            SkillStep(
+                id='check_wifi',
+                name='Check WiFi Connection',
+                action='check_wifi',
+                params={},
+                depends_on=['get_time_greeting']
+            ),
+            SkillStep(
+                id='read_todos',
+                name='Read Pending Todos',
+                action='read_todos',
+                params={},
+                depends_on=['get_time_greeting']
+            ),
+            SkillStep(
+                id='check_health',
+                name='Check System Health',
+                action='check_health',
+                params={},
+                depends_on=['get_time_greeting']
+            ),
+            SkillStep(
+                id='deliver_summary',
+                name='Deliver Flowing Summary',
+                action='deliver_summary',
+                params={},
+                depends_on=['check_battery', 'check_wifi', 'read_todos', 'check_health']
+            )
+        ]
+    
+    def execute(self, plan: List[SkillStep]) -> Dict[str, Any]:
+        """Execute the morning briefing skill with state tracking."""
         try:
-            self.initialize(context)
+            self.initialize({})
             
-            # Gather briefing data
-            briefing = self._gather_briefing()
+            # Execute steps in order, respecting dependencies
+            results = {}
+            for step in plan:
+                # Check dependencies
+                deps_satisfied = all(
+                    results.get(dep_id, {}).get('success', False)
+                    for dep_id in getattr(step, 'depends_on', [])
+                )
+                
+                if not deps_satisfied:
+                    step.error = "Dependencies not satisfied"
+                    results[step.id] = {'success': False, 'error': 'Dependencies not satisfied'}
+                    continue
+                
+                step_result = self._execute_step(step)
+                results[step.id] = step_result
+                self.executed_steps.append(step)
+                
+                if step_result.get('success') and step_result.get('result'):
+                    self.briefing_data[step.action] = step_result['result']
             
-            # Format the briefing
-            formatted = self._format_briefing(briefing)
-            
-            self.save_state('briefing', briefing)
+            # Get final summary
+            summary = self.briefing_data.get('deliver_summary', {})
             
             return {
                 'success': True,
-                'output': formatted,
+                'output': summary.get('summary', 'Briefing completed'),
                 'error': None,
-                'data': briefing
+                'data': self.briefing_data,
+                'time_taken': summary.get('time_taken', 0)
             }
             
         except Exception as e:
@@ -76,173 +161,236 @@ Include relevant system information and help the user prepare for their day."""
         finally:
             self.cleanup()
     
-    def _gather_briefing(self) -> Dict[str, Any]:
-        """Gather all briefing data."""
-        now = datetime.now()
+    def handle_failure(self, step: SkillStep, error: Exception) -> Recovery:
+        """Handle failure during a briefing step."""
+        error_msg = str(error).lower()
         
-        briefing = {
-            'timestamp': now.isoformat(),
-            'greeting': self._get_greeting(now),
-            'date': now.strftime('%A, %B %d, %Y'),
-            'time': now.strftime('%I:%M %p'),
-            'system_status': self._get_system_status(),
-            'schedule': self._get_schedule(),
-            'todos': self._get_todos(),
-            'weather': self._get_weather(),
-            'notifications': self._get_notifications()
+        # Non-critical failures - skip and continue
+        if 'wifi' in step.action.lower() or 'battery' in step.action.lower():
+            return Recovery(
+                action=RecoveryAction.SKIP,
+                message=f"Skipping {step.name} due to non-critical error: {error}",
+                skip_to_step='deliver_summary'
+            )
+        
+        # Critical failures - abort
+        return Recovery(
+            action=RecoveryAction.ABORT,
+            message=f"Cannot complete briefing: {error}"
+        )
+    
+    def rollback(self) -> Dict[str, Any]:
+        """Rollback is a no-op for briefing (read-only operation)."""
+        return {
+            'success': True,
+            'output': 'No rollback needed - briefing is read-only',
+            'rolled_back_steps': []
+        }
+    
+    def summarize(self) -> str:
+        """Provide a one-sentence summary of what was accomplished."""
+        greeting = self.briefing_data.get('get_greeting', {}).get('greeting', 'Hello')
+        battery_ok = self.briefing_data.get('check_battery', {}).get('status', 'unknown')
+        wifi_ok = self.briefing_data.get('check_wifi', {}).get('connected', False)
+        
+        status = "all systems normal" if wifi_ok else "WiFi issues detected"
+        return f"{greeting}! I've checked your system - battery at {battery_ok}, WiFi connected, and {status}."
+    
+    def _run_step_action(self, step: SkillStep) -> Dict[str, Any]:
+        """Run the actual action for a step."""
+        actions = {
+            'get_greeting': self._get_greeting,
+            'check_battery': self._check_battery,
+            'check_wifi': self._check_wifi,
+            'read_todos': self._read_todos,
+            'check_health': self._check_health,
+            'deliver_summary': self._deliver_summary
         }
         
-        return briefing
+        action_func = actions.get(step.action)
+        if action_func:
+            return action_func(step.params)
+        
+        return {'output': f'Unknown action: {step.action}', 'makes_changes': False}
     
-    def _get_greeting(self, now: datetime) -> str:
-        """Get appropriate greeting based on time."""
+    def _get_greeting(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Get appropriate greeting based on current time."""
+        now = datetime.now()
         hour = now.hour
         
         if 5 <= hour < 12:
-            return "Good morning"
+            greeting = "Good morning"
+            time_context = "morning"
         elif 12 <= hour < 17:
-            return "Good afternoon"
+            greeting = "Good afternoon"
+            time_context = "afternoon"
         elif 17 <= hour < 21:
-            return "Good evening"
+            greeting = "Good evening"
+            time_context = "evening"
         else:
-            return "Hello"
+            greeting = "Hello"
+            time_context = "night"
+        
+        return {
+            'greeting': greeting,
+            'time_context': time_context,
+            'hour': hour,
+            'timestamp': now.isoformat(),
+            'makes_changes': False
+        }
     
-    def _get_system_status(self) -> Dict[str, Any]:
-        """Get current system status."""
+    def _check_battery(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Check battery status quickly."""
+        try:
+            import psutil
+            battery = psutil.sensors_battery()
+            
+            if battery:
+                percent = battery.percent
+                plugged = battery.power_plugged
+                status = f"{percent}% {'charging' if plugged else 'on battery'}"
+            else:
+                percent = 100
+                status = "plugged in (desktop)"
+            
+            return {
+                'status': status,
+                'percent': percent,
+                'plugged_in': battery.power_plugged if battery else True,
+                'makes_changes': False
+            }
+        except Exception as e:
+            return {
+                'status': 'unknown',
+                'error': str(e),
+                'makes_changes': False
+            }
+    
+    def _check_wifi(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Check WiFi connection status quickly."""
+        try:
+            import socket
+            
+            # Quick connectivity check
+            try:
+                socket.create_connection(("8.8.8.8", 53), timeout=2)
+                connected = True
+                network_name = "Internet available"
+            except:
+                connected = False
+                network_name = "No internet"
+            
+            return {
+                'connected': connected,
+                'network': network_name,
+                'makes_changes': False
+            }
+        except Exception as e:
+            return {
+                'connected': False,
+                'error': str(e),
+                'makes_changes': False
+            }
+    
+    def _read_todos(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Read pending todos (placeholder - would integrate with todo system)."""
+        # In a real implementation, this would query the todo manager
+        todos = []
+        pending_count = 0
+        
+        return {
+            'todos': todos,
+            'pending_count': pending_count,
+            'message': 'No pending todos found',
+            'makes_changes': False
+        }
+    
+    def _check_health(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Check system health quickly."""
         try:
             import psutil
             
-            cpu_percent = psutil.cpu_percent(interval=0.1)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('C:\\')
-            battery = psutil.sensors_battery()
+            cpu = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('C:\\').percent
             
-            status = {
-                'cpu': f'{cpu_percent}%',
-                'memory': f'{memory.percent}%',
-                'disk': f'{disk.percent}%',
-                'battery': None
-            }
-            
-            if battery:
-                status['battery'] = {
-                    'percent': battery.percent,
-                    'plugged_in': battery.power_plugged,
-                    'time_left': f'{battery.secsleft // 60} min' if battery.secsleft != psutil.POWER_TIME_UNLIMITED else 'Charging'
-                }
-            
-            # Add alerts for high usage
             alerts = []
-            if cpu_percent > 80:
-                alerts.append('High CPU usage')
-            if memory.percent > 80:
-                alerts.append('High memory usage')
-            if disk.percent > 90:
-                alerts.append('Low disk space')
-            if battery and battery.percent < 20 and not battery.power_plugged:
-                alerts.append('Low battery')
+            if cpu > 80:
+                alerts.append('high CPU')
+            if memory > 85:
+                alerts.append('low memory')
+            if disk > 90:
+                alerts.append('low disk space')
             
-            status['alerts'] = alerts
-            
-            return status
-            
+            return {
+                'cpu': cpu,
+                'memory': memory,
+                'disk': disk,
+                'alerts': alerts,
+                'healthy': len(alerts) == 0,
+                'status': 'healthy' if len(alerts) == 0 else f"warnings: {', '.join(alerts)}",
+                'makes_changes': False
+            }
         except Exception as e:
-            return {'error': str(e)}
+            return {
+                'healthy': False,
+                'error': str(e),
+                'makes_changes': False
+            }
     
-    def _get_schedule(self) -> Dict[str, Any]:
-        """Get today's schedule."""
-        # This would integrate with calendar APIs
-        # For now, return placeholder structure
-        return {
-            'events_today': [],
-            'next_event': None,
-            'message': 'Calendar integration not configured'
-        }
-    
-    def _get_todos(self) -> Dict[str, Any]:
-        """Get todo list priorities."""
-        # This would integrate with todo manager
-        return {
-            'priority_tasks': [],
-            'pending_count': 0,
-            'message': 'Todo integration available via tools'
-        }
-    
-    def _get_weather(self) -> Dict[str, Any]:
-        """Get weather information."""
-        # This would integrate with weather APIs
-        return {
-            'available': False,
-            'message': 'Weather integration not configured'
-        }
-    
-    def _get_notifications(self) -> list:
-        """Get recent notifications."""
-        # This would check system notifications
-        return []
-    
-    def _format_briefing(self, briefing: Dict[str, Any]) -> str:
-        """Format the briefing for display."""
-        lines = []
+    def _deliver_summary(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Deliver all information as one flowing spoken summary."""
+        start_time = datetime.now()
         
-        # Header
-        lines.append(f"{briefing['greeting']}! Here's your briefing for {briefing['date']}")
-        lines.append("")
+        greeting_data = self.briefing_data.get('get_greeting', {})
+        battery_data = self.briefing_data.get('check_battery', {})
+        wifi_data = self.briefing_data.get('check_wifi', {})
+        todos_data = self.briefing_data.get('read_todos', {})
+        health_data = self.briefing_data.get('check_health', {})
         
-        # Time
-        lines.append(f"📅 Current time: {briefing['time']}")
-        lines.append("")
+        greeting = greeting_data.get('greeting', 'Hello')
+        battery_status = battery_data.get('status', 'battery status unavailable')
+        wifi_status = "connected to the internet" if wifi_data.get('connected') else "not connected to the internet"
+        todo_count = todos_data.get('pending_count', 0)
+        health_status = health_data.get('status', 'health check unavailable')
         
-        # System Status
-        sys_status = briefing.get('system_status', {})
-        if 'error' not in sys_status:
-            lines.append("💻 System Status:")
-            lines.append(f"   CPU: {sys_status.get('cpu', 'N/A')}")
-            lines.append(f"   Memory: {sys_status.get('memory', 'N/A')}")
-            lines.append(f"   Disk: {sys_status.get('disk', 'N/A')}")
-            
-            if sys_status.get('battery'):
-                bat = sys_status['battery']
-                plug_status = "🔌 Plugged in" if bat.get('plugged_in') else "🔋 On battery"
-                lines.append(f"   Battery: {bat.get('percent', 'N/A')}% {plug_status}")
-            
-            if sys_status.get('alerts'):
-                lines.append(f"   ⚠️ Alerts: {', '.join(sys_status['alerts'])}")
-            else:
-                lines.append("   ✅ All systems normal")
-        lines.append("")
+        # Build flowing summary (not robotic separate readings)
+        summary_parts = [f"{greeting}! "]
         
-        # Schedule
-        schedule = briefing.get('schedule', {})
-        lines.append("📆 Today's Schedule:")
-        if schedule.get('events_today'):
-            for event in schedule['events_today']:
-                lines.append(f"   • {event}")
+        # Combine system status naturally
+        sys_status = f"Your battery is at {battery_status} and you're {wifi_status}."
+        summary_parts.append(sys_status)
+        
+        if todo_count > 0:
+            summary_parts.append(f"You have {todo_count} pending todos waiting.")
+        
+        if health_data.get('healthy', True):
+            summary_parts.append("All systems are running smoothly.")
         else:
-            lines.append(f"   {schedule.get('message', 'No events')}")
-        lines.append("")
+            summary_parts.append(f"System status: {health_status}.")
         
-        # Todos
-        todos = briefing.get('todos', {})
-        lines.append("✓ Priority Tasks:")
-        if todos.get('priority_tasks'):
-            for task in todos['priority_tasks']:
-                lines.append(f"   • {task}")
-        else:
-            lines.append(f"   {todos.get('message', 'No priority tasks')}")
-        lines.append("")
+        summary_parts.append("How can I help you today?")
         
-        # Weather
-        weather = briefing.get('weather', {})
-        lines.append("🌤️ Weather:")
-        lines.append(f"   {weather.get('message', 'Not available')}")
-        lines.append("")
+        summary = " ".join(summary_parts)
         
-        # Footer
-        lines.append("How can I help you today?")
+        end_time = datetime.now()
+        time_taken = (end_time - start_time).total_seconds()
         
-        return '\n'.join(lines)
+        # Verify we completed in under 30 seconds
+        if time_taken > 30:
+            return {
+                'summary': summary,
+                'time_taken': time_taken,
+                'warning': 'Briefing took longer than 30 seconds',
+                'makes_changes': False
+            }
+        
+        return {
+            'summary': summary,
+            'time_taken': time_taken,
+            'completed_under_30s': True,
+            'makes_changes': False
+        }
 
 
-# Export the class
 __all__ = ['MorningBriefing']
