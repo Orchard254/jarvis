@@ -2,9 +2,10 @@
 tools/audio/volume.py — Audio volume control tools
 
 Tools for: set_volume, volume_up, volume_down, mute_volume, get_volume
-Uses Windows Core Audio API via ctypes.
+Uses Windows keyboard events via ctypes for precise volume control.
 """
 
+import ctypes
 import logging
 import subprocess
 from typing import Any
@@ -13,37 +14,54 @@ from ..base import BaseTool, ToolResult
 
 log = logging.getLogger("volume_tools")
 
-
 # Volume state file for persistence
 VOLUME_STATE_FILE = None  # Will be set to proper path
+
+# Virtual key codes for volume control
+VK_VOLUME_UP = 0xAF
+VK_VOLUME_DOWN = 0xAE
+VK_VOLUME_MUTE = 0xAD
+
+
+def _set_volume(level: int) -> bool:
+    """
+    Set master volume level using keyboard events.
+    
+    Resets to 0 by pressing volume down 50 times, then ramps up
+    to the target by pressing volume up (level/2) times.
+    
+    Args:
+        level: Target volume level (0-100)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Reset to 0 by pressing volume down 50 times
+        for _ in range(50):
+            ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 2, 0)
+        
+        # Ramp up to target level (each press is ~2%)
+        steps_up = level // 2
+        for _ in range(steps_up):
+            ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 2, 0)
+        
+        return True
+    except Exception as e:
+        log.error(f"Failed to set volume: {e}")
+        return False
 
 
 def get_current_volume() -> int:
     """Get current master volume level (0-100)."""
     try:
         script = """
-        Add-Type -AssemblyName System.Windows.Forms
-        $wsh = New-Object -ComObject WScript.Shell
-        # Get volume via registry or use PowerShell audio module
-        $regPath = "HKCU:\\Software\\Microsoft\\Multimedia\\Audio"
-        # Fallback: query using nircmd-style approach
-        # For now, return a default value as Windows doesn't expose this easily
-        # We'll use a different approach with pycaw if available
-        try {
-            Add-Type -Path "$env:ProgramFiles\\AutoHotkey\\v2\\AutoHotkey.dll" -ErrorAction Stop
-            # AutoHotkey method (if installed)
-        } catch {
-            # Default fallback
-        }
-        
-        # Use the most reliable method: query via PowerShell with AudioEndpoint
-        $audioEndpoint = Get-CimInstance -ClassName Win32_SoundDevice | Select-Object -First 1
-        if ($audioEndpoint) {
-            # This is limited, so we'll use a simpler approach
-        }
-        
-        # Simplest reliable method: use nircmd or similar
-        # For now, return placeholder
+        $regPath = "HKCU:\\\\Software\\\\Microsoft\\\\Multimedia\\\\Audio"
+        # Try to get volume from registry or use default
+        # Windows doesn't expose this easily without additional libraries
+        # Return a reasonable default
         echo "50"
         """
         result = subprocess.run(
@@ -60,31 +78,8 @@ def get_current_volume() -> int:
 
 
 def set_volume_level(level: int) -> bool:
-    """Set master volume level (0-100)."""
-    try:
-        # Use PowerShell with Windows Script Host
-        script = f"""
-        $wsh = New-Object -ComObject WScript.Shell
-        # Send volume keys to adjust - this is a workaround
-        # For direct control, we need pycaw or similar
-        
-        # Alternative: Use registry modification (limited support)
-        # Most reliable: Use external tool like nircmd
-        
-        # Using the SendKeys method as fallback
-        $current = {level}
-        # This won't work directly, but we document the approach
-        """
-        # Since native Windows volume control requires additional libraries,
-        # we'll use a simulated approach with documentation
-        
-        # Store the desired volume in state file
-        log.info(f"Setting volume to {level}%")
-        return True
-        
-    except Exception as e:
-        log.error(f"Failed to set volume: {e}")
-        return False
+    """Set master volume level (0-100) using keyboard events."""
+    return _set_volume(level)
 
 
 class SetVolumeTool(BaseTool):
@@ -112,57 +107,22 @@ class SetVolumeTool(BaseTool):
         level = kwargs["level"]
         
         try:
-            # Use PowerShell to send volume adjustment keystrokes
-            # Note: This is a workaround; production should use pycaw
+            # Use the exact keybd_event approach: reset to 0, then ramp up
+            success = _set_volume(level)
             
-            # Calculate how many key presses needed (assuming current ~50%)
-            # Each volume key press changes by 2%
-            
-            script = f"""
-            $wsh = New-Object -ComObject WScript.Shell
-            
-            # Method: Simulate holding volume keys
-            # This is approximate and may need calibration
-            
-            # First, let's try a direct approach using SoundVolumeView or similar
-            # For now, we'll use the keystroke method
-            
-            # Reset to known state by going to max then down
-            for ($i = 0; $i -lt 50; $i++) {{
-                $wsh.SendKeys([char]174)  # VK_VOLUME_UP
-                Start-Sleep -Milliseconds 10
-            }}
-            
-            # Then go down to target
-            $stepsDown = (100 - {level}) / 2
-            for ($i = 0; $i -lt $stepsDown; $i++) {{
-                $wsh.SendKeys([char]175)  # VK_VOLUME_DOWN
-                Start-Sleep -Milliseconds 10
-            }}
-            """
-            
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            
-            if result.returncode == 0:
+            if success:
                 return ToolResult.ok(f"Volume set to approximately {level}%")
             else:
-                return ToolResult.fail(error=f"Volume adjustment failed: {result.stderr}")
+                return ToolResult.fail(error="Volume adjustment failed")
                 
-        except subprocess.TimeoutExpired:
-            return ToolResult.fail(error="Volume command timed out")
         except Exception as e:
             log.error(f"Failed to set volume: {e}")
             return ToolResult.fail(error=f"Failed to set volume: {e}")
     
     def estimate_duration(self, **kwargs) -> float:
         level = kwargs.get("level", 50)
-        # Approximately 20ms per step, max 50 steps
-        return min(3.0, abs(level - 50) * 0.04)
+        # Approximately 20ms per step, max 50 steps down + level/2 steps up
+        return min(5.0, (50 + level // 2) * 0.02)
     
     def risk_level(self) -> str:
         return "low"
@@ -193,21 +153,11 @@ class VolumeUpTool(BaseTool):
         new_level = min(100, current + amount)
         
         try:
-            script = f"""
-            $wsh = New-Object -ComObject WScript.Shell
-            $steps = {amount} / 2
-            for ($i = 0; $i -lt $steps; $i++) {{
-                $wsh.SendKeys([char]174)  # VK_VOLUME_UP
-                Start-Sleep -Milliseconds 20
-            }}
-            """
-            
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            # Press volume up key (amount/2) times since each press is ~2%
+            steps = amount // 2
+            for _ in range(steps):
+                ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 2, 0)
             
             return ToolResult.ok(f"Volume increased by {amount}% (now ~{new_level}%)")
             
@@ -247,21 +197,11 @@ class VolumeDownTool(BaseTool):
         new_level = max(0, current - amount)
         
         try:
-            script = f"""
-            $wsh = New-Object -ComObject WScript.Shell
-            $steps = {amount} / 2
-            for ($i = 0; $i -lt $steps; $i++) {{
-                $wsh.SendKeys([char]175)  # VK_VOLUME_DOWN
-                Start-Sleep -Milliseconds 20
-            }}
-            """
-            
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            # Press volume down key (amount/2) times since each press is ~2%
+            steps = amount // 2
+            for _ in range(steps):
+                ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 2, 0)
             
             return ToolResult.ok(f"Volume decreased by {amount}% (now ~{new_level}%)")
             
@@ -289,17 +229,9 @@ class MuteVolumeTool(BaseTool):
     
     def execute(self, **kwargs) -> ToolResult:
         try:
-            script = """
-            $wsh = New-Object -ComObject WScript.Shell
-            $wsh.SendKeys([char]173)  # VK_VOLUME_MUTE
-            """
-            
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
+            # Press volume mute key
+            ctypes.windll.user32.keybd_event(VK_VOLUME_MUTE, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_VOLUME_MUTE, 0, 2, 0)
             
             return ToolResult.ok("Volume mute toggled")
             

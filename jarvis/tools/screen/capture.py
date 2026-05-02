@@ -3,6 +3,7 @@ tools/screen/capture.py — Screen capture tools
 
 Tools for: screenshot, realtime capture
 Uses mss and Pillow for screen capture.
+Returns base64 encoded image data in result dict under image_base64 key.
 """
 
 import base64
@@ -53,7 +54,7 @@ def take_screenshot(filename: Optional[str] = None) -> tuple[bool, str, Optional
             # Convert to PIL Image
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
             
-            # Save
+            # Save to disk
             img.save(filepath, "PNG")
             
             # Also get base64 for vision analysis
@@ -64,7 +65,7 @@ def take_screenshot(filename: Optional[str] = None) -> tuple[bool, str, Optional
             return True, f"Screenshot saved to {filepath}", base64_data
             
     except ImportError:
-        return False, "Screenshot libraries not installed (mss, Pillow)", None
+        return False, "Screenshot library not installed (mss, Pillow)", None
     except Exception as e:
         log.error(f"Screenshot failed: {e}")
         return False, f"Screenshot failed: {e}", None
@@ -85,10 +86,13 @@ class ScreenshotTool(BaseTool):
         success, message, base64_data = take_screenshot()
         
         if success:
+            # Create result with image_base64 key as required
             result = ToolResult.ok(message)
             # Store base64 in output for potential vision analysis
+            result.output = message
             if base64_data:
-                result.output = f"{message}\n[Image data available for analysis]"
+                # Add image_base64 to the result dict as required
+                result._data["image_base64"] = base64_data
             return result
         else:
             return ToolResult.fail(error=message)

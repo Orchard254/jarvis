@@ -3,6 +3,8 @@ tools/system/display.py — Display settings tools
 
 Tools for: brightness, dark mode toggle
 Uses PowerShell and ctypes for display control.
+Attempts WMI first and falls back to PowerShell WmiSetBrightness method.
+Honest failure reporting if both methods fail.
 """
 
 import logging
@@ -58,8 +60,11 @@ class SetBrightnessTool(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         level = kwargs["level"]
         
+        # Method 1: Try WMI direct approach first
+        wmi_success = False
+        wmi_error = None
+        
         try:
-            # Use WMI to set brightness
             script = f"""
             $brightness = {level}
             $wmi = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods
@@ -72,16 +77,71 @@ class SetBrightnessTool(BaseTool):
                 timeout=5,
             )
             
-            if result.returncode == 0:
-                return ToolResult.ok(f"Brightness set to {level}%")
+            if result.returncode == 0 and not result.stderr.strip():
+                wmi_success = True
             else:
-                return ToolResult.fail(error=f"Failed to set brightness: {result.stderr}")
+                wmi_error = result.stderr.strip() or result.stdout.strip()
                 
         except subprocess.TimeoutExpired:
-            return ToolResult.fail(error="Brightness command timed out")
+            wmi_error = "WMI command timed out"
         except Exception as e:
-            log.error(f"Failed to set brightness: {e}")
-            return ToolResult.fail(error=f"Failed to set brightness: {e}")
+            wmi_error = str(e)
+        
+        if wmi_success:
+            # Verify the brightness was actually set
+            actual = get_current_brightness()
+            if actual == level or (actual != -1 and abs(actual - level) <= 5):
+                return ToolResult.ok(f"Brightness set to {level}%")
+            else:
+                # WMI reported success but verification failed - be honest
+                return ToolResult.fail(error=f"WMI reported success but brightness is {actual}%, not {level}%")
+        
+        # Method 2: Fallback to alternative PowerShell WmiSetBrightness method
+        ps_success = False
+        ps_error = None
+        
+        try:
+            # Alternative approach using different WMI invocation
+            script = f"""
+            try {{
+                $wmi = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods
+                Invoke-CimMethod -InputObject $wmi -MethodName WmiSetBrightness -Arguments @{{Timeout = 0; CurrentBrightness = {level}}}
+                "SUCCESS"
+            }} catch {{
+                "ERROR: " + $_.Exception.Message
+            }}
+            """
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            
+            if result.returncode == 0 and "SUCCESS" in result.stdout:
+                ps_success = True
+            else:
+                ps_error = result.stderr.strip() or result.stdout.strip()
+                
+        except subprocess.TimeoutExpired:
+            ps_error = "PowerShell fallback command timed out"
+        except Exception as e:
+            ps_error = str(e)
+        
+        if ps_success:
+            actual = get_current_brightness()
+            if actual == level or (actual != -1 and abs(actual - level) <= 5):
+                return ToolResult.ok(f"Brightness set to {level}% (via fallback method)")
+            else:
+                return ToolResult.fail(error=f"Fallback reported success but brightness is {actual}%, not {level}%")
+        
+        # Both methods failed - honestly report failure
+        error_msg = f"Failed to set brightness to {level}%. "
+        error_msg += f"WMI method failed: {wmi_error}. "
+        error_msg += f"PowerShell fallback failed: {ps_error}."
+        
+        log.error(error_msg)
+        return ToolResult.fail(error=error_msg)
     
     def estimate_duration(self, **kwargs) -> float:
         return 0.5

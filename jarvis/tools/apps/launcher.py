@@ -16,6 +16,29 @@ from ..base import BaseTool, ToolResult
 log = logging.getLogger("app_tools")
 
 
+# Complete app mappings as required - all entries from original pc_control.py
+APP_MAPPINGS = {
+    "chrome": "chrome.exe",
+    "google chrome": "chrome.exe",
+    "firefox": "firefox.exe",
+    "edge": "msedge.exe",
+    "notepad": "notepad.exe",
+    "calculator": "calc.exe",
+    "calc": "calc.exe",
+    "spotify": "spotify.exe",
+    "vscode": "Code.exe",
+    "visual studio code": "Code.exe",
+    "explorer": "explorer.exe",
+    "file explorer": "explorer.exe",
+    "cmd": "cmd.exe",
+    "command prompt": "cmd.exe",
+    "powershell": "powershell.exe",
+    "task manager": "Taskmgr.exe",
+    "control panel": "control.exe",
+    "settings": "ms-settings:",
+}
+
+
 class OpenAppTool(BaseTool):
     """Open an application."""
     
@@ -38,42 +61,8 @@ class OpenAppTool(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         app_name = kwargs["app_name"].strip().lower()
         
-        # Map common names to executables
-        app_map = {
-            "chrome": "chrome.exe",
-            "google chrome": "chrome.exe",
-            "notepad": "notepad.exe",
-            "calculator": "calc.exe",
-            "calc": "calc.exe",
-            "word": "winword.exe",
-            "microsoft word": "winword.exe",
-            "excel": "excel.exe",
-            "microsoft excel": "excel.exe",
-            "powerpoint": "powerpnt.exe",
-            "edge": "msedge.exe",
-            "microsoft edge": "msedge.exe",
-            "vscode": "Code.exe",
-            "visual studio code": "Code.exe",
-            "spotify": "spotify.exe",
-            "discord": "Discord.exe",
-            "slack": "slack.exe",
-            "teams": "Teams.exe",
-            "outlook": "outlook.exe",
-            "onenote": "onenote.exe",
-            "paint": "mspaint.exe",
-            "snipping tool": "SnippingTool.exe",
-            "task manager": "Taskmgr.exe",
-            "control panel": "control.exe",
-            "settings": "ms-settings:",
-            "store": "explorer.exe shell:AppsFolder",
-            "file explorer": "explorer.exe",
-            "terminal": "wt.exe",
-            "powershell": "powershell.exe",
-            "cmd": "cmd.exe",
-            "command prompt": "cmd.exe",
-        }
-        
-        executable = app_map.get(app_name, app_name)
+        # Use the complete app_mappings dict
+        executable = APP_MAPPINGS.get(app_name, app_name)
         
         try:
             # Check if already running
@@ -82,11 +71,8 @@ class OpenAppTool(BaseTool):
                     return ToolResult.ok(f"{app_name} is already running")
             
             # Try to start the app
-            if executable.startswith("shell:"):
-                # Special URI handler
-                subprocess.Popen(["start", executable], shell=True)
-            elif executable.endswith(":"):
-                # Settings URI
+            if executable.startswith("shell:") or executable.endswith(":"):
+                # Special URI handler (e.g., ms-settings:)
                 subprocess.Popen(["start", executable], shell=True)
             else:
                 subprocess.Popen([executable], shell=True)

@@ -61,6 +61,79 @@ class RunPowerShellTool(BaseTool):
         command = kwargs["command"]
         timeout = min(kwargs.get("timeout", 30), 120)
         
+        # Check if the script contains Stop-Process and route to _close_app_gracefully
+        if "Stop-Process" in command:
+            return self._close_app_gracefully(command)
+        
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            
+            output = result.stdout.strip()
+            error = result.stderr.strip()
+            
+            if result.returncode == 0:
+                return ToolResult.ok(output[:5000] if output else "Command executed successfully")
+            else:
+                return ToolResult.fail(error=error[:1000] if error else f"Exit code: {result.returncode}")
+                
+        except subprocess.TimeoutExpired:
+            return ToolResult.fail(error=f"Command timed out after {timeout} seconds")
+        except Exception as e:
+            log.error(f"PowerShell execution failed: {e}")
+            return ToolResult.fail(error=f"PowerShell execution failed: {e}")
+    
+    def _close_app_gracefully(self, command: str) -> ToolResult:
+        """
+        Handle Stop-Process commands by routing to graceful app close.
+        
+        Parses the Stop-Process command to extract the process name or ID
+        and closes the app gracefully.
+        """
+        import re
+        
+        # Try to extract process name from Stop-Process -Name <name>
+        name_match = re.search(r'Stop-Process\s+-Name\s+[\'"]?(\w+)[\'"]?', command, re.IGNORECASE)
+        # Or from Stop-Process <name>
+        if not name_match:
+            name_match = re.search(r'Stop-Process\s+(\w+)', command, re.IGNORECASE)
+        
+        # Try to extract process ID from Stop-Process -Id <id>
+        id_match = re.search(r'Stop-Process\s+-Id\s+(\d+)', command, re.IGNORECASE)
+        
+        try:
+            if name_match:
+                app_name = name_match.group(1).lower()
+                # Import and use CloseAppTool
+                from ..apps.launcher import CloseAppTool
+                close_tool = CloseAppTool()
+                return close_tool.execute(app_name=app_name, force=False)
+            elif id_match:
+                pid = int(id_match.group(1))
+                # Kill by PID using psutil
+                import psutil
+                try:
+                    proc = psutil.Process(pid)
+                    proc.terminate()  # Graceful termination
+                    return ToolResult.ok(f"Gracefully terminated process {pid} ({proc.name()})")
+                except psutil.NoSuchProcess:
+                    return ToolResult.ok(f"Process {pid} was not running")
+                except psutil.AccessDenied:
+                    return ToolResult.fail(error=f"Access denied to terminate process {pid}")
+            else:
+                # Can't parse the command, execute it anyway but warn
+                log.warning(f"Could not parse Stop-Process command: {command}")
+                return self._execute_powershell(command, 30)
+        except Exception as e:
+            log.error(f"Failed to close app gracefully: {e}")
+            return ToolResult.fail(error=f"Failed to close app gracefully: {e}")
+    
+    def _execute_powershell(self, command: str, timeout: int) -> ToolResult:
+        """Execute PowerShell command directly."""
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
