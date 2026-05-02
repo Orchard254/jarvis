@@ -60,7 +60,7 @@ class TTSManager:
             
         try:
             # Import here to avoid circular imports
-            from output.tts import speak as tts_speak
+            from jarvis.output.tts import speak as tts_speak
             tts_speak(text)
         except (ImportError, Exception) as e:
             logger.warning(f"TTS not available: {e}")

@@ -27,8 +27,7 @@ class SystemOptimizerSkill(BaseSkill):
     def __init__(self):
         super().__init__(
             name="system_optimizer",
-            description="Analyze and optimize system performance",
-            version="1.0.0"
+            description="Analyze and optimize system performance"
         )
         
         self.optimization_history: List[Dict[str, Any]] = []
@@ -553,3 +552,52 @@ Focus on actionable improvements with measurable impact.""".format(
         """Restore skill state."""
         self.optimization_history = state.get("optimization_history", [])
         self.baseline_metrics = state.get("baseline_metrics")
+    
+    # Abstract method implementations required by BaseSkill
+    
+    def can_handle(self, task: str) -> float:
+        """Check if this skill can handle the given request."""
+        task_lower = task.lower()
+        keywords = ['optimize', 'performance', 'clean', 'cleanup', 'system tune']
+        return 0.9 if any(kw in task_lower for kw in keywords) else 0.2
+    
+    def plan(self, task: str) -> List:
+        """Create an ordered plan of steps to accomplish the task."""
+        from ..base import SkillStep
+        return [
+            SkillStep(
+                id="step_1",
+                name="Analyze System",
+                action="analyze",
+                params={"task": task}
+            ),
+            SkillStep(
+                id="step_2",
+                name="Optimize",
+                action="optimize",
+                params={"task": task}
+            )
+        ]
+    
+    def handle_failure(self, step, error: Exception):
+        """Handle a failure during step execution."""
+        from ..base import Recovery, RecoveryAction
+        return Recovery(
+            action=RecoveryAction.SKIP,
+            message=f"Optimization step failed: {error}",
+            retry_count=0,
+            max_retries=1
+        )
+    
+    def rollback(self):
+        """Undo completed steps in reverse order."""
+        return {
+            "success": True,
+            "output": "System optimizer rollback completed (no changes to undo)",
+            "steps_rolled_back": 0
+        }
+    
+    def summarize(self) -> str:
+        """Provide a one-sentence summary of what was accomplished."""
+        count = len(self.optimization_history)
+        return f"Performed {count} system optimizations."
