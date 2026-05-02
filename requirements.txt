@@ -14,3 +14,4 @@ edge-tts
 pydub
 webrtcvad
 noisereduce
+python-dotenv>=1.0.0

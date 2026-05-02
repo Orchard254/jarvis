@@ -44,8 +44,8 @@ class EpisodicMemory:
             try:
                 with open(self.index_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"[EPISODIC] Failed to load index, using defaults: {e}")
         
         return {
             'sessions': [],
@@ -178,7 +178,8 @@ class EpisodicMemory:
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
+        except Exception as e:
+            log.warning(f"[EPISODIC] Failed to load session {session_id}: {e}")
             return None
     
     def delete_session(self, session_id: str) -> bool:
@@ -209,7 +210,8 @@ class EpisodicMemory:
             self._save_index()
             
             return True
-        except Exception:
+        except Exception as e:
+            log.warning(f"[EPISODIC] Failed to delete session {session_id}: {e}")
             return False
     
     def list_sessions(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
@@ -336,7 +338,8 @@ class EpisodicMemory:
                 return f"{minutes}m"
             else:
                 return f"{delta.seconds}s"
-        except Exception:
+        except Exception as e:
+            log.debug(f"[EPISODIC] Duration calculation failed: {e}")
             return "Unknown"
     
     def get_memory_stats(self) -> Dict[str, Any]:
