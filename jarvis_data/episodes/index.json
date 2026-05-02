@@ -195,9 +195,44 @@
       "created_at": "2026-05-02T16:11:46.087175",
       "message_count": 2,
       "first_message_preview": "system info"
+    },
+    {
+      "session_id": "20260502_184117",
+      "filename": "session_20260502_184117.json",
+      "created_at": "2026-05-02T18:41:17.418357",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185008",
+      "filename": "session_20260502_185008.json",
+      "created_at": "2026-05-02T18:50:08.866857",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185013",
+      "filename": "session_20260502_185013.json",
+      "created_at": "2026-05-02T18:50:13.630362",
+      "message_count": 2,
+      "first_message_preview": "what is 2+2"
+    },
+    {
+      "session_id": "20260502_185017",
+      "filename": "session_20260502_185017.json",
+      "created_at": "2026-05-02T18:50:17.924597",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185126",
+      "filename": "session_20260502_185126.json",
+      "created_at": "2026-05-02T18:51:26.025967",
+      "message_count": 2,
+      "first_message_preview": "hello"
     }
   ],
-  "total_sessions": 28,
+  "total_sessions": 33,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-02T16:11:46.087354"
+  "updated_at": "2026-05-02T18:51:26.028202"
 }
