@@ -230,9 +230,23 @@
       "created_at": "2026-05-02T18:51:26.025967",
       "message_count": 2,
       "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_200438",
+      "filename": "session_20260502_200438.json",
+      "created_at": "2026-05-02T20:04:38.723585",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_200527",
+      "filename": "session_20260502_200527.json",
+      "created_at": "2026-05-02T20:05:27.327137",
+      "message_count": 2,
+      "first_message_preview": "hello"
     }
   ],
-  "total_sessions": 33,
+  "total_sessions": 35,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-02T18:51:26.028202"
+  "updated_at": "2026-05-02T20:05:27.327335"
 }
