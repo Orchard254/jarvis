@@ -4,7 +4,7 @@ Quick test to verify JARVIS tool registry is working correctly
 import sys
 sys.path.insert(0, '/workspace')
 
-from jarvis.tools.registry import ToolRegistry, get_registry
+from tools.registry import ToolRegistry, get_registry
 
 # Test 1: Get registry instance
 print("Test 1: Getting registry instance...")

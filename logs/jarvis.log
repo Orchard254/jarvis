@@ -1,621 +1,374 @@
-2026-05-01 14:17:24,671 - __main__ - INFO - ============================================================
-2026-05-01 14:17:24,672 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:17:24,672 - __main__ - INFO - ============================================================
-2026-05-01 14:17:24,672 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:17:24,672 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:17:24,672 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:17:24,672 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:17:24,672 - __main__ - ERROR - Fatal error: ToolRegistry.__init__() takes 1 positional argument but 2 were given
+2026-05-01 14:36:07,534 - __main__ - INFO - ============================================================
+2026-05-01 14:36:07,534 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:07,534 - __main__ - INFO - ============================================================
+2026-05-01 14:36:07,534 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:07,534 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:07,534 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:07,534 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:07,549 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:07,572 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:07,573 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:07,586 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:07,587 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:07,588 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:07,589 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:07,589 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:07,590 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:07,591 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:07,591 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:07,592 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:07,593 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:07,593 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:07,594 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:07,595 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:07,606 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:07,607 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:07,607 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:07,610 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:07,610 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:07,610 - __main__ - ERROR - Fatal error: OllamaClient.__init__() got an unexpected keyword argument 'fallback_to_local'
 Traceback (most recent call last):
   File "/workspace/jarvis/jarvis.py", line 132, in main
     run_orchestrator(config)
   File "/workspace/jarvis/core/orchestrator.py", line 503, in run_orchestrator
     orchestrator = Orchestrator(config)
                    ^^^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/orchestrator.py", line 89, in __init__
-    self.tool_registry = ToolRegistry(config)
-                         ^^^^^^^^^^^^^^^^^^^^
-TypeError: ToolRegistry.__init__() takes 1 positional argument but 2 were given
-2026-05-01 14:17:40,235 - __main__ - INFO - ============================================================
-2026-05-01 14:17:40,235 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:17:40,235 - __main__ - INFO - ============================================================
-2026-05-01 14:17:40,236 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:17:40,236 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:17:40,236 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:17:40,236 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:17:40,248 - tool_registry - ERROR - Failed to load module tools.system.power: No module named 'tools.system'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.system.info: No module named 'tools.system'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.system.display: No module named 'tools.system'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.apps.window: No module named 'tools.apps'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.apps.launcher: No module named 'tools.apps'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.audio.volume: No module named 'tools.audio'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.files.operations: No module named 'tools.files'; 'tools' is not a package
-2026-05-01 14:17:40,249 - tool_registry - ERROR - Failed to load module tools.network.connectivity: No module named 'tools.network'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.screen.capture: No module named 'tools.screen'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.input.clipboard: No module named 'tools.input'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.web.browser: No module named 'tools.web'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.time.clock: No module named 'tools.time'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.settings.windows: No module named 'tools.settings'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.tasks.background: No module named 'tools.tasks'; 'tools' is not a package
-2026-05-01 14:17:40,250 - tool_registry - ERROR - Failed to load module tools.scripts.runner: No module named 'tools.scripts'; 'tools' is not a package
-2026-05-01 14:17:40,251 - tool_registry - ERROR - Failed to load module tools.data.notes: No module named 'tools.data'; 'tools' is not a package
-2026-05-01 14:17:40,251 - tool_registry - ERROR - Failed to load module tools.data.calculate: No module named 'tools.data'; 'tools' is not a package
-2026-05-01 14:17:40,251 - tool_registry - ERROR - Failed to load module tools.data.todo: No module named 'tools.data'; 'tools' is not a package
-2026-05-01 14:17:40,251 - tool_registry - INFO - Total tools loaded: 0
-2026-05-01 14:17:40,251 - __main__ - ERROR - Fatal error: 'SkillRegistry' object has no attribute 'load_skills'
+  File "/workspace/jarvis/core/orchestrator.py", line 112, in __init__
+    self.brain = Brain(config, self.tool_registry)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/jarvis/core/brain.py", line 44, in __init__
+    self.client = OllamaClient(
+                  ^^^^^^^^^^^^^
+TypeError: OllamaClient.__init__() got an unexpected keyword argument 'fallback_to_local'
+2026-05-01 14:36:19,333 - __main__ - INFO - ============================================================
+2026-05-01 14:36:19,333 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:19,333 - __main__ - INFO - ============================================================
+2026-05-01 14:36:19,333 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:19,333 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:19,334 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:19,334 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:19,348 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:19,387 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:19,387 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:19,392 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:19,393 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:19,394 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:19,394 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:19,395 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:19,396 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:19,406 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:19,407 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:19,408 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:19,409 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:19,410 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:19,411 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:19,412 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:19,413 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:19,413 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:19,413 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:19,432 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:19,432 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:19,432 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:36:19,432 - __main__ - ERROR - Fatal error: IntentClassifier.__init__() takes from 1 to 2 positional arguments but 3 were given
 Traceback (most recent call last):
   File "/workspace/jarvis/jarvis.py", line 132, in main
     run_orchestrator(config)
   File "/workspace/jarvis/core/orchestrator.py", line 503, in run_orchestrator
     orchestrator = Orchestrator(config)
                    ^^^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/orchestrator.py", line 94, in __init__
-    self.skill_registry.load_skills()
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'SkillRegistry' object has no attribute 'load_skills'. Did you mean: 'list_skills'?
-2026-05-01 14:18:14,867 - __main__ - INFO - ============================================================
-2026-05-01 14:18:14,867 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:18:14,867 - __main__ - INFO - ============================================================
-2026-05-01 14:18:14,867 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:18:14,867 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:18:14,867 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:18:14,868 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:18:14,887 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 14:18:14,926 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 14:18:14,928 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 14:18:14,933 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 14:18:14,936 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 14:18:14,950 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 14:18:14,953 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 14:18:14,956 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 14:18:14,969 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 14:18:14,972 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 14:18:14,974 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 14:18:14,987 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 14:18:14,989 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 14:18:14,991 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 14:18:14,994 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 14:18:14,997 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 14:18:15,008 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 14:18:15,012 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 14:18:15,012 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 14:18:15,016 - __main__ - ERROR - Fatal error: WorkingMemory.__init__() got an unexpected keyword argument 'max_tokens'
+  File "/workspace/jarvis/core/orchestrator.py", line 119, in __init__
+    self.intent_classifier = IntentClassifier(config, self.brain)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: IntentClassifier.__init__() takes from 1 to 2 positional arguments but 3 were given
+2026-05-01 14:36:29,312 - __main__ - INFO - ============================================================
+2026-05-01 14:36:29,312 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:29,312 - __main__ - INFO - ============================================================
+2026-05-01 14:36:29,312 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:29,312 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:29,313 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:29,313 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:29,316 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:29,348 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:29,349 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:29,351 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:29,352 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:29,353 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:29,353 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:29,354 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:29,355 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:29,367 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:29,368 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:29,368 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:29,369 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:29,370 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:29,371 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:29,371 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:29,372 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:29,372 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:29,372 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:29,388 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:29,388 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:29,388 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:36:29,388 - __main__ - ERROR - Fatal error: VisionAnalyzer.__init__() takes from 1 to 2 positional arguments but 3 were given
 Traceback (most recent call last):
   File "/workspace/jarvis/jarvis.py", line 132, in main
     run_orchestrator(config)
   File "/workspace/jarvis/core/orchestrator.py", line 503, in run_orchestrator
     orchestrator = Orchestrator(config)
                    ^^^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/orchestrator.py", line 101, in __init__
-    self.memory = CoreMemory(config)
-                  ^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/memory.py", line 38, in __init__
-    self.working = WorkingMemory(
-                   ^^^^^^^^^^^^^^
-TypeError: WorkingMemory.__init__() got an unexpected keyword argument 'max_tokens'
-2026-05-01 14:18:29,116 - __main__ - INFO - ============================================================
-2026-05-01 14:18:29,116 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:18:29,116 - __main__ - INFO - ============================================================
-2026-05-01 14:18:29,120 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:18:29,120 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:18:29,120 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:18:29,126 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:18:29,131 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 14:18:29,167 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 14:18:29,168 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 14:18:29,171 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 14:18:29,171 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 14:18:29,172 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 14:18:29,173 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 14:18:29,186 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 14:18:29,187 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 14:18:29,188 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 14:18:29,189 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 14:18:29,189 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 14:18:29,190 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 14:18:29,190 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 14:18:29,191 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 14:18:29,192 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 14:18:29,192 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 14:18:29,193 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 14:18:29,193 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 14:18:29,207 - __main__ - ERROR - Fatal error: EpisodicMemory.__init__() got an unexpected keyword argument 'data_dir'
+  File "/workspace/jarvis/core/orchestrator.py", line 120, in __init__
+    self.vision_analyzer = VisionAnalyzer(config, self.brain.client)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: VisionAnalyzer.__init__() takes from 1 to 2 positional arguments but 3 were given
+2026-05-01 14:36:38,009 - __main__ - INFO - ============================================================
+2026-05-01 14:36:38,009 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:38,009 - __main__ - INFO - ============================================================
+2026-05-01 14:36:38,009 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:38,009 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:38,010 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:38,010 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:38,013 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:38,052 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:38,052 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:38,067 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:38,068 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:38,069 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:38,069 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:38,070 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:38,071 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:38,072 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:38,072 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:38,073 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:38,073 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:38,074 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:38,075 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:38,075 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:38,076 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:38,087 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:38,087 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:38,091 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:38,092 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:38,092 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:36:38,092 - __main__ - ERROR - Fatal error: PlanCritic.__init__() takes from 1 to 2 positional arguments but 3 were given
 Traceback (most recent call last):
   File "/workspace/jarvis/jarvis.py", line 132, in main
     run_orchestrator(config)
   File "/workspace/jarvis/core/orchestrator.py", line 503, in run_orchestrator
     orchestrator = Orchestrator(config)
                    ^^^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/orchestrator.py", line 101, in __init__
-    self.memory = CoreMemory(config)
-                  ^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/memory.py", line 44, in __init__
-    self.episodic = EpisodicMemory(data_dir=data_dir)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: EpisodicMemory.__init__() got an unexpected keyword argument 'data_dir'
-2026-05-01 14:18:48,646 - __main__ - INFO - ============================================================
-2026-05-01 14:18:48,647 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:18:48,647 - __main__ - INFO - ============================================================
-2026-05-01 14:18:48,647 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:18:48,647 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:18:48,647 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:18:48,647 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:18:48,650 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 14:18:48,673 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 14:18:48,674 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 14:18:48,687 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 14:18:48,687 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 14:18:48,688 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 14:18:48,689 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 14:18:48,690 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 14:18:48,690 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 14:18:48,691 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 14:18:48,692 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 14:18:48,692 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 14:18:48,693 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 14:18:48,694 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 14:18:48,694 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 14:18:48,695 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 14:18:48,695 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 14:18:48,696 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 14:18:48,706 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 14:18:48,710 - __main__ - ERROR - Fatal error: MemoryManager.__init__() got an unexpected keyword argument 'working'
+  File "/workspace/jarvis/core/orchestrator.py", line 124, in __init__
+    self.critic = PlanCritic(config, self.brain)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: PlanCritic.__init__() takes from 1 to 2 positional arguments but 3 were given
+2026-05-01 14:36:45,490 - __main__ - INFO - ============================================================
+2026-05-01 14:36:45,490 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:45,491 - __main__ - INFO - ============================================================
+2026-05-01 14:36:45,491 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:45,491 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:45,491 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:45,491 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:45,494 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:45,528 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:45,529 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:45,532 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:45,533 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:45,533 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:45,534 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:45,546 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:45,548 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:45,549 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:45,550 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:45,551 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:45,552 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:45,553 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:45,553 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:45,554 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:45,555 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:45,555 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:45,555 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:45,567 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:45,567 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:45,567 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:36:45,568 - __main__ - ERROR - Fatal error: StrategySelector.__init__() takes 1 positional argument but 2 were given
 Traceback (most recent call last):
   File "/workspace/jarvis/jarvis.py", line 132, in main
     run_orchestrator(config)
   File "/workspace/jarvis/core/orchestrator.py", line 503, in run_orchestrator
     orchestrator = Orchestrator(config)
                    ^^^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/orchestrator.py", line 101, in __init__
-    self.memory = CoreMemory(config)
-                  ^^^^^^^^^^^^^^^^^^
-  File "/workspace/jarvis/core/memory.py", line 47, in __init__
-    self.manager = MemoryManagerImpl(
-                   ^^^^^^^^^^^^^^^^^^
-TypeError: MemoryManager.__init__() got an unexpected keyword argument 'working'
-2026-05-01 14:55:25,631 - __main__ - INFO - ============================================================
-2026-05-01 14:55:25,631 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:55:25,631 - __main__ - INFO - ============================================================
-2026-05-01 14:55:25,631 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:55:25,631 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:55:25,631 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:55:25,631 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:55:25,634 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 14:55:25,670 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 14:55:25,671 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 14:55:25,674 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 14:55:25,674 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 14:55:25,675 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 14:55:25,676 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 14:55:25,687 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 14:55:25,688 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 14:55:25,689 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 14:55:25,690 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 14:55:25,690 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 14:55:25,691 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 14:55:25,692 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 14:55:25,692 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 14:55:25,693 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 14:55:25,693 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 14:55:25,694 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 14:55:25,694 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 14:55:25,709 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 14:55:25,709 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 14:55:25,709 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 14:55:25,709 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 14:55:25,709 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 14:55:26,034 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:26,035 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 14:55:26,035 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 14:55:26,046 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://ollama.com/api/chat
-2026-05-01 14:55:26,982 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 14:55:26,982 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 14:55:26,982 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
-2026-05-01 14:55:26,984 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f89718bcc20>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 14:55:26,984 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
-2026-05-01 14:55:27,986 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f89718bd6a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 14:55:27,987 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
-2026-05-01 14:55:29,989 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f89718bd2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 14:55:29,989 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f89718bd2e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 14:55:30,049 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:30,049 - jarvis.core.orchestrator - ERROR - Error processing command: 'EpisodicMemory' object has no attribute 'store_session'
+  File "/workspace/jarvis/core/orchestrator.py", line 126, in __init__
+    self.strategy_selector = StrategySelector(config)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: StrategySelector.__init__() takes 1 positional argument but 2 were given
+2026-05-01 14:36:51,373 - __main__ - INFO - ============================================================
+2026-05-01 14:36:51,374 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:36:51,374 - __main__ - INFO - ============================================================
+2026-05-01 14:36:51,374 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:36:51,374 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:36:51,374 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:36:51,374 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:36:51,389 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:36:51,412 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:36:51,413 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:36:51,416 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:36:51,416 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:36:51,427 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:36:51,428 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:36:51,428 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:36:51,429 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:36:51,430 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:36:51,431 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:36:51,431 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:36:51,432 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:36:51,432 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:36:51,433 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:36:51,434 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:36:51,446 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:36:51,447 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:36:51,447 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:36:51,450 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:36:51,450 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:36:51,450 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:36:51,450 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-01 14:36:51,450 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-01 14:36:51,793 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:36:51,794 - jarvis.core.orchestrator - INFO - Interaction loop started (waiting for voice input integration)
+2026-05-01 14:36:51,794 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-01 14:36:51,873 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:36:51,874 - __main__ - ERROR - Fatal error: 'EpisodicMemory' object has no attribute 'end_session'
 Traceback (most recent call last):
-  File "/workspace/jarvis/core/orchestrator.py", line 222, in process_command
-    self.memory.store_experience(
-  File "/workspace/jarvis/core/memory.py", line 162, in store_experience
-    session_id = self.episodic.store_session(
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'EpisodicMemory' object has no attribute 'store_session'. Did you mean: 'start_session'?
-2026-05-01 14:55:30,114 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:30,114 - jarvis.core.orchestrator - INFO - EOF received
-2026-05-01 14:55:30,115 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 14:55:30,211 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:30,211 - jarvis.core.memory - INFO - Ended memory session: 20260501_145530
-2026-05-01 14:55:30,211 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T14:55:25.709387', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 14:55:35,869 - __main__ - INFO - ============================================================
-2026-05-01 14:55:35,869 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 14:55:35,869 - __main__ - INFO - ============================================================
-2026-05-01 14:55:35,869 - __main__ - INFO - Starting in chat mode
-2026-05-01 14:55:35,869 - __main__ - INFO - Voice enabled: False
-2026-05-01 14:55:35,869 - __main__ - INFO - Config: jarvis_data
-2026-05-01 14:55:35,869 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 14:55:35,873 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 14:55:35,895 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 14:55:35,895 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 14:55:35,908 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 14:55:35,909 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 14:55:35,910 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 14:55:35,910 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 14:55:35,911 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 14:55:35,912 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 14:55:35,913 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 14:55:35,913 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 14:55:35,914 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 14:55:35,914 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 14:55:35,915 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 14:55:35,927 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 14:55:35,928 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 14:55:35,928 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 14:55:35,929 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 14:55:35,929 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 14:55:35,932 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 14:55:35,932 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 14:55:35,932 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 14:55:35,932 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 14:55:35,932 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 14:55:36,273 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:36,273 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 14:55:36,273 - jarvis.core.orchestrator - INFO - User requested shutdown
-2026-05-01 14:55:36,273 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 14:55:36,353 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 14:55:36,353 - jarvis.core.memory - INFO - Ended memory session: 20260501_145536
-2026-05-01 14:55:36,353 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T14:55:35.932409', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:06:55,514 - __main__ - INFO - ============================================================
-2026-05-01 15:06:55,515 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:06:55,515 - __main__ - INFO - ============================================================
-2026-05-01 15:06:55,515 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:06:55,515 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:06:55,515 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:06:55,515 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:06:55,531 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:06:55,554 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:06:55,567 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:06:55,572 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:06:55,574 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:06:55,587 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:06:55,590 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:06:55,593 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:06:55,607 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:06:55,610 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:06:55,612 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:06:55,615 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:06:55,627 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:06:55,629 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:06:55,631 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:06:55,634 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:06:55,646 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:06:55,649 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:06:55,649 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:06:55,675 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:06:55,675 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:06:55,675 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:06:55,676 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:06:55,676 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:06:56,013 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:06:56,013 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:08:18,268 - jarvis.core.orchestrator - INFO - Received interrupt signal
-2026-05-01 15:08:18,269 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:08:18,354 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:18,355 - jarvis.core.memory - INFO - Ended memory session: 20260501_150818
-2026-05-01 15:08:18,355 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:06:55.676094', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:08:35,436 - __main__ - INFO - ============================================================
-2026-05-01 15:08:35,436 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:08:35,436 - __main__ - INFO - ============================================================
-2026-05-01 15:08:35,446 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:08:35,446 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:08:35,446 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:08:35,446 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:08:35,450 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:08:35,487 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:08:35,488 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:08:35,490 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:08:35,491 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:08:35,492 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:08:35,492 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:08:35,493 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:08:35,494 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:08:35,494 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:08:35,495 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:08:35,496 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:08:35,506 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:08:35,507 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:08:35,508 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:08:35,509 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:08:35,509 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:08:35,510 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:08:35,510 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:08:35,513 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:08:35,513 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:08:35,513 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:08:35,513 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:08:35,513 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:08:35,833 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:35,833 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:08:35,834 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 15:08:35,835 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://ollama.com/api/chat
-2026-05-01 15:08:36,106 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:08:36,106 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:08:36,106 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
-2026-05-01 15:08:36,110 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fafc1ec5040>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:36,110 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
-2026-05-01 15:08:37,112 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fafc1ec5a00>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:37,112 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
-2026-05-01 15:08:39,114 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fafc1ec4e30>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:39,114 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7fafc1ec4e30>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:39,169 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:39,170 - jarvis.core.orchestrator - ERROR - Error processing command: 'EpisodicMemory' object has no attribute 'store_session'
+  File "/workspace/jarvis/jarvis.py", line 132, in main
+    run_orchestrator(config)
+  File "/workspace/jarvis/core/orchestrator.py", line 510, in run_orchestrator
+    orchestrator.stop()
+  File "/workspace/jarvis/core/orchestrator.py", line 174, in stop
+    self.memory.end_current_session(summary="User initiated shutdown")
+  File "/workspace/jarvis/core/memory.py", line 327, in end_current_session
+    session_id = self.episodic.end_session(summary=summary)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'EpisodicMemory' object has no attribute 'end_session'. Did you mean: 'load_session'?
+2026-05-01 14:37:13,929 - __main__ - INFO - ============================================================
+2026-05-01 14:37:13,929 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:37:13,929 - __main__ - INFO - ============================================================
+2026-05-01 14:37:13,929 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:37:13,929 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:37:13,929 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:37:13,929 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:37:13,933 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:37:13,954 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:37:13,955 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:37:13,968 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:37:13,969 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:37:13,970 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:37:13,970 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:37:13,971 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:37:13,972 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:37:13,973 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:37:13,973 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:37:13,974 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:37:13,974 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:37:13,986 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:37:13,988 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:37:13,988 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:37:13,989 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:37:13,989 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:37:13,989 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:37:13,992 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:37:13,992 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:37:13,992 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:37:13,992 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-01 14:37:13,993 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-01 14:37:14,309 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:37:14,309 - jarvis.core.orchestrator - INFO - Interaction loop started (waiting for voice input integration)
+2026-05-01 14:37:14,309 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-01 14:37:14,408 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:37:14,408 - __main__ - ERROR - Fatal error: WorkingMemory.get_messages() got an unexpected keyword argument 'include_tool_results'
 Traceback (most recent call last):
-  File "/workspace/jarvis/core/orchestrator.py", line 222, in process_command
-    self.memory.store_experience(
-  File "/workspace/jarvis/core/memory.py", line 162, in store_experience
-    session_id = self.episodic.store_session(
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'EpisodicMemory' object has no attribute 'store_session'. Did you mean: 'start_session'?
-2026-05-01 15:08:39,234 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:39,235 - jarvis.core.orchestrator - INFO - User requested shutdown
-2026-05-01 15:08:39,235 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:08:39,307 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:39,308 - jarvis.core.memory - INFO - Ended memory session: 20260501_150839
-2026-05-01 15:08:39,308 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:08:35.513444', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:08:53,130 - __main__ - INFO - ============================================================
-2026-05-01 15:08:53,130 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:08:53,130 - __main__ - INFO - ============================================================
-2026-05-01 15:08:53,130 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:08:53,130 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:08:53,131 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:08:53,131 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:08:53,134 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:08:53,154 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:08:53,155 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:08:53,167 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:08:53,168 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:08:53,169 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:08:53,169 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:08:53,170 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:08:53,171 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:08:53,172 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:08:53,172 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:08:53,173 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:08:53,173 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:08:53,174 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:08:53,175 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:08:53,187 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:08:53,187 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:08:53,188 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:08:53,188 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:08:53,191 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:08:53,191 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:08:53,192 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:08:53,192 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:08:53,192 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:08:53,475 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:53,486 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:08:53,486 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 15:08:53,487 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://ollama.com/api/chat
-2026-05-01 15:08:53,740 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:08:53,740 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:08:53,740 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
-2026-05-01 15:08:53,742 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f821b6c51f0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:53,742 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
-2026-05-01 15:08:54,744 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f821b6c5bb0>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:54,744 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
-2026-05-01 15:08:56,746 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f821b6c5d00>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:56,746 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f821b6c5d00>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:08:56,791 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:56,791 - jarvis.core.orchestrator - ERROR - Error processing command: EpisodicMemory.store_session() got an unexpected keyword argument 'goal'
-Traceback (most recent call last):
-  File "/workspace/jarvis/core/orchestrator.py", line 222, in process_command
-    self.memory.store_experience(
-  File "/workspace/jarvis/core/memory.py", line 162, in store_experience
-    session_id = self.episodic.store_session(
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: EpisodicMemory.store_session() got an unexpected keyword argument 'goal'
-2026-05-01 15:08:56,854 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:56,855 - jarvis.core.orchestrator - INFO - User requested shutdown
-2026-05-01 15:08:56,855 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:08:56,935 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:08:56,935 - jarvis.core.memory - INFO - Ended memory session: 20260501_150856
-2026-05-01 15:08:56,935 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:08:53.192172', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:09:05,831 - __main__ - INFO - ============================================================
-2026-05-01 15:09:05,832 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:09:05,832 - __main__ - INFO - ============================================================
-2026-05-01 15:09:05,832 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:09:05,832 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:09:05,832 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:09:05,832 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:09:05,835 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:09:05,856 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:09:05,857 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:09:05,869 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:09:05,870 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:09:05,871 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:09:05,871 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:09:05,872 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:09:05,873 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:09:05,874 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:09:05,874 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:09:05,875 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:09:05,887 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:09:05,887 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:09:05,888 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:09:05,889 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:09:05,889 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:09:05,890 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:09:05,890 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:09:05,893 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:09:05,893 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:09:05,893 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:09:05,893 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:09:05,893 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:09:06,188 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:06,189 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:09:06,189 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 15:09:06,190 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://ollama.com/api/chat
-2026-05-01 15:09:07,165 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:09:07,166 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:09:07,166 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
-2026-05-01 15:09:07,168 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ffa5d8d0e30>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:07,168 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
-2026-05-01 15:09:08,170 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ffa5d8d1880>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:08,170 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
-2026-05-01 15:09:10,172 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ffa5d8d0c80>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:10,172 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ffa5d8d0c80>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:10,231 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:10,232 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260501_150910
-2026-05-01 15:09:10,232 - jarvis.core.orchestrator - ERROR - Error processing command: 'AuditLog' object has no attribute 'log_action'
-Traceback (most recent call last):
-  File "/workspace/jarvis/core/orchestrator.py", line 230, in process_command
-    self.audit_log.log_action(
-    ^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'AuditLog' object has no attribute 'log_action'. Did you mean: 'log_decision'?
-2026-05-01 15:09:10,309 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:10,310 - jarvis.core.orchestrator - INFO - User requested shutdown
-2026-05-01 15:09:10,310 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:09:10,389 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:10,390 - jarvis.core.memory - INFO - Ended memory session: 20260501_150910
-2026-05-01 15:09:10,390 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:09:05.893622', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:09:32,196 - __main__ - INFO - ============================================================
-2026-05-01 15:09:32,196 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:09:32,206 - __main__ - INFO - ============================================================
-2026-05-01 15:09:32,206 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:09:32,206 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:09:32,206 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:09:32,207 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:09:32,211 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:09:32,234 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:09:32,235 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:09:32,249 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:09:32,250 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:09:32,250 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:09:32,251 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:09:32,252 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:09:32,253 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:09:32,253 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:09:32,254 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:09:32,255 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:09:32,266 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:09:32,267 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:09:32,268 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:09:32,269 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:09:32,269 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:09:32,269 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:09:32,270 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:09:32,273 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:09:32,274 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:09:32,274 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:09:32,274 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:09:32,274 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:09:32,607 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:32,607 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:09:32,608 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 15:09:32,609 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://ollama.com/api/chat
-2026-05-01 15:09:32,846 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:09:32,846 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://ollama.com/api/chat
-2026-05-01 15:09:32,846 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
-2026-05-01 15:09:32,848 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f2fe34c4f50>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:32,848 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
-2026-05-01 15:09:33,851 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f2fe34c5790>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:33,851 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
-2026-05-01 15:09:35,853 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f2fe34c4470>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:35,853 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f2fe34c4470>: Failed to establish a new connection: [Errno 111] Connection refused'))
-2026-05-01 15:09:35,911 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:35,912 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260501_150935
-2026-05-01 15:09:35,912 - jarvis.core.orchestrator - INFO - User requested shutdown
-2026-05-01 15:09:35,912 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:09:35,987 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:09:35,988 - jarvis.core.memory - INFO - Ended memory session: 20260501_150935
-2026-05-01 15:09:35,988 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:09:32.274282', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 15:20:14,607 - __main__ - INFO - ============================================================
-2026-05-01 15:20:14,608 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 15:20:14,608 - __main__ - INFO - ============================================================
-2026-05-01 15:20:14,608 - __main__ - INFO - Starting in chat mode
-2026-05-01 15:20:14,608 - __main__ - INFO - Voice enabled: False
-2026-05-01 15:20:14,608 - __main__ - INFO - Config: jarvis_data
-2026-05-01 15:20:14,608 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 15:20:14,611 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 15:20:14,650 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 15:20:14,650 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 15:20:14,654 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 15:20:14,654 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 15:20:14,655 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 15:20:14,656 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 15:20:14,667 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 15:20:14,668 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 15:20:14,669 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 15:20:14,669 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 15:20:14,670 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 15:20:14,670 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 15:20:14,671 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 15:20:14,687 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 15:20:14,688 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 15:20:14,688 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 15:20:14,689 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 15:20:14,689 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 15:20:14,692 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 15:20:14,692 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 15:20:14,692 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 15:20:14,692 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 15:20:14,692 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 15:20:15,009 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:20:15,010 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 15:20:15,010 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 15:20:15,011 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
-2026-05-01 15:20:16,628 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:20:16,629 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260501_152016
-2026-05-01 15:20:16,630 - jarvis.core.orchestrator - INFO - EOF received
-2026-05-01 15:20:16,630 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 15:20:16,711 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 15:20:16,712 - jarvis.core.memory - INFO - Ended memory session: 20260501_152016
-2026-05-01 15:20:16,712 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T15:20:14.692536', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
-2026-05-01 17:32:50,587 - __main__ - INFO - ============================================================
-2026-05-01 17:32:50,587 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
-2026-05-01 17:32:50,587 - __main__ - INFO - ============================================================
-2026-05-01 17:32:50,587 - __main__ - INFO - Starting in chat mode
-2026-05-01 17:32:50,587 - __main__ - INFO - Voice enabled: False
-2026-05-01 17:32:50,587 - __main__ - INFO - Config: jarvis_data
-2026-05-01 17:32:50,587 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
-2026-05-01 17:32:50,590 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
-2026-05-01 17:32:50,606 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
-2026-05-01 17:32:50,606 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
-2026-05-01 17:32:50,606 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
-2026-05-01 17:32:50,608 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
-2026-05-01 17:32:50,608 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
-2026-05-01 17:32:50,609 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
-2026-05-01 17:32:50,609 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
-2026-05-01 17:32:50,610 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
-2026-05-01 17:32:50,610 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
-2026-05-01 17:32:50,610 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
-2026-05-01 17:32:50,610 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
-2026-05-01 17:32:50,611 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
-2026-05-01 17:32:50,611 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
-2026-05-01 17:32:50,611 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
-2026-05-01 17:32:50,612 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
-2026-05-01 17:32:50,612 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
-2026-05-01 17:32:50,612 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
-2026-05-01 17:32:50,612 - tool_registry - INFO - Total tools loaded: 58
-2026-05-01 17:32:50,624 - jarvis.core.memory - INFO - Core memory system initialized
-2026-05-01 17:32:50,624 - jarvis.core.context - INFO - Context assembler initialized
-2026-05-01 17:32:50,624 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
-2026-05-01 17:32:50,625 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
-2026-05-01 17:32:50,625 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
-2026-05-01 17:32:50,869 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 17:32:50,870 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
-2026-05-01 17:32:50,870 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
-2026-05-01 17:32:50,870 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
-2026-05-01 17:32:52,366 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 17:32:52,366 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260501_173252
-2026-05-01 17:32:52,367 - jarvis.core.orchestrator - INFO - EOF received
-2026-05-01 17:32:52,367 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
-2026-05-01 17:32:52,426 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
-2026-05-01 17:32:52,426 - jarvis.core.memory - INFO - Ended memory session: 20260501_173252
-2026-05-01 17:32:52,426 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T17:32:50.625057', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
+  File "/workspace/jarvis/jarvis.py", line 132, in main
+    run_orchestrator(config)
+  File "/workspace/jarvis/core/orchestrator.py", line 510, in run_orchestrator
+    orchestrator.stop()
+  File "/workspace/jarvis/core/orchestrator.py", line 174, in stop
+    self.memory.end_current_session(summary="User initiated shutdown")
+  File "/workspace/jarvis/core/memory.py", line 328, in end_current_session
+    messages = self.get_conversation_history()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/jarvis/core/memory.py", line 296, in get_conversation_history
+    return self.working.get_messages(include_tool_results=include_tool_results)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: WorkingMemory.get_messages() got an unexpected keyword argument 'include_tool_results'
+2026-05-01 14:37:24,987 - __main__ - INFO - ============================================================
+2026-05-01 14:37:24,987 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:37:24,987 - __main__ - INFO - ============================================================
+2026-05-01 14:37:24,987 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:37:24,987 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:37:24,987 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:37:24,987 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:37:24,991 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:37:25,013 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:37:25,014 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:37:25,028 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:37:25,029 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:37:25,030 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:37:25,031 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:37:25,032 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:37:25,033 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:37:25,033 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:37:25,034 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:37:25,035 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:37:25,035 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:37:25,046 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:37:25,047 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:37:25,048 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:37:25,048 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:37:25,049 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:37:25,049 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:37:25,052 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:37:25,052 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:37:25,052 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:37:25,052 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-01 14:37:25,052 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-01 14:37:25,371 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:37:25,371 - jarvis.core.orchestrator - INFO - Interaction loop started (waiting for voice input integration)
+2026-05-01 14:37:25,372 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-01 14:37:25,472 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:37:25,472 - jarvis.core.memory - INFO - Ended memory session: 20260501_143725
+2026-05-01 14:37:25,472 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T14:37:25.052747', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-01 14:49:31,232 - __main__ - INFO - ============================================================
+2026-05-01 14:49:31,232 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-01 14:49:31,232 - __main__ - INFO - ============================================================
+2026-05-01 14:49:31,233 - __main__ - INFO - Starting in chat mode
+2026-05-01 14:49:31,233 - __main__ - INFO - Voice enabled: False
+2026-05-01 14:49:31,233 - __main__ - INFO - Config: jarvis_data
+2026-05-01 14:49:31,233 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-01 14:49:31,236 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-01 14:49:31,268 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-01 14:49:31,269 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-01 14:49:31,272 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-01 14:49:31,272 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-01 14:49:31,273 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-01 14:49:31,274 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-01 14:49:31,274 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-01 14:49:31,275 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-01 14:49:31,286 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-01 14:49:31,287 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-01 14:49:31,288 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-01 14:49:31,289 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-01 14:49:31,289 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.tasks.background
+2026-05-01 14:49:31,290 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-01 14:49:31,291 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-01 14:49:31,291 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-01 14:49:31,292 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-01 14:49:31,292 - tool_registry - INFO - Total tools loaded: 58
+2026-05-01 14:49:31,295 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-01 14:49:31,295 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-01 14:49:31,295 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-01 14:49:31,295 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-01 14:49:31,295 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-01 14:49:31,612 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:49:31,612 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-01 14:49:43,063 - jarvis.core.orchestrator - INFO - Received interrupt signal
+2026-05-01 14:49:43,063 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-01 14:49:43,132 - jarvis.output.tts - ERROR - TTS error: PortAudio library not found
+2026-05-01 14:49:43,133 - jarvis.core.memory - INFO - Ended memory session: 20260501_144943
+2026-05-01 14:49:43,133 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-01T14:49:31.295419', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}

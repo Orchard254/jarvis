@@ -14,11 +14,11 @@ import sys
 import os
 sys.path.insert(0, '/workspace')
 
-from jarvis.core.memory import CoreMemory
-from jarvis.memory.working import WorkingMemory
-from jarvis.memory.episodic import EpisodicMemory
-from jarvis.memory.semantic import SemanticMemory
-from jarvis.memory.procedural import ProceduralMemory
+from core.memory import CoreMemory
+from memory.working import WorkingMemory
+from memory.episodic import EpisodicMemory
+from memory.semantic import SemanticMemory
+from memory.procedural import ProceduralMemory
 
 
 def test_working_memory():
