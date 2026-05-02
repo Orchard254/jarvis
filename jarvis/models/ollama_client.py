@@ -202,7 +202,9 @@ class OllamaClient:
                 if not response_text:
                     log.warning(f"[OLLAMA] Empty response from {name} endpoint")
                 else:
-                    log.info(f"[OLLAMA] Raw response from {name}: {response_text[:1000]}")
+                    # Encode to ASCII with replace to avoid Windows console encoding errors
+                    safe_response = response_text[:1000].encode('ascii', errors='replace').decode('ascii')
+                    log.info(f"[OLLAMA] Raw response from {name}: {safe_response}")
                 
                 # Check for empty response
                 if not response_text:
