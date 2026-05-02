@@ -122,8 +122,14 @@ class OllamaClient:
                         log.info(f"[OLLAMA] Retrying in {backoff:.1f}s...")
                         time.sleep(backoff)
                     continue
+                elif resp.status_code == 429:  # Rate limited - retry with backoff
+                    if attempt < self.max_retries - 1:
+                        backoff = self.base_backoff * (2 ** attempt) * 2  # Longer backoff for rate limits
+                        log.info(f"[OLLAMA] Rate limited. Retrying in {backoff:.1f}s...")
+                        time.sleep(backoff)
+                    continue
                 else:
-                    break  # Client error, don't retry
+                    break  # Other client error, don't retry
                     
             except requests.exceptions.ConnectionError as e:
                 last_error = e
@@ -196,22 +202,33 @@ class OllamaClient:
                 try:
                     data = json.loads(response_text)
                 except json.JSONDecodeError:
-                    # Might be streaming response with multiple JSON lines
-                    # Take the last complete JSON object
+                    # Might be streaming response with multiple JSON lines or extra data
+                    # Parse line by line and combine/find the complete response
                     lines = response_text.split('\n')
                     data = None
-                    for line in reversed(lines):
+                    last_valid_data = None
+                    
+                    for line in lines:
                         line = line.strip()
                         if line:
                             try:
-                                data = json.loads(line)
-                                break
+                                candidate = json.loads(line)
+                                # Prefer JSON objects that have the message key
+                                if "message" in candidate:
+                                    data = candidate
+                                    break
+                                # Keep track of last valid JSON as fallback
+                                last_valid_data = candidate
                             except json.JSONDecodeError:
                                 continue
                     
+                    # If no message found, use last valid JSON or skip
                     if data is None:
-                        log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint")
-                        continue
+                        if last_valid_data:
+                            data = last_valid_data
+                        else:
+                            log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint. Response: {response_text[:500]}")
+                            continue
                 
                 msg = data.get("message", {})
                 
@@ -225,6 +242,7 @@ class OllamaClient:
                 
             except Exception as e:
                 log.error(f"[OLLAMA] Response parsing error from {name}: {e}")
+                log.error(f"[OLLAMA] Raw response: {resp.text[:500]}")
                 continue
         
         # All endpoints failed - raise exception
@@ -370,22 +388,33 @@ class OllamaClient:
                 try:
                     data = json.loads(response_text)
                 except json.JSONDecodeError:
-                    # Might be streaming response with multiple JSON lines
-                    # Take the last complete JSON object
+                    # Might be streaming response with multiple JSON lines or extra data
+                    # Parse line by line and combine/find the complete response
                     lines = response_text.split('\n')
                     data = None
-                    for line in reversed(lines):
+                    last_valid_data = None
+                    
+                    for line in lines:
                         line = line.strip()
                         if line:
                             try:
-                                data = json.loads(line)
-                                break
+                                candidate = json.loads(line)
+                                # Prefer JSON objects that have the message key
+                                if "message" in candidate:
+                                    data = candidate
+                                    break
+                                # Keep track of last valid JSON as fallback
+                                last_valid_data = candidate
                             except json.JSONDecodeError:
                                 continue
                     
+                    # If no message found, use last valid JSON or skip
                     if data is None:
-                        log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint")
-                        continue
+                        if last_valid_data:
+                            data = last_valid_data
+                        else:
+                            log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint. Response: {response_text[:500]}")
+                            continue
                 
                 msg = data.get("message", {})
                 
@@ -399,6 +428,7 @@ class OllamaClient:
                 
             except Exception as e:
                 log.error(f"[OLLAMA] Response parsing error from {name}: {e}")
+                log.error(f"[OLLAMA] Raw response: {resp.text[:500]}")
                 continue
         
         # All endpoints failed - raise exception
