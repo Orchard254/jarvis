@@ -9,11 +9,11 @@ from enum import Enum, auto
 from typing import Any, Optional
 import logging
 
-from execution.tool_runner import ToolRunner, ToolResult
-from execution.skill_runner import SkillRunner
-from execution.rollback import RollbackManager, RollbackAction
-from safety.audit_log import AuditLog
-from config.config import get_config
+from jarvis.execution.tool_runner import ToolRunner, ToolResult
+from jarvis.execution.skill_runner import SkillRunner
+from jarvis.execution.rollback import RollbackManager, RollbackAction
+from jarvis.safety.audit_log import AuditLog
+from jarvis.config.config import get_config
 
 logger = logging.getLogger(__name__)
 

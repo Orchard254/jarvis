@@ -14,18 +14,18 @@ import time
 from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 
-from core.memory import CoreMemory
-from core.context import ContextAssembler
-from core.brain import Brain
-from tools.registry import ToolRegistry
-from skills.registry import SkillRegistry
-from safety import InputFilter, PlanValidator, ToolGuard, AuditLog
-from perception.intent_classifier import IntentClassifier
-from perception.vision import VisionAnalyzer
-from reasoning.planner import TaskPlanner
-from reasoning.critic import PlanCritic
-from reasoning.reflector import Reflector as OutcomeReflector
-from reasoning.strategy_selector import StrategySelector
+from jarvis.core.memory import CoreMemory
+from jarvis.core.context import ContextAssembler
+from jarvis.core.brain import Brain
+from jarvis.tools.registry import ToolRegistry
+from jarvis.skills.registry import SkillRegistry
+from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
+from jarvis.perception.intent_classifier import IntentClassifier
+from jarvis.perception.vision import VisionAnalyzer
+from jarvis.reasoning.planner import TaskPlanner
+from jarvis.reasoning.critic import PlanCritic
+from jarvis.reasoning.reflector import Reflector as OutcomeReflector
+from jarvis.reasoning.strategy_selector import StrategySelector
 # TTS Manager - use simple wrapper for now
 class TTSManager:
     """Simple TTS wrapper that delegates to the existing tts module."""

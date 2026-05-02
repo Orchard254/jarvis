@@ -12,8 +12,8 @@ import logging
 from typing import Dict, List, Any, Optional, Callable
 import json
 
-from models.ollama_client import OllamaClient
-from tools.registry import ToolRegistry
+from jarvis.models.ollama_client import OllamaClient
+from jarvis.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 

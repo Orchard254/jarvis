@@ -10,10 +10,10 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
 
-from memory.working import WorkingMemory
-from memory.episodic import EpisodicMemory
-from memory.semantic import SemanticMemory
-from memory.manager import ProceduralMemory
+from jarvis.memory.working import WorkingMemory
+from jarvis.memory.episodic import EpisodicMemory
+from jarvis.memory.semantic import SemanticMemory
+from jarvis.memory.manager import ProceduralMemory
 
 logger = logging.getLogger(__name__)
 
