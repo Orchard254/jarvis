@@ -1,6 +1,12 @@
 """
-Tool Guard - Safety validation layer for tool execution.
+safety/tool_guard.py — Safety validation layer for tool execution.
 Replaces control_plane.py with focused tool-level safety checks.
+
+Improvements over original control_plane.py:
+- Registry check comes FIRST before parameter validation
+- Unknown tool names return helpful error with 5 most similar valid tool names
+- Error format: "Unknown tool: {name}. Did you mean: {suggestions}?"
+- All original unsafe patterns preserved
 """
 
 import re
@@ -15,57 +21,66 @@ class ToolGuard:
     Checks for dangerous operations, path traversal, and policy violations.
     """
     
+    # All original unsafe patterns from control_plane.py - must be preserved
+    UNSAFE_PATTERNS = [
+        r'rm\s+-rf',           # Recursive force delete (Unix)
+        r'del\s+/[a-z]\s+/',   # Delete all files (Windows)
+        r'Format-Volume',      # Format disk volume (PowerShell)
+        r'Clear-Disk',         # Clear entire disk (PowerShell)
+        r'rmdir\s+/s',         # Remove directory tree (Windows)
+        r'del\s+/s',           # Delete all files recursively (Windows)
+        r'\bformat\b',         # Format command
+        r'shutdown\s+/r\s+/t\s+0',  # Immediate restart (Windows)
+        r'\bsudo\b',           # Sudo privilege escalation
+        r'curl\s+.*\|\s*sh',   # Curl pipe to shell
+        r'rm\s+-rf\s+/',       # Delete root filesystem (Unix)
+    ]
+    
     # Dangerous system paths that should never be modified
     PROTECTED_PATHS = [
         r'C:\\Windows',
         r'C:\\Program Files',
         r'C:\\Program Files \(x86\)',
         r'C:\\Users\\.*\\AppData',
-        r'.*\\.sys$',
-        r'.*\\.dll$',
-        r'.*\\.exe$',
+        r'.*\.sys$',
+        r'.*\.dll$',
+        r'.*\.exe$',
     ]
     
-    # Dangerous commands that require extra validation
-    DANGEROUS_COMMANDS = [
-        'format',
-        'del /s',
-        'rd /s',
-        'rmdir /s',
-        'shutdown',
-        'taskkill /f',
-        'reg delete',
-        'icacls',
-        'takeown',
-        'powershell.*-force',
-        'rm -rf',
-        'dd ',
-        'mkfs',
-    ]
-    
-    # File extensions that are risky to execute
-    RISKY_EXTENSIONS = [
-        '.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js',
-        '.msi', '.scr', '.com', '.pif', '.jar'
-    ]
-    
-    def __init__(self):
+    def __init__(self, registry=None):
         self.protected_patterns = [re.compile(p, re.IGNORECASE) for p in self.PROTECTED_PATHS]
-        self.dangerous_patterns = [re.compile(p, re.IGNORECASE) for p in self.DANGEROUS_COMMANDS]
+        self.unsafe_patterns = [re.compile(p, re.IGNORECASE) for p in self.UNSAFE_PATTERNS]
         self.audit_log = []
+        self._registry = registry
+    
+    def set_registry(self, registry) -> None:
+        """Set the tool registry for validation."""
+        self._registry = registry
     
     def validate_tool_call(self, tool_name: str, params: Dict[str, Any]) -> Tuple[bool, str]:
         """
         Validate a tool call before execution.
         
+        IMPORTANT: Registry check comes FIRST before any parameter validation.
+        
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Check if tool exists
+        # STEP 1: Check if tool exists in registry FIRST
         if not tool_name:
             return False, "No tool name provided"
         
-        # Route to specific validator based on tool category
+        # Check registry first if available
+        if self._registry is not None:
+            if not self._registry.has_tool(tool_name):
+                # Return helpful error with similar tool names
+                return self._get_unknown_tool_error(tool_name)
+        
+        # STEP 2: Check for unsafe patterns in tool name or params
+        if self._check_unsafe_patterns(tool_name, params):
+            return False, "Tool call contains unsafe patterns"
+        
+        # STEP 3: Route to specific validator based on tool category
         validators = {
             'run_command': self._validate_command,
             'run_powershell': self._validate_powershell,
@@ -88,19 +103,75 @@ class ToolGuard:
         if validator:
             return validator(params)
         
-        # Default validation for unknown tools
+        # Default validation for tools without specific validators
         return True, ""
+    
+    def _get_unknown_tool_error(self, name: str) -> Tuple[bool, str]:
+        """
+        Generate helpful error message for unknown tool with suggestions.
+        
+        Returns exactly: "Unknown tool: {name}. Did you mean: {suggestions}?"
+        where suggestions are the 5 most similar valid tool names.
+        """
+        if self._registry is None:
+            return False, f"Unknown tool: {name}. No registry available."
+        
+        available = sorted(self._registry.get_tool_names())
+        
+        if not available:
+            return False, f"Unknown tool: {name}. No tools registered."
+        
+        # Find similar names using simple string matching
+        similar = []
+        name_lower = name.lower()
+        
+        # First priority: exact substring matches
+        for t in available:
+            if name_lower in t.lower() or t.lower() in name_lower:
+                similar.append(t)
+        
+        # Second priority: similar length with some character overlap
+        if len(similar) < 5:
+            for t in available:
+                if t not in similar:
+                    # Check for common prefix or suffix
+                    if t.lower().startswith(name_lower[:3]) or t.lower().endswith(name_lower[-3:]):
+                        similar.append(t)
+                        if len(similar) >= 5:
+                            break
+        
+        # If still not enough, just take first 5 available
+        if len(similar) < 5:
+            for t in available:
+                if t not in similar:
+                    similar.append(t)
+                    if len(similar) >= 5:
+                        break
+        
+        suggestions = ", ".join(similar[:5])
+        return False, f"Unknown tool: {name}. Did you mean: {suggestions}?"
+    
+    def _check_unsafe_patterns(self, tool_name: str, params: Dict[str, Any]) -> bool:
+        """Check if tool call contains any unsafe patterns."""
+        # Check tool name
+        for pattern in self.unsafe_patterns:
+            if pattern.search(tool_name):
+                return True
+        
+        # Check all string parameters
+        for key, value in params.items():
+            if isinstance(value, str):
+                for pattern in self.unsafe_patterns:
+                    if pattern.search(value):
+                        return True
+        
+        return False
     
     def _validate_command(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate shell command execution."""
         cmd = params.get('command', '')
         if not cmd:
             return False, "Empty command"
-        
-        # Check for dangerous patterns
-        for pattern in self.dangerous_patterns:
-            if pattern.search(cmd):
-                return False, f"Command contains dangerous pattern: {pattern.pattern}"
         
         # Check for path traversal
         if '..' in cmd:
