@@ -472,7 +472,8 @@ class Orchestrator:
         self.clear_abort()
         
         # Retrieve relevant memories
-        memories = self.memory.retrieve_relevant(command)
+        context = self.memory.retrieve_context(query=command)
+        memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
         logger.debug(f"Retrieved {len(memories)} relevant memories")
         
         # Select reasoning strategy based on task complexity
