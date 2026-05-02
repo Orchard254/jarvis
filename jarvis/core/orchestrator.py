@@ -28,7 +28,7 @@ from jarvis.perception.vision import VisionAnalyzer
 from jarvis.reasoning.planner import TaskPlanner
 from jarvis.reasoning.critic import PlanCritic
 from jarvis.reasoning.reflector import Reflector as OutcomeReflector
-from jarvis.reasoning.strategy_selector import StrategySelector
+from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
 from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
 from jarvis.config.config import get_config
 
@@ -477,8 +477,9 @@ class Orchestrator:
         logger.debug(f"Retrieved {len(memories)} relevant memories")
         
         # Select reasoning strategy based on task complexity
-        strategy = self.strategy_selector.select_strategy(command)
-        logger.info(f"Selected strategy: {strategy}")
+        classification = self.strategy_selector.classify(command)
+        strategy = self._map_complexity_to_strategy(classification.complexity)
+        logger.info(f"Selected strategy: {strategy} (complexity: {classification.complexity.value})")
         
         system_prompt = get_system_prompt(mode='agent')
         
@@ -797,11 +798,32 @@ class Orchestrator:
         
         # Update goal status
         if result.get('success'):
-            self.memory.complete_goal(goal_id)
+            self.memory.update_goal_status(goal_id, 'completed')
         else:
-            self.memory.fail_goal(goal_id, result.get('error', 'Unknown'))
+            self.memory.update_goal_status(goal_id, 'failed')
         
         return result
+    
+    def _map_complexity_to_strategy(self, complexity: TaskComplexity) -> str:
+        """
+        Map TaskComplexity enum to execution strategy string.
+        
+        Args:
+            complexity: Task complexity level from strategy selector
+            
+        Returns:
+            Strategy string: 'direct', 'plan', or 'full_cycle'
+        """
+        if complexity == TaskComplexity.TRIVIAL:
+            return 'direct'
+        elif complexity == TaskComplexity.SIMPLE:
+            return 'direct'
+        elif complexity == TaskComplexity.COMPLEX:
+            return 'plan'
+        elif complexity == TaskComplexity.STRATEGIC:
+            return 'full_cycle'
+        else:
+            return 'direct'  # Default to direct execution
     
     def _on_tool_call(self, tool_calls: list, results: list) -> None:
         """Callback when tools are called."""
