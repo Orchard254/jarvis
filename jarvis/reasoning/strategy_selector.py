@@ -296,7 +296,8 @@ Respond in JSON format:
                 estimated_tools=llm_result.get('estimated_tools', 1),
                 reasoning=llm_result.get('reasoning', 'LLM classification')
             )
-        except Exception:
+        except Exception as e:
+            log.warning(f"[STRATEGY] LLM classification failed, using heuristic: {e}")
             return heuristic_result or self.classify(task_description)
     
     def get_classification_history(self, limit: int = 10) -> List[Dict[str, Any]]:

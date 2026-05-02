@@ -491,7 +491,8 @@ Maintain the same step ID format and dependency structure."""
             result = json.loads(response.get('content', '{}'))
             return self._build_execution_graph(result, goal).to_dict()
             
-        except Exception:
+        except Exception as e:
+            log.warning(f"[PLANNER] Plan refinement failed: {e}")
             return plan
     
     def replan_after_failure(self, original_plan: Dict[str, Any],
@@ -559,8 +560,8 @@ Respond in JSON format with the new ExecutionGraph structure."""
                 result = json.loads(response.get('content', '{}'))
                 return self._build_execution_graph(result, goal).to_dict()
                 
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"[PLANNER] Replanning attempt failed: {e}")
         
         # Fallback: return remaining steps
         remaining_steps = execution_graph.steps[failed_idx + 1:]

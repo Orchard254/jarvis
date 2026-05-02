@@ -62,7 +62,8 @@ class AdvancedTaskManager:
                 return exit_code.value == 259
             finally:
                 kernel32.CloseHandle(h_process)
-        except Exception:
+        except Exception as e:
+            log.debug(f"[BACKGROUND] ctypes process check failed, using psutil: {e}")
             # Fallback to psutil if ctypes fails
             try:
                 proc = psutil.Process(pid)
@@ -141,7 +142,8 @@ class AdvancedTaskManager:
             # Get exit code if available
             try:
                 task["exit_code"] = task["process"].poll()
-            except Exception:
+            except Exception as e:
+                log.debug(f"[BACKGROUND] Failed to get exit code for task {task_id}: {e}")
                 task["exit_code"] = None
         
         return {
@@ -179,8 +181,8 @@ class AdvancedTaskManager:
                 # Windows doesn't have select for pipes, use non-blocking read
                 try:
                     task["output"] += proc.stdout.read()
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug(f"[BACKGROUND] Non-blocking read failed: {e}")
         
         return task.get("output", "")
     

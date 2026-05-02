@@ -36,7 +36,8 @@ class ProceduralMemory:
                 with open(self.storage_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.procedures = data.get('procedures', {})
-            except Exception:
+            except Exception as e:
+                log.warning(f"[MEMORY] Failed to load procedures, using empty: {e}")
                 self.procedures = {}
     
     def _save(self) -> None:

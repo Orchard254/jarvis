@@ -49,7 +49,8 @@ class SemanticMemory:
                     self.facts = data.get('facts', {})
                     self.vocabulary = data.get('vocabulary', {})
                     self.idf_scores = data.get('idf_scores', {})
-            except Exception:
+            except Exception as e:
+                log.warning(f"[SEMANTIC] Failed to load facts, using empty memory: {e}")
                 self.facts = {}
                 self.vocabulary = {}
                 self.idf_scores = {}

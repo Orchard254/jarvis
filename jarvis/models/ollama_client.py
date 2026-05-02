@@ -370,8 +370,8 @@ class OllamaClient:
                 if resp.status_code == 200:
                     log.info(f"[OLLAMA] {name} endpoint is available")
                     return True
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"[OLLAMA] Health check failed for {name}: {e}")
         return False
 
 

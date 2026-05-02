@@ -185,8 +185,8 @@ class ContextAssembler:
                         'plugged_in': battery_info.power_plugged,
                         'time_left': battery_info.secsleft if battery_info.secsleft != -1 else None
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"[CONTEXT] Battery info unavailable: {e}")
             
             # Network connections count
             net_connections = len(psutil.net_connections(kind='inet'))
