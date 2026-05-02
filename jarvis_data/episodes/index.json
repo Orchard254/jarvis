@@ -146,9 +146,16 @@
       "created_at": "2026-05-01T21:56:39.711687",
       "message_count": 2,
       "first_message_preview": "What time is it?"
+    },
+    {
+      "session_id": "20260502_063625",
+      "filename": "session_20260502_063625.json",
+      "created_at": "2026-05-02T06:36:25.167360",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
     }
   ],
-  "total_sessions": 21,
+  "total_sessions": 22,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-01T21:56:39.711898"
+  "updated_at": "2026-05-02T06:36:25.178602"
 }
