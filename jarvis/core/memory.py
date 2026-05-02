@@ -37,8 +37,8 @@ class CoreMemory:
         
         # Initialize memory components
         self.working = WorkingMemory(
-            max_messages=config.get('working_memory_max_messages', 20),
-            max_tokens_estimate=config.get('working_memory_max_tokens', 4000)
+            max_messages=config.get('working_memory_max_messages', 10),
+            max_tokens_estimate=config.get('working_memory_max_tokens', 2000)
         )
         
         data_dir = config.get('data_dir', 'jarvis_data')
