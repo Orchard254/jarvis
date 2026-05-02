@@ -9,10 +9,10 @@ from typing import Any, Optional
 import logging
 import asyncio
 
-from config.config import get_config
-from safety.audit_log import AuditLog
-from execution.rollback import RollbackAction
-from skills.base import BaseSkill
+from jarvis.config.config import get_config
+from jarvis.safety.audit_log import AuditLog
+from jarvis.execution.rollback import RollbackAction
+from jarvis.skills.base import BaseSkill
 
 logger = logging.getLogger(__name__)
 
