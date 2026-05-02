@@ -349,12 +349,13 @@ class Orchestrator:
             # Use sanitized input
             command = filter_result.sanitized_input
             
-            # Add to memory
-            self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
-            
-            # Classify intent (chat vs agent mode)
+            # Classify intent (chat vs agent mode) BEFORE adding to memory
             intent = self.intent_classifier.classify(command)
             intended_mode = intent.get('mode', 'agent')
+            
+            # Add to memory only for agent mode (to reduce memory usage)
+            if intended_mode == 'agent':
+                self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
             # Route based on intent
             if intended_mode == 'chat' or self.mode == 'chat':
@@ -369,13 +370,14 @@ class Orchestrator:
             else:
                 self.state['failed_tasks'] += 1
             
-            # Store experience
-            self.memory.store_experience(
-                goal=command,
-                actions=result.get('actions', []),
-                outcome=result.get('response', ''),
-                success=result.get('success', False)
-            )
+            # Store experience only for significant tasks (not simple chat)
+            if result.get('mode') == 'agent' and result.get('actions'):
+                self.memory.store_experience(
+                    goal=command,
+                    actions=result.get('actions', []),
+                    outcome=result.get('response', ''),
+                    success=result.get('success', False)
+                )
             
             # Audit log
             self.audit_log.log_action(
@@ -432,7 +434,7 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
-            self.memory.add_assistant_message(response_text)
+            # Don't store assistant messages in chat mode to reduce memory usage
             
             # Start speaking immediately for low latency (before full response if streaming)
             self._speak(response_text)
@@ -541,7 +543,7 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
-            self.memory.add_assistant_message(response_text)
+            # Don't store assistant messages to reduce memory usage
             
             # Start speaking before full response is generated for low latency
             self._speak(response_text)
@@ -729,20 +731,14 @@ class Orchestrator:
                 'validated': True
             })
             
-            # Add to memory
-            self.memory.add_tool_result(tool_name, result)
+            # Don't add tool results to memory to reduce memory usage
         
-        # Reflect on outcome in background thread (never slow down response)
-        self.reflector.reflect(
-            goal=command,
-            plan=plan,
-            results=executed_steps,
-            blocking=False  # Run in background thread
-        )
+        # Skip reflection to reduce memory usage
+        # self.reflector.reflect(...)
         
         # Generate response
         response_text = f"Task completed. Steps executed: {len(executed_steps)}"
-        self.memory.add_assistant_message(response_text)
+        # Don't store assistant message to reduce memory usage
         self._speak(response_text)
         
         return {
