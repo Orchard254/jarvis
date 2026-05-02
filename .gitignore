@@ -1,5 +1,12 @@
 ```
+# Compiled Python files
+*.pyc
+__pycache__/
+
 # Logs
 *.log
 logs/
+
+# Data files that might be temporary/intermediate
+jarvis_data/episodes/*.json
 ```
