@@ -1,3 +1,0 @@
-{"timestamp": "2026-05-02T06:36:22.481020", "event_type": "security_input_blocked", "session_id": null, "user_id": null, "data": {"reason": "Dangerous pattern detected", "blocked_patterns": ["format c:"], "original_input_length": 50}}
-{"timestamp": "2026-05-02T06:36:22.481051", "event_type": "security_plan_blocked", "session_id": null, "user_id": null, "data": {"goal": "Delete system files", "risk_level": "critical", "warnings": ["Destructive operation chain detected"]}}
-{"timestamp": "2026-05-02T06:36:22.481073", "event_type": "security_tool_blocked", "session_id": null, "user_id": null, "data": {"step_index": 0, "tool": "run_command", "reason": "Protected path access attempt", "parameters": {"command": "dangerous"}}}

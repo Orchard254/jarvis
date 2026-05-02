@@ -9,7 +9,7 @@ Tests the three-layer safety system:
 import sys
 sys.path.insert(0, '/workspace')
 
-from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
+from safety import InputFilter, PlanValidator, ToolGuard, AuditLog
 
 def test_input_filter():
     """Test the input filter layer."""

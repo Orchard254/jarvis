@@ -6,10 +6,10 @@ A desktop AI agent system that uses LLM inference to generate tool calls, with d
 
 ## Architecture Overview
 
-JARVIS uses a **modular architecture** organized into specialized packages:
+JARVIS uses a **flat modular architecture** with all components organized as top-level packages:
 
 ```
-jarvis/
+workspace/
 ├── core/           # Core engine (Brain, Orchestrator, Memory, Context)
 ├── perception/     # Input processing (STT, Vision, Intent, Wake Word)
 ├── reasoning/      # Planning & decision making (Planner, Critic, Strategy)
@@ -153,7 +153,7 @@ pytest test_dynamic_integration.py -v  # Dynamic scripting tests
 python test_inject.py
 
 # Test specific tools
-python -c "from jarvis.tools.executor import ToolExecutor; e = ToolExecutor(); print(e.list_tools())"
+python -c "from tools.executor import ToolExecutor; e = ToolExecutor(); print(e.list_tools())"
 ```
 
 ## Project Structure

@@ -31,7 +31,7 @@ class TestToolRegistryIntegration:
     
     def test_registry_singleton(self):
         """Verify registry singleton pattern works"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry1 = ToolRegistry.get_instance()
         registry2 = ToolRegistry.get_instance()
@@ -40,7 +40,7 @@ class TestToolRegistryIntegration:
     
     def test_load_all_tools(self):
         """Test loading all tools from modules"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry = ToolRegistry.get_instance()
         registry.clear()  # Start fresh
@@ -52,7 +52,7 @@ class TestToolRegistryIntegration:
     
     def test_tool_execution_basic(self):
         """Test basic tool execution"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry = ToolRegistry.get_instance()
         
@@ -65,7 +65,7 @@ class TestToolRegistryIntegration:
     
     def test_tool_schemas_generation(self):
         """Test schema generation for LLM function calling"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry = ToolRegistry.get_instance()
         schemas = registry.get_all_schemas()
@@ -82,7 +82,7 @@ class TestToolRegistryIntegration:
     
     def test_tool_validation(self):
         """Test tool name validation"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry = ToolRegistry.get_instance()
         
@@ -102,14 +102,14 @@ class TestSkillRegistryIntegration:
     
     def test_skill_registry_init(self):
         """Test skill registry initialization"""
-        from jarvis.skills.registry import SkillRegistry
+        from skills.registry import SkillRegistry
         
         registry = SkillRegistry()
         assert registry is not None
     
     def test_load_skills(self):
         """Test loading built-in skills"""
-        from jarvis.skills.registry import SkillRegistry
+        from skills.registry import SkillRegistry
         
         registry = SkillRegistry()
         count = registry.load_skills()
@@ -119,7 +119,7 @@ class TestSkillRegistryIntegration:
     
     def test_skill_execution(self):
         """Test skill execution"""
-        from jarvis.skills.registry import SkillRegistry
+        from skills.registry import SkillRegistry
         
         registry = SkillRegistry()
         registry.load_skills()
@@ -134,7 +134,7 @@ class TestMemorySystemIntegration:
     
     def test_core_memory_init(self):
         """Test core memory initialization"""
-        from jarvis.core.memory import CoreMemory
+        from core.memory import CoreMemory
         
         config = {'data_dir': '/tmp/jarvis_test'}
         memory = CoreMemory(config)
@@ -146,7 +146,7 @@ class TestMemorySystemIntegration:
     
     def test_add_user_message(self):
         """Test adding user messages to memory"""
-        from jarvis.core.memory import CoreMemory
+        from core.memory import CoreMemory
         
         config = {'data_dir': '/tmp/jarvis_test'}
         memory = CoreMemory(config)
@@ -159,7 +159,7 @@ class TestMemorySystemIntegration:
     
     def test_store_experience(self):
         """Test storing experiences"""
-        from jarvis.core.memory import CoreMemory
+        from core.memory import CoreMemory
         
         config = {'data_dir': '/tmp/jarvis_test'}
         memory = CoreMemory(config)
@@ -182,8 +182,8 @@ class TestBrainIntegration:
     
     def test_brain_initialization(self):
         """Test brain initialization with config"""
-        from jarvis.core.brain import Brain
-        from jarvis.tools.registry import ToolRegistry
+        from core.brain import Brain
+        from tools.registry import ToolRegistry
         
         config = {
             'model': 'test-model',
@@ -201,11 +201,11 @@ class TestBrainIntegration:
         assert brain.client is not None
         assert brain.tool_registry is registry
     
-    @patch('jarvis.models.ollama_client.OllamaClient.chat')
+    @patch('models.ollama_client.OllamaClient.chat')
     def test_brain_chat_mock(self, mock_chat):
         """Test brain chat with mocked LLM"""
-        from jarvis.core.brain import Brain
-        from jarvis.tools.registry import ToolRegistry
+        from core.brain import Brain
+        from tools.registry import ToolRegistry
         
         # Setup mock
         mock_chat.return_value = {
@@ -240,14 +240,14 @@ class TestSafetySystemsIntegration:
     
     def test_tool_guard_init(self):
         """Test tool guard initialization"""
-        from jarvis.safety.tool_guard import ToolGuard
+        from safety.tool_guard import ToolGuard
         
         guard = ToolGuard()
         assert guard is not None
     
     def test_tool_guard_validation(self):
         """Test tool call validation"""
-        from jarvis.safety.tool_guard import ToolGuard
+        from safety.tool_guard import ToolGuard
         
         guard = ToolGuard()
         
@@ -264,7 +264,7 @@ class TestSafetySystemsIntegration:
     
     def test_audit_log(self):
         """Test audit logging"""
-        from jarvis.safety.audit_log import AuditLog
+        from safety.audit_log import AuditLog
         import tempfile
         import json
         
@@ -295,9 +295,9 @@ class TestReasoningModulesIntegration:
     
     def test_planner_init(self):
         """Test task planner initialization"""
-        from jarvis.reasoning.planner import TaskPlanner
-        from jarvis.models.ollama_client import OllamaClient
-        from jarvis.tools.registry import ToolRegistry
+        from reasoning.planner import TaskPlanner
+        from models.ollama_client import OllamaClient
+        from tools.registry import ToolRegistry
         
         client = OllamaClient()
         registry = ToolRegistry.get_instance()
@@ -307,8 +307,8 @@ class TestReasoningModulesIntegration:
     
     def test_critic_init(self):
         """Test plan critic initialization"""
-        from jarvis.reasoning.critic import PlanCritic
-        from jarvis.models.ollama_client import OllamaClient
+        from reasoning.critic import PlanCritic
+        from models.ollama_client import OllamaClient
         
         client = OllamaClient()
         critic = PlanCritic(ollama_client=client)
@@ -316,7 +316,7 @@ class TestReasoningModulesIntegration:
     
     def test_strategy_selector(self):
         """Test strategy selection"""
-        from jarvis.reasoning.strategy_selector import StrategySelector
+        from reasoning.strategy_selector import StrategySelector
         
         selector = StrategySelector()
         
@@ -343,7 +343,7 @@ class TestOrchestratorIntegration:
     
     def test_orchestrator_init(self):
         """Test orchestrator initialization"""
-        from jarvis.core.orchestrator import Orchestrator
+        from core.orchestrator import Orchestrator
         
         config = {
             'mode': 'chat',
@@ -362,7 +362,7 @@ class TestOrchestratorIntegration:
     
     def test_orchestrator_process_command(self):
         """Test command processing"""
-        from jarvis.core.orchestrator import Orchestrator
+        from core.orchestrator import Orchestrator
         
         config = {
             'mode': 'chat',
@@ -386,8 +386,8 @@ class TestPerceptionIntegration:
     
     def test_intent_classifier_init(self):
         """Test intent classifier initialization"""
-        from jarvis.perception.intent_classifier import IntentClassifier
-        from jarvis.models.ollama_client import OllamaClient
+        from perception.intent_classifier import IntentClassifier
+        from models.ollama_client import OllamaClient
         
         client = OllamaClient()
         classifier = IntentClassifier(client)
@@ -396,8 +396,8 @@ class TestPerceptionIntegration:
     
     def test_vision_analyzer_init(self):
         """Test vision analyzer initialization"""
-        from jarvis.perception.vision import VisionAnalyzer
-        from jarvis.models.ollama_client import OllamaClient
+        from perception.vision import VisionAnalyzer
+        from models.ollama_client import OllamaClient
         
         client = OllamaClient()
         analyzer = VisionAnalyzer(client)
@@ -411,7 +411,7 @@ class TestEndToEndIntegration:
     @pytest.mark.skip(reason="Requires actual LLM connection")
     def test_full_command_flow(self):
         """Test complete command flow from input to execution"""
-        from jarvis.core.orchestrator import Orchestrator
+        from core.orchestrator import Orchestrator
         
         config = {
             'mode': 'agent',
@@ -432,7 +432,7 @@ class TestEndToEndIntegration:
     
     def test_tool_chain_execution(self):
         """Test executing multiple tools in sequence"""
-        from jarvis.tools.registry import ToolRegistry
+        from tools.registry import ToolRegistry
         
         registry = ToolRegistry.get_instance()
         
@@ -453,7 +453,7 @@ class TestConfigurationIntegration:
     
     def test_config_loading(self):
         """Test configuration loading"""
-        from jarvis.config.config import get_config
+        from config.config import get_config
         
         config = get_config()
         
@@ -463,7 +463,7 @@ class TestConfigurationIntegration:
     
     def test_config_with_custom_path(self):
         """Test loading config - note: current implementation ignores custom path"""
-        from jarvis.config.config import get_config
+        from config.config import get_config
         import tempfile
         import yaml
         
