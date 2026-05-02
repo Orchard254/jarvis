@@ -96,8 +96,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return f"{float(result.stdout.strip()):.1f}"
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting CPU usage: {e}")
         return "N/A"
     
     def _get_memory_usage(self) -> str:
@@ -111,8 +111,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return f"{float(result.stdout.strip()):.1f}"
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting memory usage: {e}")
         return "N/A"
     
     def _get_disk_usage(self) -> str:
@@ -126,8 +126,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return f"{float(result.stdout.strip()):.1f}"
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting disk usage: {e}")
         return "N/A"
     
     def _get_process_count(self) -> str:
@@ -140,8 +140,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting process count: {e}")
         return "N/A"
     
     def _get_uptime(self) -> str:
@@ -156,8 +156,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting uptime: {e}")
         return "N/A"
     
     def _get_battery_status(self) -> str:
@@ -171,8 +171,8 @@ Focus on actionable improvements with measurable impact.""".format(
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting battery status: {e}")
         return "N/A"
     
     def _analyze_performance(self, params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -193,22 +193,22 @@ Focus on actionable improvements with measurable impact.""".format(
                 if float(cpu) > 80:
                     issues.append(f"High CPU usage: {cpu}%")
                     recommendations.append("Consider closing CPU-intensive applications")
-            except:
-                pass
+            except Exception as e:
+                print(f"Error checking CPU usage: {e}")
             
             try:
                 if float(memory) > 85:
                     issues.append(f"High memory usage: {memory}%")
                     recommendations.append("Close unused applications or restart to free memory")
-            except:
-                pass
+            except Exception as e:
+                print(f"Error checking memory usage: {e}")
             
             try:
                 if float(disk) > 90:
                     issues.append(f"Low disk space: {disk}% used")
                     recommendations.append("Run disk cleanup or move files to external storage")
-            except:
-                pass
+            except Exception as e:
+                print(f"Error checking disk usage: {e}")
             
             analysis = {
                 "timestamp": datetime.now().isoformat(),
@@ -288,10 +288,10 @@ Focus on actionable improvements with measurable impact.""".format(
                                 try:
                                     file_path = os.path.join(root, file)
                                     total_temp_size += os.path.getsize(file_path)
-                                except:
-                                    pass
-                    except:
-                        pass
+                                except Exception as e:
+                                    print(f"Error getting file size for {file}: {e}")
+                    except Exception as e:
+                        print(f"Error walking temp path {temp_path}: {e}")
             
             if total_temp_size > 100 * 1024 * 1024:  # > 100MB
                 size_mb = total_temp_size / (1024 * 1024)
@@ -309,8 +309,8 @@ Focus on actionable improvements with measurable impact.""".format(
                     if recycle_size > 0:
                         size_gb = recycle_size / (1024 * 1024 * 1024)
                         recommendations.append(f"Recycle Bin: {size_gb:.2f}GB can be emptied")
-            except:
-                pass
+            except Exception as e:
+                print(f"Error checking recycle bin: {e}")
             
             # Check for large files
             try:
@@ -326,8 +326,8 @@ Focus on actionable improvements with measurable impact.""".format(
                     large_file_count = int(result.stdout.strip())
                     if large_file_count > 10:
                         recommendations.append(f"Found {large_file_count} large files (>500MB) to review")
-            except:
-                pass
+            except Exception as e:
+                print(f"Error checking for large files: {e}")
             
             if not recommendations:
                 recommendations.append("System is clean - no immediate cleanup needed")
@@ -372,10 +372,10 @@ Focus on actionable improvements with measurable impact.""".format(
                                     size = os.path.getsize(file_path)
                                     os.remove(file_path)
                                     cleaned += size
-                                except:
-                                    pass
-                    except:
-                        pass
+                                except Exception as e:
+                                    print(f"Error removing temp file {file}: {e}")
+                    except Exception as e:
+                        print(f"Error walking temp path {temp_path}: {e}")
                 
                 if cleaned > 0:
                     results.append(f"Cleaned {cleaned / (1024 * 1024):.1f}MB from temp folder")
@@ -389,8 +389,8 @@ Focus on actionable improvements with measurable impact.""".format(
                         timeout=10
                     )
                     results.append("Emptied Recycle Bin")
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error emptying recycle bin: {e}")
             
             if task in ["all", "memory"]:
                 # Suggest memory optimization
@@ -481,7 +481,8 @@ Focus on actionable improvements with measurable impact.""".format(
                     diff = current_val - baseline_val
                     direction = "↑" if diff > 0 else "↓" if diff < 0 else "→"
                     comparison.append(f"{metric.upper()}: {baseline_val:.1f}% → {current_val:.1f}% ({direction} {abs(diff):.1f}%)")
-                except:
+                except Exception as e:
+                    print(f"Error comparing {metric}: {e}")
                     comparison.append(f"{metric.upper()}: Data unavailable")
             
             try:
@@ -489,7 +490,8 @@ Focus on actionable improvements with measurable impact.""".format(
                 current_proc = int(current["processes"])
                 diff = current_proc - baseline_proc
                 comparison.append(f"Processes: {baseline_proc} → {current_proc} ({'+' if diff > 0 else ''}{diff})")
-            except:
+            except Exception as e:
+                print(f"Error comparing processes: {e}")
                 comparison.append("Processes: Data unavailable")
             
             output = "=== Performance Comparison ===\n" + "\n".join(comparison)

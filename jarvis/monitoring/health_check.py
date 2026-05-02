@@ -191,7 +191,7 @@ class HealthChecker:
     def _check_tools(self) -> ComponentHealth:
         """Check tool registry health."""
         try:
-            from tools.registry import get_registry
+            from jarvis.tools.registry import get_registry
             
             start = time.time()
             registry = get_registry()

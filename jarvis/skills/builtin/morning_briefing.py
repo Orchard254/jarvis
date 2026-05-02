@@ -276,7 +276,8 @@ Include relevant system information and help the user prepare for their day."""
                 socket.create_connection(("8.8.8.8", 53), timeout=2)
                 connected = True
                 network_name = "Internet available"
-            except:
+            except Exception as e:
+                print(f"Network check error: {e}")
                 connected = False
                 network_name = "No internet"
             

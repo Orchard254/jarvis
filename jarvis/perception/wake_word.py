@@ -167,8 +167,8 @@ class WakeWordDetection:
             try:
                 self._audio_stream.stop()
                 self._audio_stream.close()
-            except:
-                pass
+            except Exception as e:
+                print(f"Error stopping audio stream: {e}")
             self._audio_stream = None
         
         if self._listen_thread:
@@ -211,8 +211,8 @@ class WakeWordDetection:
                         'channels': dev['max_input_channels'],
                         'sample_rate': dev['default_samplerate']
                     })
-        except:
-            pass
+        except Exception as e:
+            print(f"Error listing audio devices: {e}")
         
         return devices
     

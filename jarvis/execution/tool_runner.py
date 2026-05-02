@@ -40,15 +40,16 @@ class ToolRunner:
     
     def __init__(self, audit_log: AuditLog):
         self.config = get_config()
-        self.audit_log = audit_logger
+        self.audit_log = audit_log
         self._tools_registry: dict[str, Any] = {}
         self._load_tools()
     
     def _load_tools(self):
         """Load all available tools from the tools registry."""
-        from tools.registry import get_all_tools
+        from jarvis.tools.registry import get_registry
         
-        self._tools_registry = get_all_tools()
+        registry = get_registry()
+        self._tools_registry = registry.get_all_tools()
         logger.info(f"Loaded {len(self._tools_registry)} tools")
     
     async def execute(
@@ -107,12 +108,11 @@ class ToolRunner:
                 rollback_actions = result.rollback_actions
             
             # Log successful execution
-            self.audit_log.log_tool_execution(
+            self.audit_log.log_tool_call(
                 tool_name,
                 params,
-                True,
+                {'success': True, 'output': result},
                 duration_ms,
-                error=None,
             )
             
             return ToolResult(
@@ -128,12 +128,11 @@ class ToolRunner:
             error_msg = f"Tool '{tool_name}' timed out after {timeout_ms}ms"
             logger.error(error_msg)
             
-            self.audit_log.log_tool_execution(
+            self.audit_log.log_tool_call(
                 tool_name,
                 params,
-                False,
+                {'success': False, 'error': error_msg},
                 duration_ms,
-                error=error_msg,
             )
             
             return ToolResult(
@@ -147,12 +146,11 @@ class ToolRunner:
             error_msg = f"Tool '{tool_name}' failed: {str(e)}"
             logger.exception(error_msg)
             
-            self.audit_log.log_tool_execution(
+            self.audit_log.log_tool_call(
                 tool_name,
                 params,
-                False,
+                {'success': False, 'error': error_msg},
                 duration_ms,
-                error=error_msg,
             )
             
             return ToolResult(

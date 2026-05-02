@@ -402,7 +402,8 @@ Do not include markdown formatting or explanations. Only return JSON."""
             img_data = base64.b64decode(base64_str)
             img = Image.open(BytesIO(img_data))
             return img.size
-        except:
+        except Exception as e:
+            print(f"Error getting image dimensions: {e}")
             return None
     
     def get_realtime_capture(self) -> Dict[str, Any]:
