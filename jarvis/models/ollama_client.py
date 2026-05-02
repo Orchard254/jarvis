@@ -19,6 +19,11 @@ import requests
 log = logging.getLogger("ollama_client")
 
 
+class OllamaUnavailableError(Exception):
+    """Raised when all Ollama endpoints (cloud and local) are unreachable."""
+    pass
+
+
 class OllamaClient:
     """Ollama API client with automatic fallback and retry logic."""
     
@@ -190,14 +195,13 @@ class OllamaClient:
                 log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
                 continue
         
-        # All endpoints failed
-        return {
-            "content": "",
-            "tool_calls": [],
-            "done": True,
-            "error": "All Ollama endpoints failed",
-            "endpoint": None,
-        }
+        # All endpoints failed - raise exception
+        log.error("[OLLAMA] All endpoints (cloud and local) are unreachable")
+        raise OllamaUnavailableError(
+            "All Ollama endpoints failed. Cloud endpoint may be unreachable or rate-limited, "
+            "and local Ollama server is not running. Please check your connection or start "
+            "Ollama locally with 'ollama serve'."
+        )
     
     def stream_chat(
         self,
@@ -342,13 +346,12 @@ class OllamaClient:
                 log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
                 continue
         
-        return {
-            "content": "",
-            "tool_calls": [],
-            "done": True,
-            "error": "All Ollama endpoints failed for vision call",
-            "endpoint": None,
-        }
+        # All endpoints failed - raise exception
+        log.error("[OLLAMA] All endpoints (cloud and local) are unreachable for vision call")
+        raise OllamaUnavailableError(
+            "All Ollama endpoints failed for vision call. Cloud endpoint may be unreachable or rate-limited, "
+            "and local Ollama server is not running."
+        )
     
     def is_available(self) -> bool:
         """Check if any Ollama endpoint is available."""

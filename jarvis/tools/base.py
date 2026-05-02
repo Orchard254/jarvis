@@ -59,19 +59,29 @@ class BaseTool(ABC):
     Every tool must implement:
     - name: Unique identifier for the tool
     - description: Human-readable description
+    - category: Tool category (system, apps, files, etc.)
     - parameters: Schema definition for parameters
     - validate(): Check parameters before execution
     - execute(): Perform the action
     - rollback(): Undo if possible
     - estimate_duration(): How long it takes
     - risk_level(): Safety classification
+    - reversible: Whether the action can be undone
+    - requires_confirmation: Whether user confirmation is needed
+    - timeout: Default timeout for execution
     """
     
     # Class-level attributes that subclasses must override
     name: str = "base_tool"
     description: str = "Base tool - should be overridden"
+    category: str = "general"  # Tool category for organization
     parameters: Dict[str, Any] = {}
     required_parameters: list = None
+    
+    # Safety and execution properties
+    reversible: bool = True  # Can the action be undone?
+    requires_confirmation: bool = False  # Does it need user confirmation?
+    timeout: int = 30  # Default timeout in seconds
     
     def __init__(self):
         if self.required_parameters is None:
