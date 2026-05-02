@@ -11,14 +11,16 @@ Tests all memory components:
 """
 
 import sys
-import os
-sys.path.insert(0, '/workspace')
+from pathlib import Path
 
-from core.memory import CoreMemory
-from memory.working import WorkingMemory
-from memory.episodic import EpisodicMemory
-from memory.semantic import SemanticMemory
-from memory.procedural import ProceduralMemory
+# Add parent directory (workspace root) to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from jarvis.core.memory import CoreMemory
+from jarvis.memory.working import WorkingMemory
+from jarvis.memory.episodic import EpisodicMemory
+from jarvis.memory.semantic import SemanticMemory
+from jarvis.memory.procedural import ProceduralMemory
 
 
 def test_working_memory():

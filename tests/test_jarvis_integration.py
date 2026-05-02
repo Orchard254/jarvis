@@ -15,11 +15,10 @@ Run with: python -m pytest test_jarvis_integration.py -v
 """
 
 import sys
-import os
 from pathlib import Path
 
-# Add workspace to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add parent directory (workspace root) to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch

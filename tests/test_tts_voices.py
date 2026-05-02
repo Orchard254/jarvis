@@ -9,14 +9,13 @@ Just run: python test_tts_voices.py
 import os
 import sys
 import warnings
+from pathlib import Path
 
 # Suppress PyTorch warnings
 warnings.filterwarnings("ignore")
 
-# Add venv to path
-venv_path = os.path.join(os.path.dirname(__file__), "venv", "Lib", "site-packages")
-if venv_path not in sys.path:
-    sys.path.insert(0, venv_path)
+# Add parent directory (workspace root) to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import numpy as np
 import sounddevice as sd

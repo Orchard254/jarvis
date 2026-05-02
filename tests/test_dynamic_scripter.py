@@ -6,8 +6,10 @@ without relying on hardcoded tools.
 """
 
 import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+
+# Add parent directory (workspace root) to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dynamic_scripter import DynamicScripter
 # Removed unused import that was causing errors
