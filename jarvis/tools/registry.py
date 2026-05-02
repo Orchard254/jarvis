@@ -194,21 +194,21 @@ class ToolRegistry:
         
         total = 0
         
-        # Map of category folders to module prefixes - use tools prefix
+        # Map of category folders to module prefixes - use jarvis.tools prefix for proper imports
         categories = {
-            "system": "tools.system",
-            "apps": "tools.apps",
-            "audio": "tools.audio",
-            "files": "tools.files",
-            "network": "tools.network",
-            "screen": "tools.screen",
-            "input": "tools.input",
-            "web": "tools.web",
-            "time": "tools.time",
-            "settings": "tools.settings",
-            "tasks": "tools.tasks",
-            "scripts": "tools.scripts",
-            "data": "tools.data",
+            "system": "jarvis.tools.system",
+            "apps": "jarvis.tools.apps",
+            "audio": "jarvis.tools.audio",
+            "files": "jarvis.tools.files",
+            "network": "jarvis.tools.network",
+            "screen": "jarvis.tools.screen",
+            "input": "jarvis.tools.input",
+            "web": "jarvis.tools.web",
+            "time": "jarvis.tools.time",
+            "settings": "jarvis.tools.settings",
+            "tasks": "jarvis.tools.tasks",
+            "scripts": "jarvis.tools.scripts",
+            "data": "jarvis.tools.data",
         }
         
         for category, prefix in categories.items():
