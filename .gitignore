@@ -1,39 +1,32 @@
-```
-# Python
+```gitignore
+# Python compiled files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Data files that might be generated
-jarvis/memory/semantic.json
-jarvis_data/
-
 # Dependencies
-.venv/
 venv/
-env/
+.venv/
 .env
 .env.local
 *.env.*
 
-# Logs
+# Logs and temporary files
 *.log
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
 *.tmp
 
+# Editors
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
 # Build artifacts
-build/
 dist/
-*.egg-info/
+build/
+target/
 ```
