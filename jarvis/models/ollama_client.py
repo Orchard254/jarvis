@@ -189,7 +189,30 @@ class OllamaClient:
                 continue
             
             try:
-                data = resp.json()
+                # Handle both single JSON response and streaming responses
+                response_text = resp.text.strip()
+                
+                # Try to parse as single JSON first (standard response)
+                try:
+                    data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Might be streaming response with multiple JSON lines
+                    # Take the last complete JSON object
+                    lines = response_text.split('\n')
+                    data = None
+                    for line in reversed(lines):
+                        line = line.strip()
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                break
+                            except json.JSONDecodeError:
+                                continue
+                    
+                    if data is None:
+                        log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint")
+                        continue
+                
                 msg = data.get("message", {})
                 
                 return {
@@ -200,8 +223,8 @@ class OllamaClient:
                     "endpoint": name,
                 }
                 
-            except json.JSONDecodeError as e:
-                log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
+            except Exception as e:
+                log.error(f"[OLLAMA] Response parsing error from {name}: {e}")
                 continue
         
         # All endpoints failed - raise exception
@@ -340,7 +363,30 @@ class OllamaClient:
                 continue
             
             try:
-                data = resp.json()
+                # Handle both single JSON response and streaming responses
+                response_text = resp.text.strip()
+                
+                # Try to parse as single JSON first (standard response)
+                try:
+                    data = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # Might be streaming response with multiple JSON lines
+                    # Take the last complete JSON object
+                    lines = response_text.split('\n')
+                    data = None
+                    for line in reversed(lines):
+                        line = line.strip()
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                break
+                            except json.JSONDecodeError:
+                                continue
+                    
+                    if data is None:
+                        log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint")
+                        continue
+                
                 msg = data.get("message", {})
                 
                 return {
@@ -351,8 +397,8 @@ class OllamaClient:
                     "endpoint": name,
                 }
                 
-            except json.JSONDecodeError as e:
-                log.error(f"[OLLAMA] Invalid JSON response from {name}: {e}")
+            except Exception as e:
+                log.error(f"[OLLAMA] Response parsing error from {name}: {e}")
                 continue
         
         # All endpoints failed - raise exception

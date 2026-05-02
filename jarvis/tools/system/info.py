@@ -95,16 +95,23 @@ class SystemInfoTool(BaseTool):
                 results.append(f"RAM: {mem.percent}% used ({mem.available / 1024**3:.1f}GB free of {mem.total / 1024**3:.1f}GB)")
             
             if info_type in ["disk", "all"]:
-                disk = psutil.disk_usage("C:")
-                results.append(f"Disk C: {disk.percent}% used ({disk.free / 1024**3:.1f}GB free of {disk.total / 1024**3:.1f}GB)")
+                # Try Windows C: drive first, fallback to root for Linux
+                try:
+                    disk = psutil.disk_usage("C:")
+                except (FileNotFoundError, OSError):
+                    disk = psutil.disk_usage("/")
+                results.append(f"Disk: {disk.percent}% used ({disk.free / 1024**3:.1f}GB free of {disk.total / 1024**3:.1f}GB)")
             
             if info_type in ["battery", "all"]:
-                battery = psutil.sensors_battery()
-                if battery:
-                    status = "charging" if battery.power_plugged else "discharging"
-                    results.append(f"Battery: {battery.percent}% ({status})")
-                else:
-                    results.append("Battery: N/A (desktop)")
+                try:
+                    battery = psutil.sensors_battery()
+                    if battery:
+                        status = "charging" if battery.power_plugged else "discharging"
+                        results.append(f"Battery: {battery.percent}% ({status})")
+                    else:
+                        results.append("Battery: N/A (desktop)")
+                except Exception:
+                    results.append("Battery: N/A (no sensor available)")
             
             return ToolResult.ok(" | ".join(results))
             
@@ -146,8 +153,11 @@ class SystemHealthTool(BaseTool):
             lines.append(f"Memory: {mem.percent}% used ({mem.available / 1024**3:.1f}GB free)")
             
             # Disk
-            disk = psutil.disk_usage("C:")
-            lines.append(f"Disk C: {disk.percent}% used")
+            try:
+                disk = psutil.disk_usage("C:")
+            except (FileNotFoundError, OSError):
+                disk = psutil.disk_usage("/")
+            lines.append(f"Disk: {disk.percent}% used")
             
             # Top processes by CPU
             lines.append("\nTop Processes (CPU):")
