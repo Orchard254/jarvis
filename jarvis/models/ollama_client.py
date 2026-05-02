@@ -16,6 +16,16 @@ from typing import Callable, Generator, Optional, List, Dict, Any
 
 import requests
 
+# Import settings - single source of truth for configuration
+from settings import (
+    OLLAMA_CLOUD_URL,
+    OLLAMA_LOCAL_URL,
+    OLLAMA_API_KEY,
+    OLLAMA_MODEL,
+    OLLAMA_TIMEOUT,
+    OLLAMA_MAX_RETRIES,
+)
+
 log = logging.getLogger("ollama_client")
 
 
@@ -30,21 +40,20 @@ class OllamaClient:
     def __init__(
         self,
         cloud_url: Optional[str] = None,
-        local_url: str = "http://localhost:11434/api/chat",
+        local_url: str = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: int = 180,
-        max_retries: int = 3,
+        timeout: int = None,
+        max_retries: int = None,
         base_backoff: float = 1.0,
     ):
-        # Load from environment if not provided (for .env compatibility)
-        import os
-        self.cloud_url = cloud_url or os.environ.get('OLLAMA_CLOUD_URL', 'https://api.ollama.com/api/chat')
-        self.local_url = local_url
-        self.api_key = api_key or os.environ.get('OLLAMA_API_KEY', '')
-        self.model = model or os.environ.get('OLLAMA_MODEL', 'nemotron-3-nano:30b-cloud')
-        self.timeout = timeout or int(os.environ.get('OLLAMA_TIMEOUT', '180'))
-        self.max_retries = max_retries
+        # Use settings defaults, allow overrides
+        self.cloud_url = cloud_url or OLLAMA_CLOUD_URL
+        self.local_url = local_url or OLLAMA_LOCAL_URL
+        self.api_key = api_key or OLLAMA_API_KEY
+        self.model = model or OLLAMA_MODEL
+        self.timeout = timeout or OLLAMA_TIMEOUT
+        self.max_retries = max_retries if max_retries is not None else OLLAMA_MAX_RETRIES
         self.base_backoff = base_backoff
         
         # Track which endpoint is working

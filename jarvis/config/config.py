@@ -2,98 +2,96 @@
 JARVIS Configuration Module
 
 Centralized configuration management with environment overrides.
-Loads from .env file using python-dotenv for compatibility with existing setup.
+DEPRECATED: This module is kept for backwards compatibility.
+All new code should import directly from settings.py instead.
+
+Usage (OLD - deprecated):
+    from jarvis.config.config import get_config
+    config = get_config()
+
+Usage (NEW - recommended):
+    from settings import OLLAMA_API_KEY, TTS_ENGINE, MAX_HISTORY
 """
 
-import os
-from pathlib import Path
-from typing import Dict, Any, Optional
+# Import all settings for backwards compatibility
+from settings import DEFAULT_CONFIG, validate_settings, print_settings_summary
 
-# Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # dotenv not installed, will use system env vars
-
-
-# Default configuration
-DEFAULT_CONFIG = {
-    # LLM Settings - loaded from .env
-    'ollama_cloud_url': os.environ.get('OLLAMA_CLOUD_URL', 'https://api.ollama.com/api/chat'),
-    'ollama_local_url': 'http://localhost:11434/api/chat',
-    'model': os.environ.get('OLLAMA_MODEL', 'nemotron-3-nano:30b-cloud'),
-    'ollama_api_key': os.environ.get('OLLAMA_API_KEY', ''),
-    'fallback_to_local': True,
-    'max_retries': 3,
-    'llm_timeout': int(os.environ.get('OLLAMA_TIMEOUT', '120')),
-    'conversation_history_limit': 20,
-    
-    # TTS Settings
-    'tts_enabled': True,
-    'tts_engine': 'kokoro',
-    'tts_voice': 'bm_george',
-    'tts_speed': 1.15,
-    
-    # STT Settings
-    'stt_engine': 'google',
-    'stt_language': 'en-US',
-    
-    # Wake Word Settings
-    'wake_word_enabled': True,
-    'wake_word_model': 'hey_jarvis',
-    'wake_word_threshold': 0.5,
-    
-    # Memory Settings
-    'working_memory_max_messages': 20,
-    'working_memory_max_tokens': 4000,
-    'memory_retrieval_limit': 5,
-    
-    # Safety Settings
-    'safety_enabled': True,
-    'require_confirmation_for': [
-        'shutdown_computer',
-        'restart_computer',
-        'delete_file',
-        'close_app'
-    ],
-    'blocked_paths': [
-        'C:\\\\Windows',
-        'C:\\\\Program Files',
-        'C:\\\\Program Files (x86)',
-        'C:\\\\System Volume Information'
-    ],
-    
-    # Paths
-    'data_dir': 'jarvis_data',
-    'log_dir': 'logs',
-    'config_dir': 'config',
-    
-    # Logging
-    'log_level': 'INFO',
-    
-    # User Profile
-    'user_name': 'User',
-    'user_preferences': {},
-    'user_routines': [],
-    
-    # Modes
-    'mode': 'agent',
-    'voice_enabled': False,
-    
-    # Monitoring
-    'ambient_monitoring': True,
-    'health_check_interval': 60,
-    
-    # Advanced
-    'enable_skills': True,
-    'enable_planning': True,
-    'enable_reflection': True,
-    'max_tool_iterations': 5
-}
+# Re-export all individual settings for backwards compatibility
+from settings import (
+    OLLAMA_API_KEY,
+    OLLAMA_CLOUD_URL,
+    OLLAMA_LOCAL_URL,
+    OLLAMA_MODEL,
+    OLLAMA_VISION_MODEL,
+    OLLAMA_CODER_MODEL,
+    OLLAMA_MODE,
+    OLLAMA_TEMPERATURE,
+    OLLAMA_MAX_TOKENS,
+    AGENT_MAX_TOKENS,
+    OLLAMA_TIMEOUT,
+    OLLAMA_MAX_RETRIES,
+    FALLBACK_TO_LOCAL,
+    CONVERSATION_HISTORY_LIMIT,
+    TTS_ENGINE,
+    TTS_ENABLED,
+    KOKORO_VOICE,
+    KOKORO_LANG_CODE,
+    KOKORO_SPEED,
+    PIPER_EXE,
+    PIPER_MODEL,
+    SAMPLE_RATE,
+    SILENCE_THRESHOLD,
+    SILENCE_DURATION,
+    MAX_RECORD_SECS,
+    MIC_DEVICE,
+    AUDIO_DEVICE,
+    STT_ENGINE,
+    STT_LANGUAGE,
+    WAKE_WORD,
+    WAKE_WORD_THRESHOLD,
+    WAKE_WORD_COOLDOWN,
+    CONTINUOUS_MODE,
+    WAKE_WORD_ENABLED,
+    MAX_HISTORY,
+    MAX_AGENT_ROUNDS,
+    MAX_TOOL_ITERATIONS,
+    AGENT_MODE,
+    WORKING_MEMORY_MAX_MESSAGES,
+    WORKING_MEMORY_MAX_TOKENS,
+    MEMORY_RETRIEVAL_LIMIT,
+    BATTERY_WARN_THRESHOLD,
+    BATTERY_CRITICAL_THRESHOLD,
+    CPU_SPIKE_THRESHOLD,
+    CPU_SPIKE_DURATION,
+    MEMORY_WARN_THRESHOLD,
+    DISK_WARN_THRESHOLD,
+    IDLE_MINUTES,
+    MONITOR_INTERVAL,
+    HEALTH_CHECK_INTERVAL,
+    AMBIENT_MONITORING,
+    LOG_DIR,
+    NOTES_DIR,
+    REMINDERS_DIR,
+    DATA_DIR,
+    CONFIG_DIR,
+    USER_HOME,
+    CONFIRM_DANGEROUS,
+    ENABLE_AUDIT_LOG,
+    SAFETY_ENABLED,
+    LOG_LEVEL,
+    WEATHER_API_KEY,
+    NEWS_API_KEY,
+    HF_TOKEN,
+    USER_NAME,
+    ENABLE_SKILLS,
+    ENABLE_PLANNING,
+    ENABLE_REFLECTION,
+    VOICE_ENABLED,
+    MODE,
+)
 
 
-def get_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+def get_config(config_path=None):
     """
     Load configuration with environment variable overrides from .env file.
     
@@ -101,22 +99,18 @@ def get_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         config_path: Optional path to config file (not used, kept for API compatibility)
         
     Returns:
-        Configuration dict
+        Configuration dict (DEFAULT_CONFIG from settings)
     """
-    config = DEFAULT_CONFIG.copy()
-    
     # Ensure data directory exists
-    data_dir = Path(config.get('data_dir', 'jarvis_data'))
-    data_dir.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     
     # Ensure log directory exists
-    log_dir = Path(config.get('log_dir', 'logs'))
-    log_dir.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     
-    return config
+    return DEFAULT_CONFIG.copy()
 
 
-def save_config(config: Dict, path: str) -> bool:
+def save_config(config, path):
     """
     Save configuration to YAML file.
     
@@ -128,6 +122,7 @@ def save_config(config: Dict, path: str) -> bool:
         True if successful
     """
     try:
+        from pathlib import Path
         path_obj = Path(path)
         path_obj.parent.mkdir(parents=True, exist_ok=True)
         
@@ -142,7 +137,7 @@ def save_config(config: Dict, path: str) -> bool:
         return False
 
 
-def get_default_config() -> Dict[str, Any]:
+def get_default_config():
     """
     Get a copy of the default configuration.
     
