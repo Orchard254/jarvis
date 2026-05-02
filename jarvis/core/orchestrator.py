@@ -101,7 +101,7 @@ class Orchestrator:
         
         # Skill registry
         self.skill_registry = SkillRegistry()
-        self.skill_registry.load_skills()
+        self.skill_registry.initialize()
         
         # Safety systems - Phase 3 Integration
         self.input_filter = InputFilter()
