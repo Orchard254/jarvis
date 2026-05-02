@@ -1,8 +1,8 @@
 """
 tools/web/browser.py — Web browser tools
 
-Tools for: search web, open URL
-Uses subprocess and webbrowser module.
+Tools for: search web, open URL, close browser, search within site
+Uses subprocess, webbrowser module, and selenium for advanced control.
 """
 
 import logging
@@ -103,8 +103,166 @@ class OpenUrlTool(BaseTool):
         return "low"
 
 
+class CloseBrowserTool(BaseTool):
+    """Close the web browser or specific tabs."""
+    
+    name = "close_browser"
+    description = "Close the web browser or all browser windows. Use this to close Chrome, Firefox, Edge, or any open browser."
+    parameters = {
+        "browser": {
+            "type": "string",
+            "description": "Browser name to close (chrome, firefox, edge, or 'all' for all browsers). Default: 'all'",
+            "default": "all",
+        },
+    }
+    required_parameters = []
+    
+    def validate(self, **kwargs) -> tuple[bool, str]:
+        browser = kwargs.get("browser", "all")
+        if not isinstance(browser, str):
+            return False, "browser must be a string"
+        
+        valid_browsers = ["chrome", "firefox", "edge", "all"]
+        if browser.lower() not in valid_browsers:
+            return False, f"browser must be one of: {', '.join(valid_browsers)}"
+        
+        return True, ""
+    
+    def execute(self, **kwargs) -> ToolResult:
+        browser = kwargs.get("browser", "all").lower()
+        
+        try:
+            import subprocess
+            
+            if browser == "chrome":
+                process_names = ["chrome", "chromium"]
+            elif browser == "firefox":
+                process_names = ["firefox"]
+            elif browser == "edge":
+                process_names = ["msedge"]
+            else:  # all
+                process_names = ["chrome", "chromium", "firefox", "msedge"]
+            
+            closed_count = 0
+            for proc_name in process_names:
+                try:
+                    # Windows: use taskkill
+                    import platform
+                    if platform.system() == "Windows":
+                        result = subprocess.run(
+                            ["taskkill", "/F", "/IM", f"{proc_name}.exe"],
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            closed_count += 1
+                    else:
+                        # Linux/Mac: use pkill
+                        result = subprocess.run(
+                            ["pkill", "-f", proc_name],
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            closed_count += 1
+                except Exception:
+                    pass  # Continue trying other browsers
+            
+            if closed_count > 0:
+                return ToolResult.ok(f"Closed {closed_count} browser process(es)")
+            else:
+                return ToolResult.ok("No browser processes found running")
+            
+        except Exception as e:
+            log.error(f"Failed to close browser: {e}")
+            return ToolResult.fail(error=f"Failed to close browser: {e}")
+    
+    def estimate_duration(self, **kwargs) -> float:
+        return 1.0
+    
+    def risk_level(self) -> str:
+        return "medium"
+
+
+class SearchInSiteTool(BaseTool):
+    """Search within a specific website using site-specific search."""
+    
+    name = "search_in_site"
+    description = "Search within a specific website. Opens the site's search results page in the browser."
+    parameters = {
+        "query": {
+            "type": "string",
+            "description": "Search query string",
+        },
+        "site": {
+            "type": "string",
+            "description": "Website domain (e.g., 'jiji.co.ke', 'amazon.com')",
+        },
+    }
+    required_parameters = ["query", "site"]
+    
+    def validate(self, **kwargs) -> tuple[bool, str]:
+        query = kwargs.get("query")
+        site = kwargs.get("site")
+        
+        if not query or not isinstance(query, str):
+            return False, "query must be a non-empty string"
+        if not site or not isinstance(site, str):
+            return False, "site must be a non-empty string"
+        
+        # Basic site validation
+        if "." not in site:
+            return False, "site must be a valid domain (e.g., 'example.com')"
+        
+        return True, ""
+    
+    def execute(self, **kwargs) -> ToolResult:
+        query = kwargs["query"]
+        site = kwargs["site"]
+        
+        try:
+            import webbrowser
+            
+            # Clean site URL (remove http/https prefix if present)
+            site_clean = site.replace("http://", "").replace("https://", "").split("/")[0]
+            
+            # Try common search URL patterns
+            search_url = None
+            
+            # Pattern 1: site.com/search?query=...
+            # Pattern 2: site.com?s=...
+            # Pattern 3: Use Google site: operator as fallback
+            
+            # For known sites, use specific patterns
+            if "jiji" in site_clean:
+                search_url = f"https://www.{site_clean}/search?query={urllib.parse.quote(query)}"
+            elif "amazon" in site_clean:
+                search_url = f"https://www.{site_clean}/s?k={urllib.parse.quote(query)}"
+            elif "ebay" in site_clean:
+                search_url = f"https://www.{site_clean}/sch/i.html?_nkw={urllib.parse.quote(query)}"
+            else:
+                # Fallback: Use Google site-specific search
+                search_url = f"https://www.google.com/search?q=site:{site_clean}+{urllib.parse.quote_plus(query)}"
+            
+            webbrowser.open(search_url)
+            
+            return ToolResult.ok(f"Searching for '{query}' on {site_clean}")
+            
+        except Exception as e:
+            log.error(f"Site search failed: {e}")
+            return ToolResult.fail(error=f"Site search failed: {e}")
+    
+    def estimate_duration(self, **kwargs) -> float:
+        return 1.0
+    
+    def risk_level(self) -> str:
+        return "low"
+
+
 # Export all tool classes
 WEB_TOOLS = [
     SearchWebTool,
     OpenUrlTool,
+    CloseBrowserTool,
+    SearchInSiteTool,
 ]
