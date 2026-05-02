@@ -69,7 +69,7 @@ class TTSManager:
 
 def get_system_prompt(mode: str = 'agent', **kwargs) -> str:
     """Get the system prompt for JARVIS."""
-    from config.prompts.jarvis_prompt import get_system_prompt as build_prompt
+    from jarvis.config.prompts.jarvis_prompt import get_system_prompt as build_prompt
     return build_prompt(mode, **kwargs)
 
 
