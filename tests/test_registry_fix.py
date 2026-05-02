@@ -2,9 +2,12 @@
 Quick test to verify JARVIS tool registry is working correctly
 """
 import sys
-sys.path.insert(0, '/workspace')
+from pathlib import Path
 
-from tools.registry import ToolRegistry, get_registry
+# Add parent directory (workspace root) to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from jarvis.tools.registry import ToolRegistry, get_registry
 
 # Test 1: Get registry instance
 print("Test 1: Getting registry instance...")
