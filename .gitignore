@@ -8,9 +8,7 @@ __pycache__/
 *.so
 *.egg-info/
 
-# Dependencies
-venv/
-.venv/
+# Environment variables
 .env
 .env.local
 .env.*
@@ -30,14 +28,9 @@ htmlcov/
 *.swo
 *.tmp
 
-# Distribution / packaging
-dist/
-build/
-*.tar.gz
-*.whl
-*.egg
-
-# Testing
-.pytest_cache/
+# Dependencies
+.venv/
+venv/
 .mypy_cache/
+.pytest_cache/
 ```
