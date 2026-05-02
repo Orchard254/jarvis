@@ -27,7 +27,7 @@ class GetWifiTool(BaseTool):
     
     def execute(self, **kwargs) -> ToolResult:
         try:
-            script = """
+            script = r"""
             $profile = netsh wlan show interfaces | Select-String -Pattern "^\s+SSID\s*:" -Context 0,0
             if ($profile) {
                 $ssid = ($profile -replace "^\s+SSID\s*:\s*", "").Trim()
