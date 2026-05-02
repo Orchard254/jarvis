@@ -27,23 +27,74 @@ class IntentClassifier:
         
         # Keywords that strongly suggest agent mode
         self.agent_keywords = [
-            'open', 'close', 'click', 'type', 'search', 'find',
-            'create', 'delete', 'move', 'copy', 'rename',
-            'run', 'execute', 'launch', 'start', 'stop',
-            'change', 'set', 'adjust', 'increase', 'decrease',
-            'take screenshot', 'capture', 'record',
-            'send', 'download', 'upload', 'install',
-            'show me', 'let me', 'help me', 'i want to',
-            'can you', 'please', 'would you'
+            # App/Window control
+            'open', 'close', 'click', 'type', 'launch', 'start', 'stop', 'kill', 'restart',
+            'minimize', 'maximize', 'restore', 'focus', 'switch',
+            
+            # File operations
+            'create', 'delete', 'move', 'copy', 'rename', 'save', 'load',
+            'download', 'upload', 'extract', 'compress',
+            
+            # Search & Navigation
+            'search', 'find', 'locate', 'navigate', 'browse', 'visit', 'go to',
+            'search in', 'search for', 'look for',
+            
+            # System control
+            'run', 'execute', 'install', 'uninstall', 'configure', 'setup', 'update',
+            'change', 'set', 'adjust', 'increase', 'decrease', 'enable', 'disable',
+            'lock', 'unlock', 'shutdown', 'restart', 'sleep', 'hibernate',
+            
+            # Screen & Input
+            'take screenshot', 'capture', 'record', 'scroll',
+            'type text', 'press key', 'copy', 'paste', 'cut',
+            
+            # Communication
+            'send', 'receive', 'email', 'message', 'notify', 'share',
+            
+            # Verification & Information (action-oriented)
+            'check', 'verify', 'confirm', 'validate', 'test', 'ensure',
+            'current', 'time', 'date', 'what time', 'battery', 'volume', 'brightness',
+            'network', 'internet', 'wifi', 'bluetooth',
+            
+            # Web control
+            'open url', 'open website', 'close tab', 'close browser', 'new tab', 'refresh',
+            'bookmark', 'history', 'clear cache',
+            
+            # Phrases indicating action request (specific tasks)
+            'show me', 'let me', 
+            'help me open', 'help me close', 'help me find', 'help me search',
+            'i want to open', 'i want to close', 'i want to search', 'i want to find',
+            'i need to open', 'i need to close', 'i need to search', 'i need to find',
+            'can you open', 'can you close', 'can you search', 'can you find',
+            'can you help me open', 'can you help me close', 'can you help me search',
+            'please open', 'please close', 'please search', 'please find',
+            'would you open', 'could you open', 'would you help me', 'could you help me',
+            
+            # Site-specific search
+            'inside', 'within', 'on the site', 'on website'
         ]
         
-        # Keywords that suggest chat mode
+        # Keywords that suggest chat mode (purely conversational/informational)
         self.chat_keywords = [
+            # Questions about facts/opinions
             'what is', 'who is', 'when', 'where', 'why', 'how',
             'explain', 'tell me about', 'define', 'describe',
-            'what do you think', 'opinion', 'idea',
-            'hello', 'hi', 'hey', 'good morning', 'good evening',
-            'thanks', 'thank you', 'bye', 'goodbye'
+            'what do you think', 'opinion', 'idea', 'your thoughts',
+            
+            # Greetings and social
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+            'how are you', 'how is it going', 'whats up',
+            
+            # Farewells and thanks
+            'thanks', 'thank you', 'bye', 'goodbye', 'see you', 'take care',
+            
+            # Meta conversation (not action requests)
+            'can you help', 'can you help me', 'are you able', 'do you know', 'is it possible',
+            'i wonder', 'i am curious', 'just asking', 'just wondering',
+            'can you tell me', 'could you tell me', 'would you tell me',
+            
+            # Clarification requests
+            'what does', 'how does', 'why does', 'when did', 'who was'
         ]
     
     def set_client(self, client) -> None:
@@ -98,27 +149,57 @@ class IntentClassifier:
         agent_score = 0
         chat_score = 0
         
-        # Check for agent keywords
-        for keyword in self.agent_keywords:
+        # Check for agent keywords (multi-word phrases first, then single words)
+        # Prioritize longer phrases to avoid partial matches
+        multi_word_agents = [kw for kw in self.agent_keywords if ' ' in kw]
+        single_word_agents = [kw for kw in self.agent_keywords if ' ' not in kw]
+        
+        for keyword in multi_word_agents:
             if keyword in input_lower:
+                agent_score += 2  # Higher weight for multi-word phrases
+        
+        for keyword in single_word_agents:
+            # Use word boundary check for single words to avoid false positives
+            import re
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, input_lower):
                 agent_score += 1
         
-        # Check for chat keywords
-        for keyword in self.chat_keywords:
+        # Check for chat keywords (same approach)
+        multi_word_chats = [kw for kw in self.chat_keywords if ' ' in kw]
+        single_word_chats = [kw for kw in self.chat_keywords if ' ' not in kw]
+        
+        for keyword in multi_word_chats:
             if keyword in input_lower:
+                chat_score += 2
+        
+        for keyword in single_word_chats:
+            import re
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, input_lower):
                 chat_score += 1
         
-        # Check for imperative verbs (action words)
+        # Check for imperative verbs at start (action words)
         imperative_verbs = ['open', 'close', 'get', 'find', 'show', 'make', 
-                           'create', 'delete', 'run', 'execute', 'click', 'type']
+                           'create', 'delete', 'run', 'execute', 'click', 'type',
+                           'search', 'check', 'verify', 'launch', 'start', 'stop']
         words = input_lower.split()
         if words and words[0] in imperative_verbs:
             agent_score += 2
         
-        # Check for question patterns
+        # Check for "i want" pattern (indicates request)
+        if input_lower.startswith('i want') or input_lower.startswith('i need'):
+            agent_score += 2
+        
+        # Check for question patterns at start
         question_words = ['what', 'who', 'when', 'where', 'why', 'how', 'is', 'are', 'does', 'do']
         if words and words[0] in question_words:
-            chat_score += 1
+            # But not if it's about time/battery/system info (those are agent tasks)
+            system_info_words = ['time', 'battery', 'volume', 'brightness', 'network', 'wifi']
+            if any(word in input_lower for word in system_info_words):
+                agent_score += 2
+            else:
+                chat_score += 1
         
         # Calculate confidence
         total = agent_score + chat_score
