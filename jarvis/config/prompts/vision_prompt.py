@@ -2,101 +2,129 @@
 Vision Prompt for Screen Analysis
 
 Prompts used when analyzing screenshots with multimodal LLM.
+Concise, structured prompts that request JSON-only output.
 """
 
 VISION_SYSTEM_PROMPT = """You are a visual analysis assistant for JARVIS.
 
-Your role is to analyze screenshots and provide structured, useful descriptions of what's visible.
+Your role is to analyze screenshots and return structured JSON descriptions.
 
-ANALYSIS GUIDELINES:
-1. Be specific and detailed about what you see
-2. Identify UI elements, windows, applications
-3. Read and report any visible text
-4. Note the overall layout and organization
-5. Identify any errors, dialogs, or notifications
-6. Describe colors, icons, and visual indicators when relevant
-7. Estimate the user's current activity based on what's shown
+RULES:
+1. Return ONLY valid JSON - no markdown, no explanations
+2. Use the exact schema provided
+3. If screen is locked/blank/login, return empty arrays and null values
+4. Be accurate about coordinates (0,0 is top-left)
+5. Confidence scores must be 0.0 to 1.0
 
-OUTPUT FORMAT:
-Return a JSON object with:
+SCHEMA FOR SCREEN ANALYSIS:
 {
-    "summary": "Brief one-sentence overview",
-    "active_application": "Name of foreground app if identifiable",
-    "visible_windows": [
-        {
-            "title": "Window title",
-            "type": "application|dialog|notification|other",
-            "position": "top-left|center|etc",
-            "content_summary": "What's in this window"
-        }
-    ],
-    "visible_text": ["Important text visible on screen"],
-    "ui_elements": ["Buttons, menus, inputs visible"],
-    "errors_or_alerts": ["Any error messages or alerts"],
-    "user_activity": "What the user appears to be doing",
-    "actionable_items": ["Things the user might want to interact with"],
-    "confidence_score": 0.0-1.0
+    "open_windows": ["window title 1", "window title 2"],
+    "active_window": "foreground window title or null",
+    "visible_text": ["important text line 1", "text line 2"],
+    "error_messages": ["error message if any"],
+    "ui_elements": [{"type": "button|input|menu", "text": "label", "position": {"x": 100, "y": 200}}],
+    "screen_description": "One sentence summary"
 }
 
-FOCUS ON UTILITY:
-- Prioritize information that would help the user or JARVIS take action
-- Don't describe every pixel - focus on meaningful content
-- If something is unclear, say so rather than guessing"""
+SCHEMA FOR FIND ELEMENT:
+{
+    "found": true/false,
+    "x": integer or null,
+    "y": integer or null,
+    "confidence": 0.0-1.0,
+    "description": "what was found"
+}
+
+If the screen is locked, blank, or shows a login screen:
+- open_windows: []
+- active_window: null
+- visible_text: []
+- error_messages: []
+- ui_elements: []
+- screen_description: "Screen is locked/blank/login screen"
+- found: false
+- x: null, y: null
+- confidence: 0.0"""
 
 
-VISION_USER_TEMPLATE = """Analyze this screenshot:
+def get_screen_analysis_prompt() -> str:
+    """Get the prompt for full screen analysis."""
+    return """Analyze this screenshot and return JSON ONLY with this exact schema:
+{
+    "open_windows": ["list", "of", "window", "titles"],
+    "active_window": "current foreground window title or null",
+    "visible_text": ["important", "text", "visible", "on", "screen"],
+    "error_messages": ["any", "error", "dialogs", "visible"],
+    "ui_elements": [{"type": "button|input|menu|icon", "text": "label", "position": {"x": 0, "y": 0}}],
+    "screen_description": "one sentence summary of what's on screen"
+}
 
-USER REQUEST: {request}
-
-CONTEXT:
-{context}
-
-Provide a structured analysis of what's visible on screen."""
-
-
-def get_vision_prompt(request: str = "Describe what's on screen",
-                     context: str = "") -> str:
-    """
-    Generate the full vision analysis prompt.
-    
-    Args:
-        request: Specific request about the image
-        context: Additional context
-        
-    Returns:
-        Complete vision prompt string
-    """
-    return VISION_USER_TEMPLATE.format(
-        request=request,
-        context=context or "No additional context provided."
-    )
+Return ONLY valid JSON, no markdown, no explanations."""
 
 
-# Specialized vision prompts for specific tasks
+def get_find_element_prompt(target: str) -> str:
+    """Get the prompt for finding a specific element."""
+    return f"""Look at this screenshot and find: {target}
 
-FIND_ELEMENT_PROMPT = """Look at this screenshot and find: {target}
+Return the location as pixel coordinates {{x: int, y: int}} relative to the top-left corner.
+Also provide a confidence score from 0.0 to 1.0.
 
-Return the location as coordinates if you can identify it.
-Format: {{"found": true/false, "coordinates": [x, y], "description": "what you found"}}"""
+IMPORTANT: Return ONLY valid JSON in this exact format:
+{{
+    "found": true/false,
+    "x": integer_x_coordinate,
+    "y": integer_y_coordinate,
+    "confidence": float_0_to_1,
+    "description": "brief description of what was found"
+}}
+
+If you cannot find "{target}", set found=false and x=null, y=null, confidence=0.0.
+Do not include markdown formatting or explanations. Only return JSON."""
+
+
+def get_error_detection_prompt() -> str:
+    """Get the prompt for detecting errors on screen."""
+    return """Scan this screenshot for any error messages, warnings, or problems.
+
+Return JSON array of issues found:
+[
+    {
+        "message": "exact error text",
+        "application": "which app shows the error",
+        "severity": "critical|warning|info",
+        "suggested_action": "what to do"
+    }
+]
+
+If no errors found, return empty array [].
+Only return JSON, no explanations."""
+
+
+# Specialized prompts for specific tasks
 
 READ_TEXT_PROMPT = """Read all visible text from this screenshot.
 Organize it by region/window.
-Be complete but exclude obvious UI chrome like menu bars unless specifically requested."""
+Be complete but exclude obvious UI chrome like menu bars unless specifically requested.
 
-IDENTIFY_ERROR_PROMPT = """Analyze this screenshot for any error messages, warnings, or problems.
-For each issue found, describe:
-- What the error says
-- Which application/window it's in
-- Severity (critical/warning/info)
-- Suggested action
+Return as JSON:
+{
+    "regions": [
+        {"name": "window/region name", "text": ["line 1", "line 2"]}
+    ]
+}
 
-Format as JSON array of issues."""
+Only return JSON."""
+
 
 SCREEN_LAYOUT_PROMPT = """Describe the layout and organization of this screen.
-Include:
-- Number and arrangement of windows
-- Primary focus area
-- Secondary elements
-- Overall desktop organization
 
-This will help understand the user's workflow."""
+Return JSON:
+{
+    "window_count": number,
+    "primary_focus": "main window/app",
+    "arrangement": "tiling|overlapping|single",
+    "secondary_elements": ["other windows"],
+    "organization_quality": "organized|cluttered|minimal"
+}
+
+Only return JSON."""
