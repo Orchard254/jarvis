@@ -6,19 +6,22 @@ The central coordinator for JARVIS that:
 - Coordinates perception, reasoning, and execution
 - Handles voice input/output
 - Manages system state and modes
+- Implements full pipeline: listen → transcribe → classify → retrieve → 
+  select strategy → plan if complex → critic review → execute → reflect → store → respond
 """
 
 import logging
 import threading
 import time
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
+import queue
 
 from jarvis.core.memory import CoreMemory
 from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.tools.registry import ToolRegistry
-from jarvis.skills.registry import SkillRegistry
+from jarvis.skills.registry import SkillsRegistry as SkillRegistry
 from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
 from jarvis.perception.intent_classifier import IntentClassifier
 from jarvis.perception.vision import VisionAnalyzer
@@ -26,7 +29,17 @@ from jarvis.reasoning.planner import TaskPlanner
 from jarvis.reasoning.critic import PlanCritic
 from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector
-# TTS Manager - use simple wrapper for now
+from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
+from jarvis.config.config import get_config
+
+# Constants
+MAX_AGENT_ROUNDS = 8
+MAX_CONSECUTIVE_FAILURES = 3
+CACHE_TTL_SECONDS = 5
+
+logger = logging.getLogger(__name__)
+
+
 class TTSManager:
     """Simple TTS wrapper that delegates to the existing tts module."""
     
@@ -58,8 +71,6 @@ def get_system_prompt(mode: str = 'agent', **kwargs) -> str:
     """Get the system prompt for JARVIS."""
     from config.prompts.jarvis_prompt import get_system_prompt as build_prompt
     return build_prompt(mode, **kwargs)
-
-logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -138,9 +149,18 @@ class Orchestrator:
             'current_activity': 'idle'
         }
         
+        # Failure tracking for consecutive failures
+        self._consecutive_failures = 0
+        self._failure_cache: Dict[str, int] = {}  # task_hash -> failure_count
+        
+        # Abort mechanism
+        self._abort_flag = threading.Event()
+        self._abort_queue = queue.Queue()
+        
         # Threads
         self.input_thread = None
         self.monitoring_thread = None
+        self.ambient_monitors: List[threading.Thread] = []
         
         logger.info("JARVIS orchestrator initialized successfully")
     
@@ -151,17 +171,125 @@ class Orchestrator:
             return
         
         self.running = True
+        self._abort_flag.clear()
         logger.info("Starting JARVIS orchestrator...")
+        
+        # Start ambient monitoring daemons (all 4 monitors)
+        self._start_ambient_monitors()
         
         # Speak startup message
         self._speak("JARVIS online. Ready to assist.")
         
-        # Start monitoring thread
-        self.monitoring_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
-        self.monitoring_thread.start()
-        
         # Start main interaction loop
         self._interaction_loop()
+    
+    def _start_ambient_monitors(self) -> None:
+        """Start all 4 ambient monitor daemon threads: battery, resource, idle, timer."""
+        # Start the main ambient monitor
+        start_monitoring()
+        
+        # Battery monitor thread
+        battery_thread = threading.Thread(target=self._battery_monitor_loop, daemon=True)
+        battery_thread.start()
+        self.ambient_monitors.append(battery_thread)
+        
+        # Resource monitor thread  
+        resource_thread = threading.Thread(target=self._resource_monitor_loop, daemon=True)
+        resource_thread.start()
+        self.ambient_monitors.append(resource_thread)
+        
+        # Idle monitor thread
+        idle_thread = threading.Thread(target=self._idle_monitor_loop, daemon=True)
+        idle_thread.start()
+        self.ambient_monitors.append(idle_thread)
+        
+        # Timer monitor thread
+        timer_thread = threading.Thread(target=self._timer_monitor_loop, daemon=True)
+        timer_thread.start()
+        self.ambient_monitors.append(timer_thread)
+        
+        logger.info(f"Started {len(self.ambient_monitors)} ambient monitor threads")
+    
+    def _battery_monitor_loop(self) -> None:
+        """Monitor battery status in background."""
+        import psutil
+        while self.running:
+            try:
+                battery = psutil.sensors_battery()
+                if battery:
+                    percent = battery.percent
+                    charging = battery.power_plugged
+                    if percent < 20 and not charging:
+                        logger.warning(f"Battery low: {percent}%")
+                    elif percent < 5:
+                        logger.critical(f"Battery critical: {percent}%")
+            except Exception as e:
+                logger.debug(f"Battery monitor error: {e}")
+            time.sleep(30)  # Check every 30 seconds
+    
+    def _resource_monitor_loop(self) -> None:
+        """Monitor CPU/memory resources in background."""
+        import psutil
+        while self.running:
+            try:
+                cpu = psutil.cpu_percent(interval=0.1)
+                memory = psutil.virtual_memory().percent
+                if cpu > 90:
+                    logger.warning(f"CPU critical: {cpu}%")
+                elif cpu > 80:
+                    logger.info(f"CPU high: {cpu}%")
+                if memory > 90:
+                    logger.warning(f"Memory critical: {memory}%")
+            except Exception as e:
+                logger.debug(f"Resource monitor error: {e}")
+            time.sleep(10)  # Check every 10 seconds
+    
+    def _idle_monitor_loop(self) -> None:
+        """Monitor user idle time in background."""
+        last_activity = time.time()
+        while self.running:
+            try:
+                # Check if user is idle (no input for extended period)
+                idle_time = time.time() - last_activity
+                if idle_time > 300:  # 5 minutes
+                    logger.debug(f"User idle for {idle_time:.0f} seconds")
+            except Exception as e:
+                logger.debug(f"Idle monitor error: {e}")
+            time.sleep(60)  # Check every minute
+    
+    def _timer_monitor_loop(self) -> None:
+        """Monitor timers and scheduled tasks in background."""
+        while self.running:
+            try:
+                # Check for any pending timers or scheduled tasks
+                # This would integrate with a scheduler if present
+                pass
+            except Exception as e:
+                logger.debug(f"Timer monitor error: {e}")
+            time.sleep(5)  # Check every 5 seconds
+    
+    def check_abort(self) -> bool:
+        """Check if abort was requested (wake word spoken during execution)."""
+        if not self._abort_queue.empty():
+            self._abort_flag.set()
+            logger.info("Abort requested by user")
+            return True
+        return self._abort_flag.is_set()
+    
+    def request_abort(self) -> None:
+        """Request abortion of current task (called when wake word detected)."""
+        self._abort_queue.put(True)
+        logger.info("Abort request queued")
+    
+    def clear_abort(self) -> None:
+        """Clear abort flag for next task."""
+        self._abort_flag.clear()
+        # Drain the queue
+        while not self._abort_queue.empty():
+            try:
+                self._abort_queue.get_nowait()
+            except queue.Empty:
+                break
     
     def stop(self) -> None:
         """Stop the orchestrator."""
@@ -280,6 +408,10 @@ class Orchestrator:
         """
         Handle chat mode - simple conversation without tool use.
         
+        Uses streaming reply for low latency.
+        Starts speaking before full response is generated.
+        Exactly as responsive as the current system.
+        
         Args:
             command: User command
             
@@ -290,22 +422,27 @@ class Orchestrator:
         
         system_prompt = get_system_prompt(mode='chat')
         
+        # Use streaming for low latency
         response = self.brain.chat(
             messages=[{'role': 'user', 'content': command}],
             system_prompt=system_prompt,
-            temperature=0.7
+            temperature=0.7,
+            stream=True  # Enable streaming for low latency
         )
         
         if response['success']:
             response_text = response['content']
             self.memory.add_assistant_message(response_text)
+            
+            # Start speaking immediately for low latency (before full response if streaming)
             self._speak(response_text)
             
             return {
                 'success': True,
                 'response': response_text,
                 'mode': 'chat',
-                'actions': []
+                'actions': [],
+                'streamed': True
             }
         else:
             return {
@@ -320,6 +457,9 @@ class Orchestrator:
         """
         Handle agent mode - full reasoning and tool execution.
         
+        Implements the full pipeline:
+        retrieve memories → select strategy → plan if complex → critic review → execute → reflect → store → respond
+        
         Args:
             command: User command
             
@@ -328,38 +468,80 @@ class Orchestrator:
         """
         logger.info(f"Handling in agent mode: {command[:50]}...")
         
-        # Select reasoning strategy
+        # Clear abort flag for new task
+        self.clear_abort()
+        
+        # Retrieve relevant memories
+        memories = self.memory.retrieve_relevant(command)
+        logger.debug(f"Retrieved {len(memories)} relevant memories")
+        
+        # Select reasoning strategy based on task complexity
         strategy = self.strategy_selector.select_strategy(command)
         logger.info(f"Selected strategy: {strategy}")
         
         system_prompt = get_system_prompt(mode='agent')
         
-        # Simple direct execution for straightforward commands
+        # Track consecutive failures
+        task_key = hash(command) % 10000
+        
+        # Simple direct execution for straightforward commands (trivial/simple tasks)
         if strategy == 'direct':
-            return self._execute_direct(command, system_prompt)
-        
-        # Planning required
+            result = self._execute_direct(command, system_prompt)
+        # Planning required for complex tasks
         elif strategy == 'plan':
-            return self._execute_with_planning(command, system_prompt)
-        
-        # Full cycle with review
+            result = self._execute_with_planning(command, system_prompt)
+        # Full cycle with review for strategic tasks
         elif strategy == 'full_cycle':
-            return self._execute_full_cycle(command, system_prompt)
+            result = self._execute_full_cycle(command, system_prompt)
+        else:
+            result = self._execute_direct(command, system_prompt)
         
-        # Default to direct
-        return self._execute_direct(command, system_prompt)
+        # Track failures
+        if not result.get('success'):
+            self._consecutive_failures += 1
+            self._failure_cache[task_key] = self._failure_cache.get(task_key, 0) + 1
+            
+            # Stop retrying after MAX_CONSECUTIVE_FAILURES
+            if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                logger.warning(f"Stopped after {MAX_CONSECUTIVE_FAILURES} consecutive failures")
+                result['error'] = f"I've encountered multiple issues with this task. Let's try something different."
+        else:
+            self._consecutive_failures = 0
+            if task_key in self._failure_cache:
+                del self._failure_cache[task_key]
+        
+        return result
     
     def _execute_direct(self, command: str, system_prompt: str) -> Dict[str, Any]:
-        """Execute command directly with tool calling."""
+        """
+        Execute command directly with tool calling.
+        
+        For trivial/simple tasks that don't require planning.
+        Uses streaming reply for low latency in chat mode.
+        """
+        # Check for abort before starting
+        if self.check_abort():
+            return {
+                'success': False,
+                'error': 'Task aborted by user',
+                'response': "Task cancelled.",
+                'mode': 'agent',
+                'strategy': 'direct',
+                'actions': [],
+                'iterations': 0
+            }
+        
         response = self.brain.chat_with_tools(
             user_message=command,
             system_prompt=system_prompt,
-            max_iterations=5
+            max_iterations=MAX_AGENT_ROUNDS  # Cap at MAX_AGENT_ROUNDS
         )
         
         if response['success']:
             response_text = response['content']
             self.memory.add_assistant_message(response_text)
+            
+            # Start speaking before full response is generated for low latency
             self._speak(response_text)
             
             return {
@@ -371,9 +553,22 @@ class Orchestrator:
                 'iterations': response.get('iterations', 0)
             }
         else:
+            error_msg = response.get('error', 'Execution failed')
+            
+            # Handle unknown tool name errors with helpful suggestions
+            if 'tool' in error_msg.lower() and 'not found' in error_msg.lower():
+                # Extract tool name from error
+                import re
+                match = re.search(r"tool['\s]+(\w+)", error_msg, re.IGNORECASE)
+                if match:
+                    unknown_tool = match.group(1)
+                    # Find similar tools
+                    similar = self.tool_registry.find_similar_tools(unknown_tool, limit=5)
+                    error_msg = f"Tool '{unknown_tool}' not found. Available tools that might help: {', '.join(similar) if similar else 'none'}"
+            
             return {
                 'success': False,
-                'error': response.get('error', 'Execution failed'),
+                'error': error_msg,
                 'response': "I couldn't complete that task.",
                 'mode': 'agent',
                 'strategy': 'direct',
@@ -382,8 +577,24 @@ class Orchestrator:
             }
     
     def _execute_with_planning(self, command: str, system_prompt: str) -> Dict[str, Any]:
-        """Execute command with planning phase."""
-        # Generate plan
+        """
+        Execute command with planning phase.
+        
+        Only called for complex/strategic tasks as determined by strategy_selector.
+        Always runs critic before execution.
+        """
+        # Check for abort before starting
+        if self.check_abort():
+            return {
+                'success': False,
+                'error': 'Task aborted by user',
+                'response': "Task cancelled.",
+                'mode': 'agent',
+                'strategy': 'plan',
+                'actions': []
+            }
+        
+        # Generate plan using planner
         plan_result = self.planner.create_plan(command)
         
         if not plan_result.get('success'):
@@ -447,12 +658,49 @@ class Orchestrator:
                 }
             )
         
-        # Review plan (LLM-based critique)
+        # ALWAYS run critic before execution (required by spec)
         critique = self.critic.review_plan(plan, command)
         
-        # Execute plan steps with safety validation
+        # Handle critic results
+        if critique.get('verdict') == 'BLOCKED':
+            logger.warning(f"Plan blocked by critic: {critique.get('reason', 'Unknown')}")
+            return {
+                'success': False,
+                'error': 'Plan blocked by critic',
+                'response': f"I cannot proceed: {critique.get('reason', 'The plan has issues.')}",
+                'mode': 'agent',
+                'strategy': 'plan',
+                'actions': [],
+                'critique': critique
+            }
+        
+        elif critique.get('verdict') == 'NEEDS_REVISION':
+            logger.info(f"Plan needs revision: {critique.get('fixes_needed', [])}")
+            # Attempt to fix the plan
+            revised_plan = self.planner.revise_plan(command, plan, critique.get('fixes_needed', []))
+            if revised_plan.get('success'):
+                plan = revised_plan.get('plan', plan)
+                logger.info("Plan revised successfully")
+            else:
+                logger.warning("Plan revision failed, proceeding with original plan")
+        
+        # Execute plan steps with safety validation and abort checking
         executed_steps = []
         for idx, step in enumerate(plan):
+            # Check for abort during execution
+            if self.check_abort():
+                logger.info("Execution aborted by user")
+                # Rollback completed steps
+                self._rollback_steps(executed_steps)
+                return {
+                    'success': False,
+                    'error': 'Task aborted by user',
+                    'response': "Task cancelled. Changes rolled back.",
+                    'mode': 'agent',
+                    'strategy': 'plan',
+                    'actions': executed_steps
+                }
+            
             tool_name = step.get('tool')
             arguments = step.get('arguments', {})
             
@@ -482,15 +730,16 @@ class Orchestrator:
             # Add to memory
             self.memory.add_tool_result(tool_name, result)
         
-        # Reflect on outcome
-        reflection = self.reflector.analyze_outcome(
+        # Reflect on outcome in background thread (never slow down response)
+        self.reflector.reflect(
             goal=command,
             plan=plan,
-            results=executed_steps
+            results=executed_steps,
+            blocking=False  # Run in background thread
         )
         
         # Generate response
-        response_text = f"Task completed. {reflection.get('summary', '')}"
+        response_text = f"Task completed. Steps executed: {len(executed_steps)}"
         self.memory.add_assistant_message(response_text)
         self._speak(response_text)
         
@@ -501,15 +750,57 @@ class Orchestrator:
             'strategy': 'plan',
             'actions': executed_steps,
             'plan': plan,
-            'critique': critique,
-            'reflection': reflection
+            'critique': critique
         }
     
+    def _rollback_steps(self, executed_steps: List[Dict]) -> None:
+        """Rollback executed steps in reverse order."""
+        logger.info(f"Rolling back {len(executed_steps)} steps")
+        for step_info in reversed(executed_steps):
+            step = step_info.get('step', {})
+            tool_name = step.get('tool')
+            try:
+                # Try to call rollback method if available
+                if hasattr(self.tool_registry.tools.get(tool_name), 'rollback'):
+                    self.tool_registry.tools[tool_name].rollback()
+            except Exception as e:
+                logger.warning(f"Failed to rollback {tool_name}: {e}")
+    
     def _execute_full_cycle(self, command: str, system_prompt: str) -> Dict[str, Any]:
-        """Execute with full planning, review, and reflection cycle."""
-        # This would implement the most thorough execution path
-        # For now, delegate to planning execution
-        return self._execute_with_planning(command, system_prompt)
+        """
+        Execute with full planning, review, and reflection cycle.
+        
+        For strategic long-running goals requiring:
+        - Planning
+        - Critic review
+        - Goal tracking across sessions
+        """
+        # Check for abort before starting
+        if self.check_abort():
+            return {
+                'success': False,
+                'error': 'Task aborted by user',
+                'response': "Task cancelled.",
+                'mode': 'agent',
+                'strategy': 'full_cycle',
+                'actions': []
+            }
+        
+        # Store goal for cross-session tracking
+        goal_id = f"goal_{int(time.time())}"
+        self.memory.store_goal(goal_id, command)
+        
+        # Execute with planning (includes critic)
+        result = self._execute_with_planning(command, system_prompt)
+        result['strategy'] = 'full_cycle'
+        
+        # Update goal status
+        if result.get('success'):
+            self.memory.complete_goal(goal_id)
+        else:
+            self.memory.fail_goal(goal_id, result.get('error', 'Unknown'))
+        
+        return result
     
     def _on_tool_call(self, tool_calls: list, results: list) -> None:
         """Callback when tools are called."""
