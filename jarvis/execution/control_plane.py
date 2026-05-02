@@ -65,8 +65,8 @@ class ControlPlane:
     def __init__(self, audit_log: AuditLog):
         self.config = get_config()
         self.audit_log = audit_log
-        self.tool_runner = ToolRunner(self.config, audit_log)
-        self.skill_runner = SkillRunner(self.config, audit_log)
+        self.tool_runner = ToolRunner(audit_log)
+        self.skill_runner = SkillRunner(audit_log)
         self.rollback_manager = RollbackManager()
         
         self._current_plan_id: Optional[str] = None

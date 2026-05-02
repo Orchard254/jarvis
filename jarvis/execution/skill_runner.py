@@ -41,15 +41,16 @@ class SkillRunner:
     
     def __init__(self, audit_log: AuditLog):
         self.config = get_config()
-        self.audit_log = audit_logger
+        self.audit_log = audit_log
         self._skills_registry: dict[str, BaseSkill] = {}
         self._load_skills()
     
     def _load_skills(self):
         """Load all available skills from the skills registry."""
-        from skills.registry import get_all_skills
+        from jarvis.skills.registry import get_registry
         
-        self._skills_registry = get_all_skills()
+        registry = get_registry()
+        self._skills_registry = registry.get_all_skills()
         logger.info(f"Loaded {len(self._skills_registry)} skills")
     
     async def execute(
