@@ -1,249 +1,317 @@
 """
-Strategy Selector - Picks reasoning depth based on task complexity.
-Decides when to use simple execution vs full planning/critique/reflection cycle.
+Strategy Selector - Task classifier and routing system.
+Classifies tasks into complexity levels and determines execution strategy.
+
+Classification categories:
+- trivial -> single tool, no planning, no critic
+- simple -> 1-3 tools, no planning, critic only  
+- complex -> 4+ tools or multi-step, full planning + critic
+- strategic -> long-running goal, planning + critic + goal tracking across sessions
+
+Classification is based on:
+- Number of verbs in the request
+- Presence of sequential words: then, after, next, finally
+- Presence of conditional words: if, when, unless
+- Whether the task requires verifying a result
 """
 
-from typing import Dict, Any, Optional, Tuple
-from datetime import datetime
+from typing import Dict, Any, List, Optional, Tuple
+from enum import Enum
+from dataclasses import dataclass
+
+
+class TaskComplexity(Enum):
+    """Task complexity levels."""
+    TRIVIAL = "trivial"
+    SIMPLE = "simple"
+    COMPLEX = "complex"
+    STRATEGIC = "strategic"
+
+
+@dataclass
+class ClassificationResult:
+    """Result of task classification."""
+    complexity: TaskComplexity
+    verb_count: int
+    has_sequential: bool
+    has_conditional: bool
+    requires_verification: bool
+    estimated_tools: int
+    reasoning: str
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'complexity': self.complexity.value,
+            'verb_count': self.verb_count,
+            'has_sequential': self.has_sequential,
+            'has_conditional': self.has_conditional,
+            'requires_verification': self.requires_verification,
+            'estimated_tools': self.estimated_tools,
+            'reasoning': self.reasoning
+        }
 
 
 class StrategySelector:
     """
-    Selects the appropriate reasoning strategy for each task.
+    Classifies tasks and determines execution strategy.
     
-    Strategies:
-    - direct: Execute immediately (simple queries)
-    - plan_only: Create and execute a plan (moderate tasks)
-    - plan_and_review: Plan, critique, then execute (complex tasks)
-    - full_cycle: Plan, review, execute, reflect (critical/learning tasks)
+    Classification rules:
+    - trivial: 1 verb, no sequencing, no conditionals, no verification
+    - simple: 2-3 verbs OR has sequencing (but < 4 total actions)
+    - complex: 4+ verbs OR has conditionals OR requires verification
+    - strategic: contains session-spanning keywords OR explicit long-term goal
     """
     
-    def __init__(self):
-        """Initialize the strategy selector."""
-        self.strategy_history = []
-        
-        # Complexity thresholds
-        self.thresholds = {
-            'direct_max_words': 10,
-            'plan_min_words': 8,
-            'review_min_complexity': 2,
-            'reflect_min_steps': 3
-        }
+    ACTION_VERBS = [
+        'open', 'close', 'create', 'delete', 'move', 'copy', 'rename',
+        'read', 'write', 'save', 'load', 'download', 'upload',
+        'run', 'execute', 'launch', 'start', 'stop', 'kill', 'restart',
+        'install', 'uninstall', 'configure', 'setup', 'update',
+        'find', 'search', 'locate', 'list', 'show', 'display',
+        'send', 'receive', 'email', 'message', 'notify', 'alert',
+        'verify', 'check', 'confirm', 'validate', 'test', 'ensure',
+        'extract', 'parse', 'analyze', 'process', 'transform',
+        'compress', 'decompress', 'encrypt', 'decrypt',
+        'navigate', 'browse', 'visit', 'go', 'switch',
+        'type', 'press', 'click', 'select', 'scroll'
+    ]
     
-    def select_strategy(self, user_input: str, intent: Dict[str, Any] = None,
-                        context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Select the best strategy for the given input.
+    SEQUENTIAL_WORDS = [
+        'then', 'after', 'next', 'finally', 'first', 'second', 'third',
+        'before', 'once', 'when done', 'after that', 'subsequently',
+        'in order', 'step by step', 'one by one', 'sequentially'
+    ]
+    
+    CONDITIONAL_WORDS = [
+        'if', 'when', 'unless', 'otherwise', 'else', 'in case',
+        'provided', 'assuming', 'whether', 'depending on',
+        'only if', 'as long as', 'so that'
+    ]
+    
+    VERIFICATION_WORDS = [
+        'verify', 'check', 'confirm', 'make sure', 'ensure',
+        'validate', 'test', 'see if', 'find out if',
+        'double-check', 'prove', 'demonstrate'
+    ]
+    
+    STRATEGIC_WORDS = [
+        'ongoing', 'continuous', 'monitor', 'track', 'watch',
+        'daily', 'weekly', 'monthly', 'every day', 'regularly',
+        'automate', 'routine', 'habit', 'workflow', 'pipeline',
+        'project', 'goal', 'objective', 'mission', 'campaign',
+        'across sessions', 'remember to', 'keep doing', 'maintain'
+    ]
+    
+    def __init__(self, ollama_client=None):
+        self.ollama_client = ollama_client
+        self.classification_history = []
+    
+    def set_client(self, client) -> None:
+        self.ollama_client = client
+    
+    def classify(self, task_description: str, context: str = None) -> ClassificationResult:
+        task_lower = task_description.lower()
+        if context:
+            task_lower += " " + context.lower()
         
-        Args:
-            user_input: User's request
-            intent: Intent classification result (optional)
-            context: Additional context (optional)
-            
-        Returns:
-            Dictionary with strategy selection:
-            {
-                'strategy': str,
-                'reasoning': str,
-                'estimated_complexity': int 1-5,
-                'requires_planning': bool,
-                'requires_review': bool,
-                'requires_reflection': bool
-            }
-        """
-        # Analyze input characteristics
-        analysis = self._analyze_input(user_input, intent, context)
+        verb_count = self._count_verbs(task_lower)
+        has_sequential = self._has_words(task_lower, self.SEQUENTIAL_WORDS)
+        has_conditional = self._has_words(task_lower, self.CONDITIONAL_WORDS)
+        requires_verification = self._has_words(task_lower, self.VERIFICATION_WORDS)
+        has_strategic = self._has_words(task_lower, self.STRATEGIC_WORDS)
+        estimated_tools = self._estimate_tools(task_lower, verb_count)
         
-        # Determine strategy
-        strategy, reasoning = self._determine_strategy(analysis)
+        complexity = self._determine_complexity(
+            verb_count=verb_count, has_sequential=has_sequential,
+            has_conditional=has_conditional, requires_verification=requires_verification,
+            has_strategic=has_strategic, estimated_tools=estimated_tools
+        )
         
-        result = {
-            'strategy': strategy,
-            'reasoning': reasoning,
-            'estimated_complexity': analysis['complexity'],
-            'requires_planning': strategy in ['plan_only', 'plan_and_review', 'full_cycle'],
-            'requires_review': strategy in ['plan_and_review', 'full_cycle'],
-            'requires_reflection': strategy == 'full_cycle'
-        }
+        reasoning = self._generate_reasoning(
+            complexity=complexity, verb_count=verb_count,
+            has_sequential=has_sequential, has_conditional=has_conditional,
+            requires_verification=requires_verification, has_strategic=has_strategic,
+            estimated_tools=estimated_tools
+        )
         
-        # Store in history
-        self.strategy_history.append({
-            'input': user_input[:100],
-            'result': result,
-            'timestamp': datetime.now().isoformat()
+        result = ClassificationResult(
+            complexity=complexity, verb_count=verb_count,
+            has_sequential=has_sequential, has_conditional=has_conditional,
+            requires_verification=requires_verification,
+            estimated_tools=estimated_tools, reasoning=reasoning
+        )
+        
+        self.classification_history.append({
+            'task': task_description[:200],
+            'classification': result.to_dict(),
+            'timestamp': __import__('datetime').datetime.now().isoformat()
         })
         
-        # Keep history bounded
-        if len(self.strategy_history) > 50:
-            self.strategy_history = self.strategy_history[-50:]
+        if len(self.classification_history) > 50:
+            self.classification_history = self.classification_history[-50:]
         
         return result
     
-    def _analyze_input(self, user_input: str, intent: Dict[str, Any] = None,
-                       context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Analyze input characteristics."""
-        words = user_input.split()
-        word_count = len(words)
-        
-        # Check for complexity indicators
-        complexity_indicators = [
-            'then', 'after', 'before', 'if', 'when', 'while',
-            'make sure', 'verify', 'check', 'confirm',
-            'all', 'every', 'each', 'multiple',
-            'first', 'second', 'third', 'finally',
-            'backup', 'save', 'copy', 'duplicate',
-            'compare', 'analyze', 'optimize', 'improve'
-        ]
-        
-        indicator_count = sum(
-            1 for ind in complexity_indicators 
-            if ind in user_input.lower()
-        )
-        
-        # Check for action verbs (suggests agent mode)
-        action_verbs = [
-            'open', 'close', 'create', 'delete', 'move', 'copy',
-            'run', 'execute', 'install', 'configure', 'set up',
-            'find', 'search', 'download', 'upload', 'send'
-        ]
-        
-        has_action = any(verb in user_input.lower() for verb in action_verbs)
-        
-        # Check for risk indicators
-        risk_indicators = [
-            'delete', 'remove', 'erase', 'destroy',
-            'shutdown', 'restart', 'kill', 'terminate',
-            'format', 'reset', 'overwrite'
-        ]
-        
-        has_risk = any(ind in user_input.lower() for ind in risk_indicators)
-        
-        # Calculate complexity score (1-5)
-        complexity = 1
-        
-        if word_count > 15:
-            complexity += 1
-        if word_count > 30:
-            complexity += 1
-        if indicator_count >= 2:
-            complexity += 1
-        if indicator_count >= 4:
-            complexity += 1
-        if has_risk:
-            complexity = max(complexity, 3)
-        
-        complexity = min(complexity, 5)
-        
-        # Determine mode
-        mode = 'agent' if has_action else 'chat'
-        if intent and intent.get('mode') == 'agent':
-            mode = 'agent'
-        elif intent and intent.get('mode') == 'chat':
-            mode = 'chat'
-        
-        return {
-            'word_count': word_count,
-            'indicator_count': indicator_count,
-            'has_action': has_action,
-            'has_risk': has_risk,
-            'complexity': complexity,
-            'mode': mode
-        }
+    def _count_verbs(self, text: str) -> int:
+        import re
+        count = 0
+        for verb in self.ACTION_VERBS:
+            pattern = r'\b' + re.escape(verb) + r'\b'
+            matches = re.findall(pattern, text)
+            count += len(matches)
+        return count
     
-    def _determine_strategy(self, analysis: Dict[str, Any]) -> Tuple[str, str]:
-        """Determine the best strategy based on analysis."""
-        complexity = analysis['complexity']
-        mode = analysis['mode']
-        has_risk = analysis['has_risk']
-        word_count = analysis['word_count']
-        
-        # Chat mode always uses direct strategy
-        if mode == 'chat':
-            return 'direct', 'Chat mode - no tool execution needed'
-        
-        # Very short inputs without risk -> direct
-        if word_count <= 5 and not has_risk and complexity <= 2:
-            return 'direct', 'Simple request - execute directly'
-        
-        # High risk -> always review
-        if has_risk:
-            return 'plan_and_review', 'Risky operation requires planning and review'
-        
-        # Complexity-based selection
-        if complexity <= 2:
-            return 'plan_only', 'Moderate task - create and execute plan'
-        elif complexity <= 4:
-            return 'plan_and_review', 'Complex task - plan should be reviewed'
-        else:
-            return 'full_cycle', 'Very complex task - full reasoning cycle recommended'
+    def _has_words(self, text: str, word_list: List[str]) -> bool:
+        for word in word_list:
+            if word in text:
+                return True
+        return False
     
-    def get_strategies(self) -> Dict[str, Dict[str, Any]]:
-        """Get all available strategies with descriptions."""
-        return {
-            'direct': {
-                'name': 'Direct Execution',
-                'description': 'Execute tool calls immediately without planning',
-                'use_when': 'Simple requests, chat mode, or single tool calls',
-                'steps': ['Parse tool call', 'Validate', 'Execute', 'Return result']
+    def _estimate_tools(self, text: str, verb_count: int) -> int:
+        estimate = verb_count
+        for indicator in ['and', 'also', 'plus', 'additionally']:
+            if indicator in text:
+                estimate += 1
+        return min(estimate, 20)
+    
+    def _determine_complexity(self, verb_count: int, has_sequential: bool,
+                              has_conditional: bool, requires_verification: bool,
+                              has_strategic: bool, estimated_tools: int) -> TaskComplexity:
+        if has_strategic:
+            return TaskComplexity.STRATEGIC
+        if verb_count >= 4:
+            return TaskComplexity.COMPLEX
+        if has_conditional:
+            return TaskComplexity.COMPLEX
+        if requires_verification and verb_count >= 2:
+            return TaskComplexity.COMPLEX
+        if verb_count >= 2 and verb_count <= 3:
+            return TaskComplexity.SIMPLE
+        if has_sequential and verb_count >= 2:
+            return TaskComplexity.SIMPLE
+        if estimated_tools >= 2 and estimated_tools <= 3:
+            return TaskComplexity.SIMPLE
+        return TaskComplexity.TRIVIAL
+    
+    def _generate_reasoning(self, complexity: TaskComplexity, verb_count: int,
+                           has_sequential: bool, has_conditional: bool,
+                           requires_verification: bool, has_strategic: bool,
+                           estimated_tools: int) -> str:
+        reasons = []
+        if has_strategic:
+            reasons.append("Contains strategic/long-running indicators")
+        if verb_count >= 4:
+            reasons.append(f"High verb count ({verb_count}) indicates multiple operations")
+        elif verb_count >= 2:
+            reasons.append(f"Moderate verb count ({verb_count})")
+        if has_conditional:
+            reasons.append("Contains conditional logic requiring decision points")
+        if has_sequential:
+            reasons.append("Has sequential ordering indicating multi-step process")
+        if requires_verification:
+            reasons.append("Requires verification of results")
+        if not reasons:
+            reasons.append("Single straightforward operation")
+        return f"Classified as {complexity.value}: " + "; ".join(reasons)
+    
+    def get_execution_strategy(self, complexity: TaskComplexity) -> Dict[str, Any]:
+        strategies = {
+            TaskComplexity.TRIVIAL: {
+                'use_planner': False, 'use_critic': False,
+                'parallel_allowed': True, 'max_retries': 1,
+                'require_confirmation': False, 'track_in_history': False,
+                'description': 'Direct execution - single tool call'
             },
-            'plan_only': {
-                'name': 'Plan and Execute',
-                'description': 'Create a plan then execute it',
-                'use_when': 'Multi-step tasks with clear procedures',
-                'steps': ['Generate plan', 'Execute steps', 'Return results']
+            TaskComplexity.SIMPLE: {
+                'use_planner': False, 'use_critic': True,
+                'parallel_allowed': True, 'max_retries': 2,
+                'require_confirmation': False, 'track_in_history': True,
+                'description': 'Quick execution with critic validation'
             },
-            'plan_and_review': {
-                'name': 'Plan, Review, Execute',
-                'description': 'Create plan, have critic review it, then execute',
-                'use_when': 'Complex tasks or risky operations',
-                'steps': ['Generate plan', 'Critic review', 'Refine if needed', 'Execute', 'Return results']
+            TaskComplexity.COMPLEX: {
+                'use_planner': True, 'use_critic': True,
+                'parallel_allowed': True, 'max_retries': 2,
+                'require_confirmation': True, 'track_in_history': True,
+                'description': 'Full planning with critic review'
             },
-            'full_cycle': {
-                'name': 'Full Reasoning Cycle',
-                'description': 'Complete plan-review-execute-reflect cycle',
-                'use_when': 'Critical tasks, learning opportunities, or very complex goals',
-                'steps': ['Generate plan', 'Critic review', 'Refine', 'Execute', 'Reflect', 'Store lessons']
+            TaskComplexity.STRATEGIC: {
+                'use_planner': True, 'use_critic': True,
+                'parallel_allowed': False, 'max_retries': 3,
+                'require_confirmation': True, 'track_in_history': True,
+                'persist_state': True, 'cross_session_tracking': True,
+                'description': 'Strategic execution with goal tracking across sessions'
             }
         }
+        return strategies.get(complexity, strategies[TaskComplexity.SIMPLE])
     
-    def adapt_thresholds(self, success_rate: float, strategy: str) -> None:
-        """
-        Adapt thresholds based on observed success rates.
+    def should_use_planner(self, task_description: str) -> bool:
+        result = self.classify(task_description)
+        return result.complexity in [TaskComplexity.COMPLEX, TaskComplexity.STRATEGIC]
+    
+    def should_use_critic(self, task_description: str) -> bool:
+        result = self.classify(task_description)
+        return result.complexity in [
+            TaskComplexity.SIMPLE, TaskComplexity.COMPLEX, TaskComplexity.STRATEGIC
+        ]
+    
+    def llm_assisted_classify(self, task_description: str,
+                              heuristic_result: ClassificationResult = None) -> ClassificationResult:
+        if self.ollama_client is None:
+            return heuristic_result or self.classify(task_description)
         
-        Args:
-            success_rate: Recent success rate for the strategy
-            strategy: The strategy used
-        """
-        # Simple adaptive logic
-        if success_rate < 0.6:
-            # Strategy is failing too often - be more conservative
-            if strategy == 'direct':
-                self.thresholds['direct_max_words'] = max(5, 
-                    self.thresholds['direct_max_words'] - 1)
-            elif strategy == 'plan_only':
-                self.thresholds['review_min_complexity'] = max(1,
-                    self.thresholds['review_min_complexity'] - 1)
-        elif success_rate > 0.9:
-            # Strategy is working well - can be more aggressive
-            if strategy == 'plan_and_review':
-                self.thresholds['review_min_complexity'] = min(5,
-                    self.thresholds['review_min_complexity'] + 1)
+        prompt = f'''Classify this task by complexity:
+
+Task: "{task_description}"
+
+Categories: trivial, simple, complex, strategic
+
+Respond in JSON format:
+{{
+    "complexity": "trivial/simple/complex/strategic",
+    "verb_count": <number>,
+    "estimated_tools": <number>,
+    "has_sequential": true/false,
+    "has_conditional": true/false,
+    "requires_verification": true/false,
+    "reasoning": "<brief explanation>"
+}}'''
+        
+        try:
+            response = self.ollama_client.chat(messages=[{'role': 'user', 'content': prompt}])
+            import json
+            llm_result = json.loads(response.get('content', '{}'))
+            
+            complexity_str = llm_result.get('complexity', 'simple')
+            try:
+                llm_complexity = TaskComplexity(complexity_str)
+            except ValueError:
+                llm_complexity = TaskComplexity.SIMPLE
+            
+            return ClassificationResult(
+                complexity=llm_complexity,
+                verb_count=llm_result.get('verb_count', 1),
+                has_sequential=llm_result.get('has_sequential', False),
+                has_conditional=llm_result.get('has_conditional', False),
+                requires_verification=llm_result.get('requires_verification', False),
+                estimated_tools=llm_result.get('estimated_tools', 1),
+                reasoning=llm_result.get('reasoning', 'LLM classification')
+            )
+        except Exception:
+            return heuristic_result or self.classify(task_description)
     
-    def get_strategy_history(self, limit: int = 20) -> list:
-        """Get recent strategy selection history."""
-        return self.strategy_history[-limit:]
+    def get_classification_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        return self.classification_history[-limit:]
     
     def clear_history(self) -> None:
-        """Clear strategy history."""
-        self.strategy_history = []
+        self.classification_history = []
 
 
-# Singleton instance
 _selector_instance = None
 
-def get_strategy_selector() -> StrategySelector:
-    """Get the singleton StrategySelector instance."""
+def get_strategy_selector(ollama_client=None) -> StrategySelector:
     global _selector_instance
     if _selector_instance is None:
-        _selector_instance = StrategySelector()
+        _selector_instance = StrategySelector(ollama_client)
+    elif ollama_client:
+        _selector_instance.set_client(ollama_client)
     return _selector_instance
