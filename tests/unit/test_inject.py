@@ -79,17 +79,18 @@ sys.modules["ambient"] = ambient_stub
 
 # ── Now safe to import jarvis internals ───────────────────────────────────────
 try:
-    import config
-    import user_profile
-    from brain import stream_reply
-    from jarvis import (
-        _likely_needs_tools,
-        _make_system_prompt,
-        _run_agentic_loop,
-        _trim_history,
-    )
-    from jarvis_prompt import build_jarvis_prompt
-    from tools import get_tools
+    # Add parent directory to path for imports
+    from pathlib import Path
+    import sys
+    project_root = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    sys.path.insert(0, str(project_root / 'jarvis'))
+    
+    from jarvis.config.config import get_config as config
+    from jarvis.profile.user_profile import get_current_profile as user_profile
+    from jarvis.core.brain import Brain
+    from jarvis.config.prompts.jarvis_prompt import get_system_prompt as build_jarvis_prompt
+    from jarvis.tools.registry import ToolRegistry
 except ImportError as e:
     print(f"[ERROR] Could not import JARVIS modules: {e}")
     print("Make sure you're running this from the project directory.")
