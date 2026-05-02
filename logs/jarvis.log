@@ -542,3 +542,56 @@ TypeError: WorkingMemory.get_messages() got an unexpected keyword argument 'incl
 2026-05-02 15:37:24,519 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
 2026-05-02 15:37:24,521 - jarvis.core.memory - INFO - Ended memory session: 20260502_153724
 2026-05-02 15:37:24,521 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-02T15:37:21.217717', 'total_interactions': 1, 'successful_tasks': 0, 'failed_tasks': 1, 'current_activity': 'idle'}
+2026-05-02 15:54:01,335 - __main__ - INFO - ============================================================
+2026-05-02 15:54:01,335 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-02 15:54:01,335 - __main__ - INFO - ============================================================
+2026-05-02 15:54:01,335 - __main__ - INFO - Starting in agent mode
+2026-05-02 15:54:01,335 - __main__ - INFO - Voice enabled: False
+2026-05-02 15:54:01,335 - __main__ - INFO - Config: jarvis_data
+2026-05-02 15:54:01,335 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-02 15:54:01,336 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-02 15:54:01,337 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-02 15:54:01,337 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-02 15:54:01,340 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-02 15:54:01,341 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-02 15:54:01,341 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-02 15:54:01,342 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-02 15:54:01,353 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-02 15:54:01,354 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-02 15:54:01,355 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-02 15:54:01,356 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-02 15:54:01,357 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-02 15:54:01,357 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-02 15:54:01,358 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-02 15:54:01,359 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-02 15:54:01,360 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-02 15:54:01,360 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-02 15:54:01,361 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-02 15:54:01,361 - tool_registry - INFO - Total tools loaded: 63
+2026-05-02 15:54:01,379 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-02 15:54:01,379 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-02 15:54:01,380 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-02 15:54:01,380 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-02 15:54:01,380 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-02 15:54:01,381 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-02 15:54:01,382 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 15:54:01,382 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-02 15:54:01,382 - jarvis.core.orchestrator - INFO - Handling in chat mode: list files...
+2026-05-02 15:54:01,382 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-02 15:54:01,692 - ollama_client - WARNING - [OLLAMA] cloud HTTP error (attempt 1): 401 Client Error: Unauthorized for url: https://api.ollama.com/api/chat
+2026-05-02 15:54:01,692 - ollama_client - ERROR - [OLLAMA] All retries failed for cloud: 401 Client Error: Unauthorized for url: https://api.ollama.com/api/chat
+2026-05-02 15:54:01,692 - ollama_client - INFO - [OLLAMA] Calling local endpoint: http://localhost:11434/api/chat
+2026-05-02 15:54:01,695 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 1): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f0f900750a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2026-05-02 15:54:01,695 - ollama_client - INFO - [OLLAMA] Retrying in 1.0s...
+2026-05-02 15:54:02,697 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 2): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f0f8f7b4bc0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2026-05-02 15:54:02,698 - ollama_client - INFO - [OLLAMA] Retrying in 2.0s...
+2026-05-02 15:54:04,700 - ollama_client - WARNING - [OLLAMA] local connection error (attempt 3): HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f0f8f7b52e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2026-05-02 15:54:04,700 - ollama_client - ERROR - [OLLAMA] All retries failed for local: HTTPConnectionPool(host='localhost', port=11434): Max retries exceeded with url: /api/chat (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f0f8f7b52e0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2026-05-02 15:54:04,700 - ollama_client - ERROR - [OLLAMA] All endpoints (cloud and local) are unreachable
+2026-05-02 15:54:04,700 - jarvis.core.brain - ERROR - LLM chat failed: All Ollama endpoints failed. Cloud endpoint may be unreachable or rate-limited, and local Ollama server is not running. Please check your connection or start Ollama locally with 'ollama serve'.
+2026-05-02 15:54:04,701 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260502_155404
+2026-05-02 15:54:04,701 - jarvis.core.orchestrator - INFO - EOF received
+2026-05-02 15:54:04,702 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-02 15:54:04,702 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 15:54:04,703 - jarvis.core.memory - INFO - Ended memory session: 20260502_155404
+2026-05-02 15:54:04,703 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-02T15:54:01.380167', 'total_interactions': 1, 'successful_tasks': 0, 'failed_tasks': 1, 'current_activity': 'idle'}
