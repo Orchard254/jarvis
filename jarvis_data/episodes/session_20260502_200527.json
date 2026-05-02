@@ -1,0 +1,25 @@
+{
+  "session_id": "20260502_200527",
+  "created_at": "2026-05-02T20:05:27.327137",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello",
+      "timestamp": "2026-05-02T20:05:26.210351",
+      "metadata": {
+        "source": "text"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! How can I assist you today?",
+      "timestamp": "2026-05-02T20:05:27.322869"
+    }
+  ],
+  "metadata": {
+    "summary": "User initiated shutdown"
+  },
+  "message_count": 2,
+  "first_message": "hello",
+  "last_message": "Hello! How can I assist you today?"
+}
