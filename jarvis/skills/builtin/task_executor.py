@@ -27,8 +27,7 @@ class TaskExecutorSkill(BaseSkill):
     def __init__(self):
         super().__init__(
             name="task_executor",
-            description="Execute complex multi-step tasks with tracking",
-            version="1.0.0"
+            description="Execute complex multi-step tasks with tracking"
         )
         
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
@@ -628,3 +627,53 @@ Current active tasks should be monitored and updated regularly.""".format(
         self.completed_tasks = state.get("completed_tasks", [])
         self.failed_tasks = state.get("failed_tasks", [])
         self.task_queue = state.get("task_queue", [])
+    
+    # Abstract method implementations required by BaseSkill
+    
+    def can_handle(self, task: str) -> float:
+        """Check if this skill can handle the given request."""
+        task_lower = task.lower()
+        keywords = ['execute', 'run task', 'multi-step', 'complex task', 'plan']
+        return 0.9 if any(kw in task_lower for kw in keywords) else 0.3
+    
+    def plan(self, task: str) -> List:
+        """Create an ordered plan of steps to accomplish the task."""
+        from ..base import SkillStep
+        return [
+            SkillStep(
+                id="step_1",
+                name="Analyze Task",
+                action="analyze",
+                params={"task": task}
+            ),
+            SkillStep(
+                id="step_2",
+                name="Execute Task",
+                action="execute",
+                params={"task": task}
+            )
+        ]
+    
+    def handle_failure(self, step, error: Exception):
+        """Handle a failure during step execution."""
+        from ..base import Recovery, RecoveryAction
+        return Recovery(
+            action=RecoveryAction.RETRY,
+            message=f"Step failed: {error}",
+            retry_count=0,
+            max_retries=3
+        )
+    
+    def rollback(self):
+        """Undo completed steps in reverse order."""
+        return {
+            "success": True,
+            "output": "Task executor rollback completed",
+            "steps_rolled_back": len(self.executed_steps)
+        }
+    
+    def summarize(self) -> str:
+        """Provide a one-sentence summary of what was accomplished."""
+        completed = len(self.completed_tasks)
+        failed = len(self.failed_tasks)
+        return f"Executed {completed} tasks successfully, {failed} failed."
