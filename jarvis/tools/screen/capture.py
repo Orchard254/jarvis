@@ -134,25 +134,24 @@ class AnalyzeScreenTool(BaseTool):
         
         try:
             # Import vision module for analysis
-            from ...perception.vision import analyze_image_with_llm
+            from ...perception.vision import get_vision_analyzer
             
-            # Build prompt based on focus
-            prompts = {
-                "all": "Analyze this screenshot comprehensively. Describe: 1) What windows/applications are open, 2) Visible text content, 3) UI elements and their states, 4) Any error messages or warnings, 5) Overall context of what the user appears to be doing.",
-                "windows": "Identify all open windows in this screenshot. List their titles, positions, and which application they belong to.",
-                "text": "Extract and transcribe all visible text from this screenshot. Organize by region/window.",
-                "errors": "Scan this screenshot for any error messages, warnings, or problem indicators. Describe each one found.",
-            }
+            # Get vision analyzer instance
+            vision = get_vision_analyzer()
             
-            analysis = analyze_image_with_llm(base64_data, prompts.get(focus, prompts["all"]))
+            # Analyze screen - returns dict with screen_state object
+            analysis = vision.analyze_screen(screenshot_base64=base64_data)
             
-            if analysis:
-                return ToolResult.ok(f"Screen Analysis:\n{analysis}")
+            if analysis['success'] and analysis.get('screen_state'):
+                screen_state = analysis['screen_state']
+                # Return formatted string suitable for LLM reading
+                formatted_output = screen_state.to_formatted_string()
+                return ToolResult.ok(f"Screen Analysis:\n{formatted_output}")
             else:
                 return ToolResult.fail(error="Vision analysis returned no results")
                 
-        except ImportError:
-            return ToolResult.fail(error="Vision module not available")
+        except ImportError as e:
+            return ToolResult.fail(error=f"Vision module not available: {e}")
         except Exception as e:
             log.error(f"Screen analysis failed: {e}")
             return ToolResult.fail(error=f"Screen analysis failed: {e}")
@@ -272,18 +271,25 @@ class FindOnScreenTool(BaseTool):
             return ToolResult.fail(error=f"Failed to capture screen: {message}")
         
         try:
-            from ...perception.vision import find_element_in_image
+            from ...perception.vision import get_vision_analyzer
             
-            coords = find_element_in_image(base64_data, description)
+            vision = get_vision_analyzer()
             
-            if coords:
-                x, y = coords
-                return ToolResult.ok(f"Found '{description}' at coordinates ({x}, {y})")
+            # Find element on screen - returns coordinates dict
+            result = vision.find_on_screen(description, screenshot_base64=base64_data)
+            
+            if result.get('success') and result.get('found'):
+                coords = result['coordinates']
+                x = coords.get('x')
+                y = coords.get('y')
+                confidence = result.get('confidence', 0.5)
+                return ToolResult.ok(f"Found '{description}' at coordinates ({x}, {y}) with {confidence:.0%} confidence")
             else:
-                return ToolResult.fail(error=f"Could not find '{description}' on screen")
+                error_msg = result.get('error', f"Could not find '{description}' on screen")
+                return ToolResult.fail(error=error_msg)
                 
-        except ImportError:
-            return ToolResult.fail(error="Vision module not available")
+        except ImportError as e:
+            return ToolResult.fail(error=f"Vision module not available: {e}")
         except Exception as e:
             log.error(f"Find on screen failed: {e}")
             return ToolResult.fail(error=f"Find on screen failed: {e}")
