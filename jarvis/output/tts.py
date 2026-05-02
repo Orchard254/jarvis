@@ -21,6 +21,10 @@ def speak(text: str) -> None:
     Args:
         text: Text to speak
     """
+    # Skip empty or whitespace-only text to avoid blank output
+    if not text or not text.strip():
+        return
+        
     try:
         # Try to import the main TTS module from root
         import sys
@@ -74,6 +78,10 @@ class TTSManager:
         Args:
             text: Text to speak
         """
+        # Skip empty or whitespace-only text to avoid blank output
+        if not text or not text.strip():
+            return
+            
         if not self.enabled:
             logger.debug(f"TTS disabled, would speak: {text[:50]}...")
             return
