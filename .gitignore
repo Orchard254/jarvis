@@ -1,30 +1,90 @@
 ```
-# Python
+# Dependencies
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py.class
+*.py.o
+*.py.obj
+*.py.out
+*.py.dll
+*.py.so
+*.py.a
+*.py.obj
+*.py.out
 
-# Dependencies
-.venv/
+# Virtual environments
 venv/
+.venv/
 env/
-pip-log.txt
-pip-selfcheck.json
+.ENV/
+.env
 
-# Logs
-*.log
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Temporary files
-*.tmp
-*.swp
-*~
-.DS_Store
-Thumbs.db
+# Testing
+.coverage
+coverage/
+htmlcov/
+.noseids
+.pytest_cache/
 
 # Environment variables
 .env
 .env.local
 .env.*
-!env.sample
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Coverage
+.coverage
+htmlcov/
+.coverage.*
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*$py.o
+*$py.obj
+*$py.out
+*$py.dll
+*$py.so
+*$py.a
+*$py.obj
+*$py.out
 ```
