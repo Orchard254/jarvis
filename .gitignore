@@ -1,1 +1,41 @@
-Nothing should be ignored based on the provided file changes. The modification of 'jarvis/core/orchestrator.py' is a source code file and does not require any new ignore rules.
+```gitignore
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Build artifacts
+dist/
+build/
+target/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+```
