@@ -55,6 +55,10 @@ class TTSManager:
         Args:
             text: Text to speak
         """
+        # Skip empty or whitespace-only text to avoid blank output
+        if not text or not text.strip():
+            return
+            
         if not self.enabled:
             return
             
@@ -833,6 +837,10 @@ class Orchestrator:
     
     def _speak(self, text: str) -> None:
         """Speak text using TTS."""
+        # Skip empty or whitespace-only text to avoid blank output
+        if not text or not text.strip():
+            return
+            
         if self.config.get('tts_enabled', True):
             self.tts.speak(text)
     
