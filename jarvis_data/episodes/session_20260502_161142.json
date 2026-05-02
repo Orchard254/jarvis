@@ -1,0 +1,23 @@
+{
+  "session_id": "20260502_161142",
+  "created_at": "2026-05-02T16:11:42.787084",
+  "messages": [
+    {
+      "role": "user",
+      "content": "system info"
+    },
+    {
+      "role": "assistant",
+      "content": "Actions: []\nOutcome: I'm having trouble responding right now."
+    }
+  ],
+  "metadata": {
+    "goal": "system info",
+    "actions": [],
+    "outcome": "I'm having trouble responding right now.",
+    "success": false
+  },
+  "message_count": 2,
+  "first_message": "system info",
+  "last_message": "Actions: []\nOutcome: I'm having trouble responding right now."
+}
