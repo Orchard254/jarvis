@@ -17,6 +17,14 @@ from jarvis.execution.rollback import (
     RollbackStatus,
     RollbackResult,
 )
+from jarvis.execution.task_executor import (
+    TaskExecutor,
+    TaskPlan,
+    TaskStep,
+    TaskStatus,
+    VerificationStrategy,
+    create_web_search_plan,
+)
 
 __all__ = [
     # Control Plane
@@ -35,4 +43,11 @@ __all__ = [
     'RollbackAction',
     'RollbackStatus',
     'RollbackResult',
+    # Task Executor (NEW - Plan-Execute-Verify Loop)
+    'TaskExecutor',
+    'TaskPlan',
+    'TaskStep',
+    'TaskStatus',
+    'VerificationStrategy',
+    'create_web_search_plan',
 ]
