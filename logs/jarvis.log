@@ -1017,3 +1017,101 @@ TypeError: WorkingMemory.get_messages() got an unexpected keyword argument 'incl
 2026-05-02 18:51:26,025 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
 2026-05-02 18:51:26,028 - jarvis.core.memory - INFO - Ended memory session: 20260502_185126
 2026-05-02 18:51:26,028 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-02T18:51:24.772418', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-02 20:04:37,529 - __main__ - INFO - ============================================================
+2026-05-02 20:04:37,529 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-02 20:04:37,529 - __main__ - INFO - ============================================================
+2026-05-02 20:04:37,529 - __main__ - INFO - Starting in agent mode
+2026-05-02 20:04:37,529 - __main__ - INFO - Voice enabled: False
+2026-05-02 20:04:37,529 - __main__ - INFO - Config: jarvis_data
+2026-05-02 20:04:37,529 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-02 20:04:37,530 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-02 20:04:37,531 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-02 20:04:37,531 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-02 20:04:37,545 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-02 20:04:37,545 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-02 20:04:37,546 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-02 20:04:37,547 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-02 20:04:37,547 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-02 20:04:37,548 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-02 20:04:37,549 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-02 20:04:37,549 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-02 20:04:37,550 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-02 20:04:37,551 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-02 20:04:37,551 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-02 20:04:37,552 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-02 20:04:37,564 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-02 20:04:37,564 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-02 20:04:37,564 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-02 20:04:37,564 - tool_registry - INFO - Total tools loaded: 63
+2026-05-02 20:04:37,570 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-02 20:04:37,570 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-02 20:04:37,570 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-02 20:04:37,571 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-02 20:04:37,571 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-02 20:04:37,584 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-02 20:04:37,585 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:04:37,585 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-02 20:04:37,585 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
+2026-05-02 20:04:37,586 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-02 20:04:38,720 - ollama_client - INFO - [OLLAMA] Raw response from cloud: {"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.369738317Z","message":{"role":"assistant","content":"","thinking":"The"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.407064244Z","message":{"role":"assistant","content":"","thinking":" user just said \"hello\". We're in chat"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.449582719Z","message":{"role":"assistant","content":"","thinking":" mode. Should respond conversationally. No tool needed"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.492508282Z","message":{"role":"assistant","content":"Hello! How","thinking":". Just respond friendly."},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.523554322Z","message":{"role":"assistant","content":" can I assist you today?"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:04:38.523605277Z","
+2026-05-02 20:04:38,721 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:04:38,723 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260502_200438
+2026-05-02 20:04:38,723 - jarvis.core.orchestrator - INFO - EOF received
+2026-05-02 20:04:38,723 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-02 20:04:38,723 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:04:38,724 - jarvis.core.memory - INFO - Ended memory session: 20260502_200438
+2026-05-02 20:04:38,724 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-02T20:04:37.570989', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-02 20:05:26,149 - __main__ - INFO - ============================================================
+2026-05-02 20:05:26,149 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-02 20:05:26,149 - __main__ - INFO - ============================================================
+2026-05-02 20:05:26,149 - __main__ - INFO - Starting in agent mode
+2026-05-02 20:05:26,149 - __main__ - INFO - Voice enabled: False
+2026-05-02 20:05:26,149 - __main__ - INFO - Config: jarvis_data
+2026-05-02 20:05:26,149 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-02 20:05:26,151 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-02 20:05:26,151 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-02 20:05:26,152 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-02 20:05:26,166 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-02 20:05:26,167 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-02 20:05:26,167 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-02 20:05:26,168 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-02 20:05:26,169 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-02 20:05:26,170 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-02 20:05:26,171 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-02 20:05:26,171 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.web.browser
+2026-05-02 20:05:26,184 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-02 20:05:26,185 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-02 20:05:26,186 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-02 20:05:26,187 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-02 20:05:26,188 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-02 20:05:26,188 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-02 20:05:26,189 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-02 20:05:26,189 - tool_registry - INFO - Total tools loaded: 63
+2026-05-02 20:05:26,207 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-02 20:05:26,207 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-02 20:05:26,207 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-02 20:05:26,207 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-02 20:05:26,207 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-02 20:05:26,209 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-02 20:05:26,210 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:05:26,210 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-02 20:05:26,210 - jarvis.core.orchestrator - INFO - Handling in chat mode: hello...
+2026-05-02 20:05:26,211 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-02 20:05:27,322 - ollama_client - INFO - [OLLAMA] Raw response from cloud: {"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:05:26.996755886Z","message":{"role":"assistant","content":"","thinking":"The"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:05:27.02234808Z","message":{"role":"assistant","content":"","thinking":" user just said \"hello\". This is a greeting"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:05:27.053847169Z","message":{"role":"assistant","content":"","thinking":". According to instructions, in chat mode we respond"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:05:27.087266315Z","message":{"role":"assistant","content":"","thinking":" naturally and conversationally. No tool needed. Just"},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","created_at":"2026-05-02T20:05:27.116136783Z","message":{"role":"assistant","content":"Hello! How can I","thinking":" reply friendly."},"done":false}
+{"model":"nemotron-3-nano:30b-cloud","cre
+2026-05-02 20:05:27,323 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:05:27,326 - jarvis.core.memory - INFO - Stored experience in episodic memory: 20260502_200527
+2026-05-02 20:05:27,326 - jarvis.core.orchestrator - INFO - EOF received
+2026-05-02 20:05:27,326 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-02 20:05:27,327 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-02 20:05:27,327 - jarvis.core.memory - INFO - Ended memory session: 20260502_200527
+2026-05-02 20:05:27,327 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-02T20:05:26.207498', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}

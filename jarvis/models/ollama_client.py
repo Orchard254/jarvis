@@ -198,6 +198,17 @@ class OllamaClient:
                 # Handle both single JSON response and streaming responses
                 response_text = resp.text.strip()
                 
+                # Log raw response for debugging empty responses
+                if not response_text:
+                    log.warning(f"[OLLAMA] Empty response from {name} endpoint")
+                else:
+                    log.info(f"[OLLAMA] Raw response from {name}: {response_text[:1000]}")
+                
+                # Check for empty response
+                if not response_text:
+                    log.error(f"[OLLAMA] Empty response from {name} endpoint - API key may be invalid or model unavailable")
+                    continue
+                
                 # Try to parse as single JSON first (standard response)
                 try:
                     data = json.loads(response_text)
@@ -207,25 +218,38 @@ class OllamaClient:
                     lines = response_text.split('\n')
                     data = None
                     last_valid_data = None
+                    accumulated_content = ""
                     
                     for line in lines:
                         line = line.strip()
                         if line:
                             try:
                                 candidate = json.loads(line)
-                                # Prefer JSON objects that have the message key
-                                if "message" in candidate:
-                                    data = candidate
-                                    break
                                 # Keep track of last valid JSON as fallback
                                 last_valid_data = candidate
+                                
+                                # Accumulate content from all chunks
+                                msg_content = candidate.get("message", {}).get("content", "")
+                                if msg_content:
+                                    accumulated_content += msg_content
+                                
+                                # Prefer JSON objects that have done=true (final chunk)
+                                if candidate.get("done") and "message" in candidate:
+                                    data = candidate
+                                    # Merge accumulated content if the final chunk has empty content
+                                    if not data.get("message", {}).get("content"):
+                                        data["message"]["content"] = accumulated_content
+                                    break
                             except json.JSONDecodeError:
                                 continue
                     
-                    # If no message found, use last valid JSON or skip
+                    # If no done=true found, use last valid JSON with accumulated content
                     if data is None:
                         if last_valid_data:
                             data = last_valid_data
+                            # Use accumulated content if available
+                            if accumulated_content and not data.get("message", {}).get("content"):
+                                data["message"]["content"] = accumulated_content
                         else:
                             log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint. Response: {response_text[:500]}")
                             continue
