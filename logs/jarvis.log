@@ -1156,3 +1156,38 @@ TypeError: WorkingMemory.get_messages() got an unexpected keyword argument 'incl
 2026-05-03 03:46:12,444 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
 2026-05-03 03:46:12,444 - jarvis.core.memory - INFO - Ended memory session: 20260503_034612
 2026-05-03 03:46:12,444 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-03T03:46:06.163500', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-03 07:59:48,824 - __main__ - INFO - ============================================================
+2026-05-03 07:59:48,824 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-03 07:59:48,824 - __main__ - INFO - ============================================================
+2026-05-03 07:59:48,824 - __main__ - INFO - Starting in agent mode
+2026-05-03 07:59:48,824 - __main__ - INFO - Voice enabled: False
+2026-05-03 07:59:48,824 - __main__ - INFO - Config: jarvis_data
+2026-05-03 07:59:48,824 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-03 07:59:48,825 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-03 07:59:48,826 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-03 07:59:48,826 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-03 07:59:48,841 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-03 07:59:48,842 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-03 07:59:48,842 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-03 07:59:48,843 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-03 07:59:48,844 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-03 07:59:48,861 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-03 07:59:48,862 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-03 07:59:48,985 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-03 07:59:48,985 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.web.automation
+2026-05-03 07:59:48,986 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-03 07:59:48,987 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-03 07:59:48,988 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-03 07:59:49,001 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-03 07:59:49,002 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-03 07:59:49,002 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-03 07:59:49,003 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-03 07:59:49,003 - tool_registry - INFO - Total tools loaded: 71
+2026-05-03 07:59:49,009 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-03 07:59:49,019 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-03 07:59:49,019 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-03 07:59:49,019 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-03 07:59:49,019 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-03 07:59:49,021 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-03 07:59:49,021 - jarvis.output.tts - WARNING - Root TTS module not available: No module named 'tts'
+2026-05-03 07:59:49,022 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
