@@ -145,7 +145,7 @@ class Orchestrator:
         self.react_agent = ReActAgent(
             brain=self.brain,
             tool_registry=self.tool_registry,
-            max_iterations=15,
+            max_iterations=50,  # Increased for complex web browsing tasks
             vault=self.vault
         )
         
