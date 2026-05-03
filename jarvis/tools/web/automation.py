@@ -6,6 +6,7 @@ Replaces blind "open URL" with precise element interaction and state verificatio
 
 import logging
 import time
+import urllib.parse
 from typing import Any, Optional, List, Dict
 from pathlib import Path
 
@@ -587,55 +588,88 @@ class SearchAndNavigateTool(BaseTool):
         submit_selector = kwargs.get("submit_selector")
         
         try:
-            from jarvis.tools.registry import ToolRegistry
+            engine = get_automation_engine()
+            page = engine.ensure_browser(headless=False)
             
-            # Step 1: Search for the site
+            # Step 1: Search for the site using Google via Playwright
             logger.info(f"Searching for site: {site_query}")
-            registry = ToolRegistry.get_instance()
+            search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
+            page.goto(search_url, timeout=30000)
+            time.sleep(2)  # Wait for results to load
             
-            # Use search_web to find the site
-            search_result = registry.execute("search_web", query=site_query)
-            if not search_result.success:
-                return ToolResult.fail(error=f"Failed to search for site: {search_result.error}")
+            # Step 2: Extract first organic result URL
+            # Google organic results typically have selector div.g a[href] or similar
+            first_result_selector = 'div.g a[href^="http"]'
+            try:
+                element = page.query_selector(first_result_selector)
+                if not element:
+                    # Fallback: try alternative selectors
+                    fallback_selectors = [
+                        'div.yuRUbf a[href^="http"]',
+                        'a[href^="http"][data-ved]',
+                        '.LC20lb.MBeuO.DKV0Md'
+                    ]
+                    for sel in fallback_selectors:
+                        element = page.query_selector(sel)
+                        if element:
+                            break
+                
+                if not element:
+                    # Last resort: use JavaScript to find first result
+                    first_link = page.evaluate("""
+                        () => {
+                            const links = document.querySelectorAll('a[href^="http"]');
+                            for (let link of links) {
+                                if (link.href.includes('google') === false && 
+                                    link.href.includes('/search?') === false &&
+                                    link.href.length > 20) {
+                                    return link.href;
+                                }
+                            }
+                            return null;
+                        }
+                    """)
+                    if first_link:
+                        target_url = first_link
+                    else:
+                        return ToolResult.fail(error="No valid URL found in search results")
+                else:
+                    target_url = element.get_attribute('href')
+                    
+            except Exception as e:
+                logger.warning(f"Failed to extract URL via selector: {e}")
+                return ToolResult.fail(error=f"Could not find site URL: {e}")
             
-            # Extract URL from search result (assuming first result is the target)
-            search_output = search_result.output if hasattr(search_result, 'output') else str(search_result)
-            
-            # Simple URL extraction - look for http(s) URLs in the response
-            import re
-            url_match = re.search(r'https?://[^\s\)]+', search_output)
-            if not url_match:
-                return ToolResult.fail(error=f"No URL found in search results: {search_output[:200]}")
-            
-            target_url = url_match.group(0)
             logger.info(f"Found URL: {target_url}")
             
-            # Step 2: Navigate to the site
-            nav_result = registry.execute("navigate_to_url", url=target_url)
-            if not nav_result.success:
-                return ToolResult.fail(error=f"Failed to navigate: {nav_result.error}")
+            # Step 3: Navigate to the site
+            logger.info(f"Navigating to: {target_url}")
+            page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+            time.sleep(2)  # Wait for page to stabilize
             
-            # Step 3: If internal search requested, perform it
+            # Step 4: If internal search requested, perform it
             if internal_search:
                 logger.info(f"Performing internal search for: {internal_search}")
                 
                 # Common search selectors
                 search_selectors = search_selector.split(',') if search_selector else [
                     'input[name="q"]', 'input[name="search"]', 'input[type="search"]',
-                    '.search-input', '#search', 'input[placeholder*="search" i]'
+                    '.search-input', '#search', 'input[placeholder*="search" i]',
+                    'input[aria-label*="search" i]', '.search-box input'
                 ]
                 
                 submit_selectors = submit_selector.split(',') if submit_selector else [
                     'button[type="submit"]', 'input[type="submit"]', '.search-btn',
-                    'button.search', '[aria-label*="search" i]'
+                    'button.search', '[aria-label*="search" i]', 'button[title*="search" i]'
                 ]
                 
                 # Try to fill search field
                 filled = False
                 for sel in search_selectors:
                     try:
-                        fill_result = registry.execute("fill_input", selector=sel, value=internal_search)
-                        if fill_result.success:
+                        element = page.query_selector(sel)
+                        if element:
+                            element.fill(internal_search)
                             filled = True
                             logger.info(f"Filled search field with selector: {sel}")
                             break
@@ -649,8 +683,9 @@ class SearchAndNavigateTool(BaseTool):
                 submitted = False
                 for sel in submit_selectors:
                     try:
-                        click_result = registry.execute("click_element", selector=sel)
-                        if click_result.success:
+                        element = page.query_selector(sel)
+                        if element:
+                            element.click()
                             submitted = True
                             logger.info(f"Submitted search with selector: {sel}")
                             break
@@ -660,22 +695,17 @@ class SearchAndNavigateTool(BaseTool):
                 if not submitted:
                     # Try pressing Enter as fallback
                     try:
-                        from playwright.sync_api import sync_playwright
-                        engine = get_automation_engine()
-                        page = engine.get_page()
-                        if page:
-                            page.keyboard.press("Enter")
-                            submitted = True
-                            logger.info("Submitted search by pressing Enter")
+                        page.keyboard.press("Enter")
+                        submitted = True
+                        logger.info("Submitted search by pressing Enter")
                     except Exception as e:
                         logger.warning(f"Failed to press Enter: {e}")
+                        return ToolResult.fail(error="Could not submit search")
                 
                 if submitted:
-                    import time
-                    time.sleep(2)  # Wait for search results
+                    time.sleep(3)  # Wait for search results
                     
                     # Get page summary
-                    engine = get_automation_engine()
                     summary = engine.get_page_content_summary(max_length=500)
                     return ToolResult.ok({
                         "url": target_url,
@@ -684,7 +714,6 @@ class SearchAndNavigateTool(BaseTool):
                     })
             
             # No internal search - just return navigation success
-            engine = get_automation_engine()
             summary = engine.get_page_content_summary(max_length=500)
             return ToolResult.ok({
                 "url": target_url,
