@@ -3,9 +3,10 @@
 *.pyc
 __pycache__/
 
-# Logs and temporary files
+# Logs and temp files
 *.log
 *.tmp
+*.swp
 
 # Environment files
 .env
@@ -31,11 +32,27 @@ coverage/
 htmlcov/
 .coverage
 
-# Testing
-.pytest_cache/
-.mypy_cache/
-
-# OS generated files
-.DS_Store
-Thumbs.db
+# Compression files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
