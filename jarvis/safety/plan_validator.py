@@ -94,7 +94,7 @@ class PlanValidator:
         Review a plan for safety issues.
         
         Args:
-            plan: List of step dictionaries with 'tool' and 'parameters' keys
+            plan: List of step dictionaries with 'tool_or_skill' and 'params' keys
             
         Returns:
             PlanValidationResult with validation details
@@ -128,16 +128,16 @@ class PlanValidator:
                 result.is_valid = False
                 result.block_step(i, step_result[1])  # reason
             
-            # Support both 'tool' and 'tool_or_skill' keys
-            tool_name = step.get('tool', step.get('tool_or_skill', ''))
+            # Use 'tool_or_skill' key (standard from ExecutionStep.to_dict())
+            tool_name = step.get('tool_or_skill', '')
             tool_set.add(tool_name)
             
             if tool_name in self.DESTRUCTIVE_TOOLS:
                 destructive_count += 1
             
-            # Check for missing parameters
-            if 'parameters' not in step and 'params' not in step:
-                result.add_warning(f"Step {i}: Missing 'parameters' key")
+            # Check for missing parameters (use 'params' key from ExecutionStep.to_dict())
+            if 'params' not in step:
+                result.add_warning(f"Step {i}: Missing 'params' key")
         
         # Check destructive operation limit
         if destructive_count > self.MAX_DESTRUCTIVE_OPS:
@@ -189,10 +189,10 @@ class PlanValidator:
         Returns:
             Tuple of (is_valid, reason_if_invalid)
         """
-        # Support both 'tool' and 'tool_or_skill' keys
-        tool_name = step.get('tool', step.get('tool_or_skill', ''))
-        # Support both 'parameters' and 'params' keys
-        parameters = step.get('parameters', step.get('params', {}))
+        # Use 'tool_or_skill' key (standard from ExecutionStep.to_dict())
+        tool_name = step.get('tool_or_skill', '')
+        # Use 'params' key (standard from ExecutionStep.to_dict())
+        parameters = step.get('params', {})
         
         # Check for empty tool name
         if not tool_name:
@@ -227,10 +227,10 @@ class PlanValidator:
         last_params = None
         
         for step in plan:
-            # Support both 'tool' and 'tool_or_skill' keys
-            tool = step.get('tool', step.get('tool_or_skill', ''))
-            # Support both 'parameters' and 'params' keys
-            params = str(step.get('parameters', step.get('params', {})))
+            # Use 'tool_or_skill' key (standard from ExecutionStep.to_dict())
+            tool = step.get('tool_or_skill', '')
+            # Use 'params' key (standard from ExecutionStep.to_dict())
+            params = str(step.get('params', {}))
             
             if tool == last_tool and params == last_params:
                 consecutive_same += 1
@@ -291,12 +291,12 @@ class PlanValidator:
         # Check for backup before destructive ops
         delete_indices = [
             i for i, step in enumerate(plan) 
-            if step.get('tool', step.get('tool_or_skill', '')) in self.DESTRUCTIVE_TOOLS
+            if step.get('tool_or_skill', '') in self.DESTRUCTIVE_TOOLS
         ]
         if delete_indices:
             has_backup = any(
-                'backup' in str(step.get('parameters', {})).lower()
-                or 'copy' in step.get('tool', '').lower()
+                'backup' in str(step.get('params', {})).lower()
+                or 'copy' in step.get('tool_or_skill', '').lower()
                 for step in plan[:delete_indices[0]]
             )
             if not has_backup:

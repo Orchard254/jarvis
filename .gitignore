@@ -3,12 +3,17 @@
 *.pyc
 __pycache__/
 
-# Logs
+# Logs and temp files
 *.log
-jarvis/logs/
+*.tmp
+*.swp
 
 # Environment
 .env
 .env.local
 *.env.*
+
+# Editors
+.vscode/
+.idea/
 ```
