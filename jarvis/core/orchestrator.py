@@ -20,6 +20,7 @@ import queue
 from jarvis.core.memory import CoreMemory
 from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
+from jarvis.core.react_agent import ReActAgent
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
 from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
@@ -130,6 +131,13 @@ class Orchestrator:
         self.brain.set_callbacks(
             on_tool_call=self._on_tool_call,
             on_thinking=self._on_thinking
+        )
+        
+        # ReAct Agent for autonomous multi-step tasks
+        self.react_agent = ReActAgent(
+            brain=self.brain,
+            tool_registry=self.tool_registry,
+            max_iterations=15
         )
         
         # Perception
@@ -499,7 +507,14 @@ class Orchestrator:
         
         # Simple direct execution for straightforward commands (trivial/simple tasks)
         if strategy == 'direct':
-            result = self._execute_direct(command, system_prompt)
+            # Use ReAct agent for better multi-step handling even in simple tasks
+            logger.info(f"[ReAct] Using autonomous agent mode for: {command[:50]}...")
+            react_result = self.react_agent.execute(command, context=memories)
+            result = {
+                'success': True,
+                'response': react_result,
+                'mode': 'react'
+            }
         # Planning required for complex tasks
         elif strategy == 'plan':
             result = self._execute_with_planning(command, system_prompt)
