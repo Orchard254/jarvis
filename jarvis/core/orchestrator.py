@@ -32,6 +32,8 @@ from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
 from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
 from jarvis.config.config import get_config
+from jarvis.memory.persistent import PersistentMemory
+from jarvis.security.vault import CredentialVault
 
 # Constants
 MAX_AGENT_ROUNDS = 8
@@ -117,6 +119,12 @@ class Orchestrator:
         
         # Memory system
         self.memory = CoreMemory(config)
+        
+        # Persistent memory with RAG (new)
+        self.persistent_memory = PersistentMemory()
+        
+        # Credential vault (new)
+        self.vault = CredentialVault()
         
         # Context assembler
         self.context_assembler = ContextAssembler(
@@ -395,6 +403,20 @@ class Orchestrator:
                     outcome=result.get('response', ''),
                     success=result.get('success', False)
                 )
+                
+                # Also store in persistent memory with RAG
+                try:
+                    self.persistent_memory.add_experience(
+                        user_input=command,
+                        assistant_response=result.get('response', ''),
+                        context={
+                            'success': result.get('success', False),
+                            'actions_count': len(result.get('actions', [])),
+                            'mode': 'agent'
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to store in persistent memory: {e}")
             
             # Audit log
             self.audit_log.log_action(
@@ -912,6 +934,18 @@ class Orchestrator:
                     logger.info("User requested shutdown")
                     break
                 
+                # Handle special commands
+                if command.lower() == 'show memory':
+                    self._handle_show_memory()
+                    continue
+                elif command.lower() == 'setup keys':
+                    self._handle_setup_keys()
+                    continue
+                elif command.lower().startswith('search memory '):
+                    query = command[14:].strip()
+                    self._handle_search_memory(query)
+                    continue
+                
                 # Process command
                 result = self.process_command(command, voice=False)
                 
@@ -930,6 +964,38 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Interaction loop error: {e}", exc_info=True)
                 print(f"\nError: {e}")
+    
+    def _handle_show_memory(self):
+        """Display recent conversation history."""
+        print("\n=== Recent Memory ===")
+        recent = self.persistent_memory.get_recent_conversations(limit=5)
+        if not recent:
+            print("No conversations stored yet.")
+        else:
+            for i, record in enumerate(recent, 1):
+                print(f"\n{i}. [{record['timestamp'][:16]}]")
+                print(f"   You: {record['user'][:80]}...")
+                print(f"   JARVIS: {record['assistant'][:80]}...")
+        print()
+    
+    def _handle_search_memory(self, query: str):
+        """Search memory for relevant past conversations."""
+        print(f"\n=== Searching Memory for: '{query}' ===")
+        results = self.persistent_memory.search_memories(query, n_results=5)
+        if not results:
+            print("No matching memories found.")
+        else:
+            for i, record in enumerate(results, 1):
+                score = record.get('relevance_score', 'N/A')
+                print(f"\n{i}. [Relevance: {score:.4f}] [{record['timestamp'][:16]}]")
+                print(f"   You: {record['user']}")
+                print(f"   JARVIS: {record['assistant']}")
+        print()
+    
+    def _handle_setup_keys(self):
+        """Interactive API key setup."""
+        from jarvis.security.vault import setup_api_keys
+        setup_api_keys(self.vault)
     
     def _monitoring_loop(self) -> None:
         """Background monitoring loop."""
