@@ -726,19 +726,21 @@ class Orchestrator:
                     'actions': executed_steps
                 }
             
-            tool_name = step.get('tool')
-            arguments = step.get('arguments', {})
+            # Extract tool name and arguments from step (handle both formats)
+            # LLM may output 'tool_or_skill'/'params' or 'tool'/'arguments'
+            tool_name = step.get('tool') or step.get('tool_or_skill')
+            arguments = step.get('arguments', {}) or step.get('params', {})
             
             # Phase 3 Safety: Tool guard validation (third safety layer)
-            validation = self.tool_guard.validate_tool_call(tool_name, arguments)
-            if not validation.get('allowed', True):
-                logger.warning(f"Tool call blocked by guard at step {idx}: {tool_name} - {validation.get('reason', 'Unknown')}")
+            is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, arguments)
+            if not is_valid:
+                logger.warning(f"Tool call blocked by guard at step {idx}: {tool_name} - {error_msg}")
                 self.audit_log.log_security_event(
                     event_type='tool_blocked',
                     details={
                         'step_index': idx,
                         'tool': tool_name,
-                        'reason': validation.get('reason', 'Unknown'),
+                        'reason': error_msg,
                         'parameters': arguments
                     }
                 )
@@ -791,7 +793,8 @@ class Orchestrator:
         logger.info(f"Rolling back {len(executed_steps)} steps")
         for step_info in reversed(executed_steps):
             step = step_info.get('step', {})
-            tool_name = step.get('tool')
+            # Handle both formats: 'tool' or 'tool_or_skill'
+            tool_name = step.get('tool') or step.get('tool_or_skill')
             try:
                 # Try to call rollback method if available
                 if hasattr(self.tool_registry.tools.get(tool_name), 'rollback'):
