@@ -609,19 +609,55 @@ class SearchAndNavigateTool(BaseTool):
             logger.info(f"Searching for site: {site_query}")
             search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
             page.goto(search_url, timeout=30000)
-            time.sleep(2)  # Wait for results to load
+            
+            # Wait for search results with multiple fallback selectors
+            selectors = ["div#search", "div.g", "h3", "a[href^='http']"]
+            loaded = False
+            for selector in selectors:
+                try:
+                    page.wait_for_selector(selector, timeout=5000)
+                    loaded = True
+                    logger.debug(f"Found search results with selector: {selector}")
+                    break
+                except:
+                    continue
+            
+            if not loaded:
+                logger.warning("No search results found immediately, waiting longer...")
+                time.sleep(5)
             
             # Step 2: Extract first organic result URL using JavaScript (most reliable)
             first_link = page.evaluate("""
                 () => {
+                    // Strategy 1: Find first search result link excluding Google
                     const links = document.querySelectorAll('a[href^="http"]');
                     for (let link of links) {
-                        if (link.href.includes('google') === false && 
-                            link.href.includes('/search?') === false &&
-                            link.href.length > 20) {
+                        const href = link.href;
+                        if (!href.includes('google.com') && 
+                            !href.includes('/search?') &&
+                            href.length > 20) {
+                            return href;
+                        }
+                    }
+                    
+                    // Strategy 2: Try to find any result div's link
+                    const resultDivs = document.querySelectorAll('div.g, div[data-sokoban-result]');
+                    for (const div of resultDivs) {
+                        const link = div.querySelector('a[href^="http"]');
+                        if (link && !link.href.includes('google.com')) {
                             return link.href;
                         }
                     }
+                    
+                    // Strategy 3: Just get first external link
+                    const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
+                    const exclude = ['google.com', 'youtube.com', 'googleusercontent'];
+                    for (const link of allLinks) {
+                        if (!exclude.some(ex => link.href.includes(ex))) {
+                            return link.href;
+                        }
+                    }
+                    
                     return null;
                 }
             """)
