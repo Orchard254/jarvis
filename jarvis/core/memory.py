@@ -159,15 +159,26 @@ class CoreMemory:
         Returns:
             Session ID for the stored experience
         """
+        from jarvis.tools.base import ToolResult
+        
+        # Convert ToolResult objects to dicts for JSON serialization
+        actions_serializable = []
+        for action in actions:
+            action_copy = dict(action) if isinstance(action, dict) else action
+            if isinstance(action_copy, dict) and 'result' in action_copy:
+                if isinstance(action_copy['result'], ToolResult):
+                    action_copy['result'] = action_copy['result'].to_dict()
+            actions_serializable.append(action_copy)
+        
         # Build messages from the interaction
         messages = [
             {'role': 'user', 'content': goal},
-            {'role': 'assistant', 'content': f"Actions: {actions}\nOutcome: {outcome}"}
+            {'role': 'assistant', 'content': f"Actions: {actions_serializable}\nOutcome: {outcome}"}
         ]
         
         metadata = {
             'goal': goal,
-            'actions': actions,
+            'actions': actions_serializable,
             'outcome': outcome,
             'success': success
         }
@@ -183,7 +194,7 @@ class CoreMemory:
         
         # Update procedural memory if successful
         if success:
-            self._update_procedural_memory(goal, actions)
+            self._update_procedural_memory(goal, actions_serializable)
         
         logger.info(f"Stored experience in episodic memory: {session_id}")
         return session_id
