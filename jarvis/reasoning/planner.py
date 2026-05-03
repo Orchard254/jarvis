@@ -499,8 +499,86 @@ Maintain the same step ID format and dependency structure."""
             return self._build_execution_graph(result, goal).to_dict()
             
         except Exception as e:
-            log.warning(f"[PLANNER] Plan refinement failed: {e}")
+            logger.error(f"Failed to refine plan: {e}")
             return plan
+    
+    def revise_plan(self, goal: str, plan: List[Dict], feedback: str) -> Dict[str, Any]:
+        """
+        Revise a plan based on critic feedback.
+        
+        This is a wrapper around refine_plan with a compatible signature
+        for the orchestrator's _execute_with_planning method.
+        
+        Args:
+            goal: The original goal
+            plan: List of step dictionaries
+            feedback: Critic feedback about what needs fixing
+            
+        Returns:
+            Dictionary with revised plan:
+            {
+                'success': bool,
+                'plan': revised list of steps,
+                'reasoning': explanation of changes
+            }
+        """
+        if self.ollama_client is None:
+            return {'success': False, 'error': 'No Ollama client configured', 'plan': plan}
+        
+        # Build prompt for revision
+        steps_str = "\n".join([
+            f"{i+1}. {step.get('tool_or_skill', step.get('tool', 'unknown'))}: {step.get('params', step.get('arguments', {}))}"
+            for i, step in enumerate(plan)
+        ])
+        
+        prompt = f"""Revise this plan based on the feedback.
+
+Goal: {goal}
+
+Current Plan Steps:
+{steps_str}
+
+Critique/Feedback: {feedback}
+
+Provide a revised plan as a JSON list of steps with the same structure.
+Each step should have: tool_or_skill, params, depends_on, success_criteria, fallback_strategy.
+
+Respond in JSON format:
+{{
+    "success": true,
+    "steps": [
+        {{"tool_or_skill": "...", "params": {{}}, "depends_on": [], "success_criteria": "...", "fallback_strategy": "..."}},
+        ...
+    ],
+    "reasoning": "explanation of what was changed and why"
+}}"""
+        
+        try:
+            response = self.ollama_client.chat(
+                messages=[{'role': 'user', 'content': prompt}],
+                
+            )
+            
+            import json
+            import re
+            content = response.get('content', '{}').strip()
+            
+            # Strip markdown code blocks if present
+            json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(1)
+            
+            result = json.loads(content)
+            
+            return {
+                'success': result.get('success', False),
+                'plan': result.get('steps', plan),
+                'reasoning': result.get('reasoning', '')
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to revise plan: {e}")
+            return {'success': False, 'error': str(e), 'plan': plan}
     
     def replan_after_failure(self, original_plan: Dict[str, Any],
                              failed_step_id: str, error: str) -> Dict[str, Any]:
