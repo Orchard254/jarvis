@@ -108,6 +108,9 @@ Do not output any text outside the JSON block when acting.
                 if not action:
                     # LLM decided to talk directly (Task Complete)
                     logger.info(f"[ReAct] LLM responded with natural language: {str(response)[:100]}...")
+                    # Extract content from dict response or return string
+                    if isinstance(response, dict):
+                        return response.get('content', 'Task completed.')
                     return str(response) if response else "Task completed."
                 
                 # Handle dynamic tool generation
@@ -226,15 +229,16 @@ Do not output any text outside the JSON block when acting.
         """Extracts JSON action from LLM response."""
         # Handle dict response directly (from tool_calls)
         if isinstance(response, dict):
+            # Check for natural language response (no tool calls)
             if 'tool_calls' in response and response['tool_calls']:
                 tool_call = response['tool_calls'][0]
                 return {
-                    'action': 'tool',
-                    'tool': tool_call['function']['name'],
-                    'args': tool_call['function']['arguments']
+                    'action': tool_call['function']['name'],
+                    'arguments': tool_call['function']['arguments']
                 }
-            elif 'content' in response and response['content']:
-                return {'action': 'respond', 'text': response['content']}
+            elif 'content' in response and response.get('content'):
+                # LLM returned natural language - task complete
+                return None
             else:
                 return None
         
@@ -262,7 +266,7 @@ Do not output any text outside the JSON block when acting.
             return f"ERROR: Tool '{tool_name}' does not exist. Available tools: [{available}]"
         
         try:
-            result = self.tool_registry.execute(tool_name, args)
+            result = self.tool_registry.execute(tool_name, **args)
             
             # Normalize result to string observation
             if hasattr(result, 'success') and not result.success:
