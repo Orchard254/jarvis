@@ -146,7 +146,7 @@ class Orchestrator:
             brain=self.brain,
             tool_registry=self.tool_registry,
             max_iterations=15,
-            vault=self.credential_vault
+            vault=self.vault
         )
         
         # Perception
