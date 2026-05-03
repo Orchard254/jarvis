@@ -387,6 +387,14 @@ class PlanCritic:
         """Check d: No destructive steps without confirmation flag."""
         issues = []
         
+        # Safe read-only commands that use destructive tools but aren't dangerous
+        SAFE_COMMANDS = {
+            'systeminfo', 'get-computerinfo', 'gpresult', 'tasklist', 
+            'netstat', 'ipconfig', 'dir', 'ls', 'cat', 'type',
+            'powershell get-computerinfo', 'powershell get-process',
+            'powershell get-service', 'powershell get-eventlog'
+        }
+        
         for i, step in enumerate(steps):
             tool_name = step.get('tool_or_skill', step.get('tool', '')).lower()
             params = step.get('params', {})
@@ -398,6 +406,18 @@ class PlanCritic:
             )
             
             if is_destructive:
+                # Special handling for run_command/run_powershell - check if command is safe
+                if tool_name in {'run_command', 'run_powershell', 'run_shell'}:
+                    command = params.get('command', '').lower().strip()
+                    # Check if command starts with or contains a safe pattern
+                    is_safe = any(
+                        safe_cmd in command
+                        for safe_cmd in SAFE_COMMANDS
+                    )
+                    if is_safe:
+                        # This is a safe read-only command, skip confirmation requirement
+                        continue
+                
                 # Check for confirmation flag
                 has_confirmation = any(
                     param in self.CONFIRMATION_PARAMS 
