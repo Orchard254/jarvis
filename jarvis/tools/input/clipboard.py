@@ -236,6 +236,7 @@ class PressKeyTool(BaseTool):
             import subprocess
             
             # Use PowerShell WScript.Shell for special keys
+            # Extended key map including calculator symbols
             key_map = {
                 "win": "{LWIN}",
                 "windows": "{LWIN}",
@@ -244,6 +245,7 @@ class PressKeyTool(BaseTool):
                 "shift": "+",
                 "tab": "{TAB}",
                 "enter": "{ENTER}",
+                "return": "{ENTER}",
                 "escape": "{ESC}",
                 "space": " ",
                 "backspace": "{BACKSPACE}",
@@ -259,29 +261,79 @@ class PressKeyTool(BaseTool):
                 "f1": "{F1}", "f2": "{F2}", "f3": "{F3}", "f4": "{F4}",
                 "f5": "{F5}", "f6": "{F6}", "f7": "{F7}", "f8": "{F8}",
                 "f9": "{F9}", "f10": "{F10}", "f11": "{F11}", "f12": "{F12}",
+                # Calculator/math symbols - map to their literal characters
+                # In SendKeys, these need special handling
+                "plus": "{+}",  # Literal plus sign
+                "add": "{+}",
+                "subtract": "-",
+                "multiply": "*",
+                "divide": "/",
+                "decimal": ".",
+                "dot": ".",
+                "percent": "%",
+                # Parentheses and brackets
+                "lparen": "(",
+                "rparen": ")",
+                "lbracket": "[",
+                "rbracket": "]",
+                "lbrace": "{{",  # Escaped { in SendKeys
+                "rbrace": "}}",  # Escaped } in SendKeys
             }
             
             # Parse key combination
+            # Check if it's a hotkey combo (contains + but not just "+")
             parts = keys.lower().split("+")
-            ps_keys = []
             
-            for part in parts:
-                part = part.strip()
-                if part in key_map:
-                    ps_keys.append(key_map[part])
-                elif len(part) == 1:
-                    ps_keys.append(part)
-                else:
-                    # Assume it's a regular key
-                    ps_keys.append(f"{{{part.upper()}}}")
-            
-            # Build sendkeys string
-            sendkeys_str = "".join(ps_keys)
-            
-            script = f"""
-            $shell = New-Object -ComObject WScript.Shell
-            $shell.SendKeys("{sendkeys_str}")
-            """
+            # Handle single "+" key press vs combination like "ctrl+s"
+            if keys == "+" or keys.strip() == "+":
+                # User wants to press the plus key literally
+                script = """
+                $shell = New-Object -ComObject WScript.Shell
+                $shell.SendKeys("{+}")
+                """
+            elif len(parts) > 1 and parts[0].strip() in ["ctrl", "alt", "shift", "win"]:
+                # It's a modifier combination like "ctrl+c"
+                ps_keys = []
+                for i, part in enumerate(parts):
+                    part = part.strip()
+                    if part in key_map:
+                        mapped = key_map[part]
+                        # Modifiers should not be wrapped in braces when combined
+                        if part in ["ctrl", "alt", "shift", "win"]:
+                            ps_keys.append(mapped)
+                        else:
+                            ps_keys.append(f"{mapped}")
+                    elif len(part) == 1:
+                        ps_keys.append(part)
+                    else:
+                        ps_keys.append(f"{{{part.upper()}}}")
+                
+                sendkeys_str = "".join(ps_keys)
+                script = f"""
+                $shell = New-Object -ComObject WScript.Shell
+                $shell.SendKeys("{sendkeys_str}")
+                """
+            else:
+                # Single key or non-modifier combination
+                processed_parts = []
+                for part in parts:
+                    part = part.strip()
+                    if part in key_map:
+                        processed_parts.append(key_map[part])
+                    elif len(part) == 1:
+                        # Single character - escape if special in SendKeys
+                        if part in "+^%~(){}[]":
+                            processed_parts.append("{" + part + "}")
+                        else:
+                            processed_parts.append(part)
+                    else:
+                        processed_parts.append(f"{{{part.upper()}}}")
+                
+                sendkeys_str = "".join(processed_parts)
+                script = f"""
+                $shell = New-Object -ComObject WScript.Shell
+                $shell.SendKeys("{sendkeys_str}")
+                """
             
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],

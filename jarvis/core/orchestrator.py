@@ -362,8 +362,12 @@ class Orchestrator:
             if intended_mode == 'agent':
                 self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
-            # Route based on intent
-            if intended_mode == 'chat' or self.mode == 'chat':
+            # Route based on intent - but respect explicit agent mode override
+            # If system is already in agent mode, stay in agent mode unless explicitly told to chat
+            if self.mode == 'agent' and intended_mode != 'chat':
+                # Stay in agent mode for consecutive commands
+                result = self._handle_agent_mode(command)
+            elif intended_mode == 'chat':
                 result = self._handle_chat_mode(command)
             else:
                 result = self._handle_agent_mode(command)
@@ -740,8 +744,22 @@ class Orchestrator:
                 )
                 continue
             
-            # Execute
-            result = self.tool_registry.execute(tool_name, **arguments)
+            # Execute with retry logic
+            result = None
+            max_retries = 2
+            for attempt in range(max_retries):
+                result = self.tool_registry.execute(tool_name, **arguments)
+                
+                if result.success:
+                    break
+                    
+                # Retry on failure with exponential backoff
+                if attempt < max_retries - 1:
+                    logger.warning(f"Tool {tool_name} failed (attempt {attempt + 1}/{max_retries}), retrying...")
+                    time.sleep(0.5 * (attempt + 1))
+                else:
+                    logger.error(f"Tool {tool_name} failed after {max_retries} attempts")
+            
             executed_steps.append({
                 'step': step,
                 'result': result,
