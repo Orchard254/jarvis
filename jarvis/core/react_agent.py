@@ -106,6 +106,20 @@ Do not output any text outside the JSON block when acting.
 
     def _parse_action(self, response: str) -> Optional[Dict]:
         """Extracts JSON action from LLM response."""
+        # Handle dict response directly (from tool_calls)
+        if isinstance(response, dict):
+            if 'tool_calls' in response and response['tool_calls']:
+                tool_call = response['tool_calls'][0]
+                return {
+                    'action': 'tool',
+                    'tool': tool_call['function']['name'],
+                    'args': tool_call['function']['arguments']
+                }
+            elif 'content' in response and response['content']:
+                return {'action': 'respond', 'text': response['content']}
+            else:
+                return None
+        
         try:
             # Handle markdown code blocks if present
             clean_resp = response.strip()
@@ -113,13 +127,13 @@ Do not output any text outside the JSON block when acting.
                 clean_resp = clean_resp[7:]
             if clean_resp.endswith("```"):
                 clean_resp = clean_resp[:-3]
-            
+
             data = json.loads(clean_resp.strip())
             if 'action' in data:
                 return data
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, AttributeError):
             pass
-        
+
         return None
 
     def _execute_tool(self, tool_name: str, args: Dict) -> str:
