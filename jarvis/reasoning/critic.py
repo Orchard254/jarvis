@@ -265,7 +265,7 @@ class PlanCritic:
             
             # Check against registry if available
             if self.tool_registry:
-                if not self.tool_registry.tool_exists(tool_name):
+                if not self.tool_registry.has_tool(tool_name):
                     unknown_tools.append(tool_name)
                     issues.append(f"Step {i+1}: Unknown tool '{tool_name}'")
         

@@ -110,6 +110,7 @@ class Orchestrator:
         # Safety systems - Phase 3 Integration
         self.input_filter = InputFilter()
         self.plan_validator = PlanValidator()
+        self.plan_validator.tool_registry = self.tool_registry
         self.tool_guard = ToolGuard()
         self.audit_log = AuditLog()
         
