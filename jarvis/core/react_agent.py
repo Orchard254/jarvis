@@ -15,7 +15,7 @@ import traceback
 logger = logging.getLogger(__name__)
 
 class ReActAgent:
-    def __init__(self, brain, tool_registry, max_iterations: int = 15, vault=None):
+    def __init__(self, brain, tool_registry, max_iterations: int = 50, vault=None):
         self.brain = brain
         self.tool_registry = tool_registry
         self.max_iterations = max_iterations
@@ -157,7 +157,7 @@ Do not output any text outside the JSON block when acting.
                 if i > self.max_iterations - 3:
                     return f"Error: Multiple failures encountered. Last error: {str(e)}"
         
-        return "Error: Max iterations reached without completing the task."
+        return f"Error: Max iterations ({self.max_iterations}) reached without completing the task. Consider breaking down the task into smaller steps or checking network connectivity."
     
     def _execute_tool_with_retry(self, tool_name: str, args: Dict, max_retries: int = 3) -> str:
         """Execute tool with exponential backoff retry logic."""
