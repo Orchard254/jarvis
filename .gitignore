@@ -1,12 +1,14 @@
 ```
-# Python cache
-__pycache__/
+# Compiled Python files
 *.pyc
+__pycache__/
 
-# Virtual environment
-venv/
+# Logs
+*.log
+jarvis/logs/
 
-# Data files (if they're generated)
-*.json
-
+# Environment
+.env
+.env.local
+*.env.*
 ```
