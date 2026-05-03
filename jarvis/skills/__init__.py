@@ -8,6 +8,7 @@ from .builtin.morning_briefing import MorningBriefing
 from .builtin.focus_mode import FocusMode
 from .builtin.task_executor import TaskExecutorSkill
 from .builtin.system_optimizer import SystemOptimizerSkill as ResearchSkill
+from .supervisor import SupervisorSkill
 
 # Alias for consistency
 MorningBriefingSkill = MorningBriefing
@@ -24,5 +25,6 @@ __all__ = [
     'FocusModeSkill',
     'FocusMode',
     'TaskExecutorSkill',
-    'ResearchSkill'
+    'ResearchSkill',
+    'SupervisorSkill'
 ]
