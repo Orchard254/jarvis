@@ -615,7 +615,19 @@ class Orchestrator:
                 'actions': []
             }
         
-        plan = plan_result.get('plan', [])
+        # Extract steps from execution_graph
+        execution_graph = plan_result.get('execution_graph')
+        if not execution_graph:
+            return {
+                'success': False,
+                'error': 'No execution graph in plan result',
+                'response': "I'm having trouble creating a plan for that task.",
+                'mode': 'agent',
+                'strategy': 'plan',
+                'actions': []
+            }
+        
+        plan = [step.to_dict() for step in execution_graph.steps]
         
         # Phase 3 Safety: Plan validation (second safety layer)
         plan_validation = self.plan_validator.review(plan)

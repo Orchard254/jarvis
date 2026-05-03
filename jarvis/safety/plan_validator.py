@@ -128,14 +128,15 @@ class PlanValidator:
                 result.is_valid = False
                 result.block_step(i, step_result[1])  # reason
             
-            tool_name = step.get('tool', '')
+            # Support both 'tool' and 'tool_or_skill' keys
+            tool_name = step.get('tool', step.get('tool_or_skill', ''))
             tool_set.add(tool_name)
             
             if tool_name in self.DESTRUCTIVE_TOOLS:
                 destructive_count += 1
             
             # Check for missing parameters
-            if 'parameters' not in step:
+            if 'parameters' not in step and 'params' not in step:
                 result.add_warning(f"Step {i}: Missing 'parameters' key")
         
         # Check destructive operation limit
@@ -188,8 +189,10 @@ class PlanValidator:
         Returns:
             Tuple of (is_valid, reason_if_invalid)
         """
-        tool_name = step.get('tool', '')
-        parameters = step.get('parameters', {})
+        # Support both 'tool' and 'tool_or_skill' keys
+        tool_name = step.get('tool', step.get('tool_or_skill', ''))
+        # Support both 'parameters' and 'params' keys
+        parameters = step.get('parameters', step.get('params', {}))
         
         # Check for empty tool name
         if not tool_name:
@@ -224,8 +227,10 @@ class PlanValidator:
         last_params = None
         
         for step in plan:
-            tool = step.get('tool')
-            params = str(step.get('parameters', {}))
+            # Support both 'tool' and 'tool_or_skill' keys
+            tool = step.get('tool', step.get('tool_or_skill', ''))
+            # Support both 'parameters' and 'params' keys
+            params = str(step.get('parameters', step.get('params', {})))
             
             if tool == last_tool and params == last_params:
                 consecutive_same += 1
@@ -286,7 +291,7 @@ class PlanValidator:
         # Check for backup before destructive ops
         delete_indices = [
             i for i, step in enumerate(plan) 
-            if step.get('tool') in self.DESTRUCTIVE_TOOLS
+            if step.get('tool', step.get('tool_or_skill', '')) in self.DESTRUCTIVE_TOOLS
         ]
         if delete_indices:
             has_backup = any(
