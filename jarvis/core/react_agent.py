@@ -18,9 +18,29 @@ class ReActAgent:
     def _build_system_prompt(self) -> str:
         """Builds a prompt that enforces ReAct behavior and lists available tools."""
         tools_desc = []
-        for name, info in self.tool_registry.get_all_tools().items():
-            args = ", ".join([f"{k}: {v}" for k, v in info.get('arguments', {}).items()])
-            tools_desc.append(f"- {name}({args}): {info.get('description', 'No description')}")
+        for name, tool in self.tool_registry.get_all_tools().items():
+            # Extract schema from tool instance
+            schema = tool.get_schema() if hasattr(tool, 'get_schema') else {}
+            
+            # Get parameters/arguments from schema
+            params = schema.get('parameters', {}) or schema.get('arguments', {})
+            param_props = params.get('properties', {})
+            
+            # Format arguments as string
+            args_list = []
+            for arg_name, arg_info in param_props.items():
+                arg_type = arg_info.get('type', 'any')
+                arg_desc = arg_info.get('description', '')
+                required = arg_name in params.get('required', [])
+                req_marker = '*' if required else ''
+                args_list.append(f"{req_marker}{arg_name}: {arg_type}")
+            
+            args = ", ".join(args_list) if args_list else "no args"
+            
+            # Get description from schema or tool
+            desc = schema.get('description', getattr(tool, 'description', 'No description'))
+            
+            tools_desc.append(f"- {name}({args}): {desc}")
         
         tools_list = "\n".join(tools_desc)
         
