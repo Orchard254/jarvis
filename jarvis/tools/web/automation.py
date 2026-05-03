@@ -167,10 +167,13 @@ class NavigateToUrlTool(BaseTool):
             logger.info(f"Navigating to: {url}")
             page.goto(url, timeout=timeout, wait_until="domcontentloaded")
             
-            # Wait for specific element if requested
+            # Wait for specific element if requested (but don't fail hard if not found)
             if wait_for:
-                page.wait_for_selector(wait_for, timeout=timeout)
-                logger.info(f"Waited for selector: {wait_for}")
+                try:
+                    page.wait_for_selector(wait_for, timeout=min(timeout, 10000))
+                    logger.info(f"Waited for selector: {wait_for}")
+                except Exception as e:
+                    logger.warning(f"Selector {wait_for} not found, continuing anyway: {e}")
             
             # Small delay for dynamic content
             time.sleep(1)
@@ -179,8 +182,19 @@ class NavigateToUrlTool(BaseTool):
             return ToolResult.ok(f"Loaded: {title} ({url})")
             
         except Exception as e:
-            logger.error(f"Navigation failed: {e}")
-            return ToolResult.fail(error=f"Navigation failed: {e}")
+            error_msg = str(e)
+            logger.error(f"Navigation failed: {error_msg}")
+            
+            # Detect browser context crash
+            if "closed" in error_msg.lower() or "target" in error_msg.lower() or "context" in error_msg.lower():
+                logger.warning("Browser context detected as closed. Attempting recovery...")
+                try:
+                    engine.stop()
+                except Exception:
+                    pass
+                return ToolResult.fail(error="Browser context was closed. Please try again - browser will restart automatically.")
+            
+            return ToolResult.fail(error=f"Navigation failed: {error_msg}")
     
     def estimate_duration(self, **kwargs) -> float:
         return 3.0
@@ -597,55 +611,39 @@ class SearchAndNavigateTool(BaseTool):
             page.goto(search_url, timeout=30000)
             time.sleep(2)  # Wait for results to load
             
-            # Step 2: Extract first organic result URL
-            # Google organic results typically have selector div.g a[href] or similar
-            first_result_selector = 'div.g a[href^="http"]'
-            try:
-                element = page.query_selector(first_result_selector)
-                if not element:
-                    # Fallback: try alternative selectors
-                    fallback_selectors = [
-                        'div.yuRUbf a[href^="http"]',
-                        'a[href^="http"][data-ved]',
-                        '.LC20lb.MBeuO.DKV0Md'
-                    ]
-                    for sel in fallback_selectors:
-                        element = page.query_selector(sel)
-                        if element:
-                            break
-                
-                if not element:
-                    # Last resort: use JavaScript to find first result
-                    first_link = page.evaluate("""
-                        () => {
-                            const links = document.querySelectorAll('a[href^="http"]');
-                            for (let link of links) {
-                                if (link.href.includes('google') === false && 
-                                    link.href.includes('/search?') === false &&
-                                    link.href.length > 20) {
-                                    return link.href;
-                                }
-                            }
-                            return null;
+            # Step 2: Extract first organic result URL using JavaScript (most reliable)
+            first_link = page.evaluate("""
+                () => {
+                    const links = document.querySelectorAll('a[href^="http"]');
+                    for (let link of links) {
+                        if (link.href.includes('google') === false && 
+                            link.href.includes('/search?') === false &&
+                            link.href.length > 20) {
+                            return link.href;
                         }
-                    """)
-                    if first_link:
-                        target_url = first_link
-                    else:
-                        return ToolResult.fail(error="No valid URL found in search results")
-                else:
-                    target_url = element.get_attribute('href')
-                    
-            except Exception as e:
-                logger.warning(f"Failed to extract URL via selector: {e}")
-                return ToolResult.fail(error=f"Could not find site URL: {e}")
+                    }
+                    return null;
+                }
+            """)
             
+            if not first_link:
+                return ToolResult.fail(error="No valid URL found in search results")
+            
+            target_url = first_link
             logger.info(f"Found URL: {target_url}")
             
-            # Step 3: Navigate to the site
+            # Step 3: Navigate to the site with error recovery
             logger.info(f"Navigating to: {target_url}")
-            page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
-            time.sleep(2)  # Wait for page to stabilize
+            try:
+                page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+                time.sleep(2)
+            except Exception as nav_error:
+                error_msg = str(nav_error)
+                if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                    logger.warning("Browser crashed during navigation. Restarting...")
+                    engine.stop()
+                    return ToolResult.fail(error="Browser crashed. Please try again.")
+                raise
             
             # Step 4: If internal search requested, perform it
             if internal_search:
@@ -677,7 +675,18 @@ class SearchAndNavigateTool(BaseTool):
                         continue
                 
                 if not filled:
-                    return ToolResult.fail(error="Could not find search input field on page")
+                    # Fallback: Just open Google search for "site + internal_search"
+                    logger.info("Search field not found. Using Google search fallback.")
+                    google_search = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query + ' ' + internal_search)}"
+                    page.goto(google_search, timeout=30000)
+                    time.sleep(2)
+                    summary = engine.get_page_content_summary(max_length=500)
+                    return ToolResult.ok({
+                        "url": google_search,
+                        "search_performed": internal_search,
+                        "method": "google_fallback",
+                        "page_summary": summary
+                    })
                 
                 # Submit search
                 submitted = False
@@ -700,7 +709,17 @@ class SearchAndNavigateTool(BaseTool):
                         logger.info("Submitted search by pressing Enter")
                     except Exception as e:
                         logger.warning(f"Failed to press Enter: {e}")
-                        return ToolResult.fail(error="Could not submit search")
+                        # Fallback to Google search
+                        google_search = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query + ' ' + internal_search)}"
+                        page.goto(google_search, timeout=30000)
+                        time.sleep(2)
+                        summary = engine.get_page_content_summary(max_length=500)
+                        return ToolResult.ok({
+                            "url": google_search,
+                            "search_performed": internal_search,
+                            "method": "google_fallback_enter",
+                            "page_summary": summary
+                        })
                 
                 if submitted:
                     time.sleep(3)  # Wait for search results
@@ -721,8 +740,18 @@ class SearchAndNavigateTool(BaseTool):
             })
             
         except Exception as e:
-            logger.error(f"Search and navigate failed: {e}")
-            return ToolResult.fail(error=f"Search and navigate failed: {e}")
+            error_msg = str(e)
+            logger.error(f"Search and navigate failed: {error_msg}")
+            
+            # Detect browser crash
+            if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                try:
+                    engine.stop()
+                except Exception:
+                    pass
+                return ToolResult.fail(error="Browser context closed. Please try again.")
+            
+            return ToolResult.fail(error=f"Search and navigate failed: {error_msg}")
     
     def estimate_duration(self, **kwargs) -> float:
         internal = kwargs.get("internal_search")
