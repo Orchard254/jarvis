@@ -399,7 +399,73 @@
       "success_rate": 1.0,
       "created_at": "2026-05-02T20:05:27.324306",
       "usage_count": 0
+    },
+    "successful_pattern_5040": {
+      "name": "successful_pattern_5040",
+      "steps": [
+        {
+          "goal_pattern": "check system info and save it to a note",
+          "action_sequence": [
+            "unknown",
+            "unknown"
+          ],
+          "full_actions": [
+            {
+              "step": {
+                "id": "step_1",
+                "tool_or_skill": "system_info",
+                "params": {
+                  "type": "all"
+                },
+                "depends_on": [],
+                "success_criteria": "system_info returns a complete system information object without error",
+                "fallback_strategy": "retry the call once; if it still fails, fall back to using system_health to gather partial info",
+                "parallelizable": true
+              },
+              "result": {
+                "success": true,
+                "output": "CPU: 2.0% usage, 2 cores, 2500MHz | RAM: 41.1% used (0.6GB free of 1.0GB) | Disk: 14.7% used (0.4GB free of 0.5GB) | Battery: N/A (no sensor available)",
+                "error": "",
+                "exit_code": 0,
+                "verified": false,
+                "verify_msg": ""
+              },
+              "validated": true
+            },
+            {
+              "step": {
+                "id": "step_2",
+                "tool_or_skill": "create_note",
+                "params": {
+                  "content": "{{step_1.output}}",
+                  "title": "System Info"
+                },
+                "depends_on": [
+                  "step_1"
+                ],
+                "success_criteria": "A note titled \"System Info\" is created and can be retrieved with read_notes",
+                "fallback_strategy": "retry the creation; if it fails again, truncate the content to the most recent 500 characters and retry",
+                "parallelizable": false
+              },
+              "result": {
+                "success": true,
+                "output": "Note created: 'System Info'",
+                "error": "",
+                "exit_code": 0,
+                "verified": false,
+                "verify_msg": ""
+              },
+              "validated": true
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-03T08:46:43.023928",
+      "usage_count": 0
     }
   },
-  "updated_at": "2026-05-02T20:05:27.324316"
+  "updated_at": "2026-05-03T08:46:43.023935"
 }

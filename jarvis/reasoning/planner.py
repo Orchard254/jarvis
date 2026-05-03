@@ -319,6 +319,13 @@ Ensure all tool names match EXACTLY from the available tools list above."""
             
             content = response.get('content', '{}')
             
+            # Strip markdown code blocks if present (LLM sometimes wraps JSON in ```json ... ```)
+            import re
+            content = content.strip()
+            json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(1)
+            
             import json
             try:
                 result = json.loads(content)
