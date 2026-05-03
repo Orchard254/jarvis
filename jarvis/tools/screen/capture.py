@@ -90,9 +90,6 @@ class ScreenshotTool(BaseTool):
             result = ToolResult.ok(message)
             # Store base64 in output for potential vision analysis
             result.output = message
-            if base64_data:
-                # Add image_base64 to the result dict as required
-                result._data["image_base64"] = base64_data
             return result
         else:
             return ToolResult.fail(error=message)
