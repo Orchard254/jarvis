@@ -543,6 +543,166 @@ class ScreenshotTool(BaseTool):
         return "low"
 
 
+class SearchAndNavigateTool(BaseTool):
+    """
+    Composite tool: Search web for a site, navigate to it, and optionally search within.
+    This reduces multi-step web navigation to a single atomic operation.
+    """
+    
+    name = "search_and_navigate"
+    description = "Search for a website, navigate to it, and optionally perform an internal search. Combines search_web + navigate_to_url + fill_input + click into one tool."
+    parameters = {
+        "site_query": {
+            "type": "string",
+            "description": "Query to find the website (e.g., 'kilimall', 'amazon')"
+        },
+        "internal_search": {
+            "type": "string",
+            "description": "Optional: search term to use after navigating to the site (e.g., 'refurbished phones')",
+            "default": None
+        },
+        "search_selector": {
+            "type": "string",
+            "description": "CSS selector for the search input field on the target site (default: common selectors)",
+            "default": None
+        },
+        "submit_selector": {
+            "type": "string",
+            "description": "CSS selector for the search submit button (default: common selectors)",
+            "default": None
+        }
+    }
+    required_parameters = ["site_query"]
+    
+    def validate(self, **kwargs) -> tuple[bool, str]:
+        site_query = kwargs.get("site_query")
+        if not site_query or not isinstance(site_query, str):
+            return False, "site_query must be a non-empty string"
+        return True, ""
+    
+    def execute(self, **kwargs) -> ToolResult:
+        site_query = kwargs["site_query"]
+        internal_search = kwargs.get("internal_search")
+        search_selector = kwargs.get("search_selector")
+        submit_selector = kwargs.get("submit_selector")
+        
+        try:
+            from jarvis.tools.registry import ToolRegistry
+            
+            # Step 1: Search for the site
+            logger.info(f"Searching for site: {site_query}")
+            registry = ToolRegistry.get_instance()
+            
+            # Use search_web to find the site
+            search_result = registry.execute("search_web", query=site_query)
+            if not search_result.success:
+                return ToolResult.fail(error=f"Failed to search for site: {search_result.error}")
+            
+            # Extract URL from search result (assuming first result is the target)
+            search_output = search_result.output if hasattr(search_result, 'output') else str(search_result)
+            
+            # Simple URL extraction - look for http(s) URLs in the response
+            import re
+            url_match = re.search(r'https?://[^\s\)]+', search_output)
+            if not url_match:
+                return ToolResult.fail(error=f"No URL found in search results: {search_output[:200]}")
+            
+            target_url = url_match.group(0)
+            logger.info(f"Found URL: {target_url}")
+            
+            # Step 2: Navigate to the site
+            nav_result = registry.execute("navigate_to_url", url=target_url)
+            if not nav_result.success:
+                return ToolResult.fail(error=f"Failed to navigate: {nav_result.error}")
+            
+            # Step 3: If internal search requested, perform it
+            if internal_search:
+                logger.info(f"Performing internal search for: {internal_search}")
+                
+                # Common search selectors
+                search_selectors = search_selector.split(',') if search_selector else [
+                    'input[name="q"]', 'input[name="search"]', 'input[type="search"]',
+                    '.search-input', '#search', 'input[placeholder*="search" i]'
+                ]
+                
+                submit_selectors = submit_selector.split(',') if submit_selector else [
+                    'button[type="submit"]', 'input[type="submit"]', '.search-btn',
+                    'button.search', '[aria-label*="search" i]'
+                ]
+                
+                # Try to fill search field
+                filled = False
+                for sel in search_selectors:
+                    try:
+                        fill_result = registry.execute("fill_input", selector=sel, value=internal_search)
+                        if fill_result.success:
+                            filled = True
+                            logger.info(f"Filled search field with selector: {sel}")
+                            break
+                    except Exception:
+                        continue
+                
+                if not filled:
+                    return ToolResult.fail(error="Could not find search input field on page")
+                
+                # Submit search
+                submitted = False
+                for sel in submit_selectors:
+                    try:
+                        click_result = registry.execute("click_element", selector=sel)
+                        if click_result.success:
+                            submitted = True
+                            logger.info(f"Submitted search with selector: {sel}")
+                            break
+                    except Exception:
+                        continue
+                
+                if not submitted:
+                    # Try pressing Enter as fallback
+                    try:
+                        from playwright.sync_api import sync_playwright
+                        engine = get_automation_engine()
+                        page = engine.get_page()
+                        if page:
+                            page.keyboard.press("Enter")
+                            submitted = True
+                            logger.info("Submitted search by pressing Enter")
+                    except Exception as e:
+                        logger.warning(f"Failed to press Enter: {e}")
+                
+                if submitted:
+                    import time
+                    time.sleep(2)  # Wait for search results
+                    
+                    # Get page summary
+                    engine = get_automation_engine()
+                    summary = engine.get_page_content_summary(max_length=500)
+                    return ToolResult.ok({
+                        "url": target_url,
+                        "search_performed": internal_search,
+                        "page_summary": summary
+                    })
+            
+            # No internal search - just return navigation success
+            engine = get_automation_engine()
+            summary = engine.get_page_content_summary(max_length=500)
+            return ToolResult.ok({
+                "url": target_url,
+                "page_summary": summary
+            })
+            
+        except Exception as e:
+            logger.error(f"Search and navigate failed: {e}")
+            return ToolResult.fail(error=f"Search and navigate failed: {e}")
+    
+    def estimate_duration(self, **kwargs) -> float:
+        internal = kwargs.get("internal_search")
+        return 8.0 if internal else 5.0
+    
+    def risk_level(self) -> str:
+        return "low"
+
+
 # Export all tool classes
 WEB_AUTOMATION_TOOLS = [
     NavigateToUrlTool,
@@ -551,4 +711,5 @@ WEB_AUTOMATION_TOOLS = [
     ExtractContentTool,
     WaitForElementTool,
     ScreenshotTool,
+    SearchAndNavigateTool,
 ]
