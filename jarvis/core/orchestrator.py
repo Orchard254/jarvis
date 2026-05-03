@@ -26,7 +26,7 @@ from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
 from jarvis.perception.intent_classifier import IntentClassifier
 from jarvis.perception.vision import VisionAnalyzer
 from jarvis.reasoning.planner import TaskPlanner
-from jarvis.reasoning.critic import PlanCritic
+from jarvis.reasoning.critic import PlanCritic, CriticDecision
 from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
 from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
@@ -683,22 +683,22 @@ class Orchestrator:
         critique = self.critic.review_plan(plan, command)
         
         # Handle critic results
-        if critique.get('verdict') == 'BLOCKED':
-            logger.warning(f"Plan blocked by critic: {critique.get('reason', 'Unknown')}")
+        if critique.decision == CriticDecision.BLOCKED:
+            logger.warning(f"Plan blocked by critic: {critique.blocked_reason}")
             return {
                 'success': False,
                 'error': 'Plan blocked by critic',
-                'response': f"I cannot proceed: {critique.get('reason', 'The plan has issues.')}",
+                'response': f"I cannot proceed: {critique.blocked_reason or 'The plan has issues.'}",
                 'mode': 'agent',
                 'strategy': 'plan',
                 'actions': [],
-                'critique': critique
+                'critique': critique.to_dict()
             }
         
-        elif critique.get('verdict') == 'NEEDS_REVISION':
-            logger.info(f"Plan needs revision: {critique.get('fixes_needed', [])}")
+        elif critique.decision == CriticDecision.NEEDS_REVISION:
+            logger.info(f"Plan needs revision: {critique.fixes_needed}")
             # Attempt to fix the plan
-            revised_plan = self.planner.revise_plan(command, plan, critique.get('fixes_needed', []))
+            revised_plan = self.planner.revise_plan(command, plan, critique.fixes_needed)
             if revised_plan.get('success'):
                 plan = revised_plan.get('plan', plan)
                 logger.info("Plan revised successfully")
@@ -765,7 +765,7 @@ class Orchestrator:
             'strategy': 'plan',
             'actions': executed_steps,
             'plan': plan,
-            'critique': critique
+            'critique': critique.to_dict()
         }
     
     def _rollback_steps(self, executed_steps: List[Dict]) -> None:
