@@ -12,10 +12,14 @@ from pathlib import Path
 from ..base import BaseTool, ToolResult
 
 try:
-    from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
+    from playwright.sync_api import sync_playwright
+    from playwright.sync_api._generated import Page, Browser, BrowserContext
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+    Page = None
+    Browser = None
+    BrowserContext = None
     logging.warning("Playwright not installed. Advanced web automation disabled.")
 
 logger = logging.getLogger("web_automation")

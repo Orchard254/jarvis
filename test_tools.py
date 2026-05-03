@@ -62,8 +62,8 @@ class TestSystemTools(unittest.TestCase):
         tool = GetTimeTool()
         result = tool.execute()
         self.assertTrue(result.success)
-        self.assertIsNotNone(result.data)
-        self.assertIn('time', str(result.data).lower())
+        self.assertIsNotNone(result.output)
+        self.assertIn('time', result.output.lower())
     
     def test_get_date(self):
         """Test get_date tool."""
@@ -71,7 +71,7 @@ class TestSystemTools(unittest.TestCase):
         tool = GetDateTool()
         result = tool.execute()
         self.assertTrue(result.success)
-        self.assertIsNotNone(result.data)
+        self.assertIsNotNone(result.output)
     
     def test_system_info(self):
         """Test system_info tool."""
@@ -79,12 +79,12 @@ class TestSystemTools(unittest.TestCase):
         tool = SystemInfoTool()
         result = tool.execute()
         self.assertTrue(result.success)
-        self.assertIsNotNone(result.data)
+        self.assertIsNotNone(result.output)
     
     def test_get_battery(self):
         """Test get_battery tool."""
-        from jarvis.tools.system.power import GetBatteryTool
-        tool = GetBatteryTool()
+        from jarvis.tools.system.info import BatteryStatusTool
+        tool = BatteryStatusTool()
         result = tool.execute()
         # May not have battery on desktop, but should not crash
         self.assertIsNotNone(result)
@@ -95,7 +95,8 @@ class TestSystemTools(unittest.TestCase):
         tool = GetTopProcessesTool()
         result = tool.execute(limit=5)
         self.assertTrue(result.success)
-        self.assertIsInstance(result.data, list)
+        self.assertIsInstance(result.output, str)
+        self.assertIn('CPU', result.output)
 
 
 class TestFileTools(unittest.TestCase):
@@ -115,25 +116,32 @@ class TestFileTools(unittest.TestCase):
     
     def test_list_files(self):
         """Test list_files tool."""
-        from jarvis.tools.files.operations import ListFilesTool
-        tool = ListFilesTool()
-        result = tool.execute(path=str(Path.home()))
+        from jarvis.tools.files.operations import ReadFileTool
+        # Use ReadFileTool to verify file operations work
+        # Note: list_files tool doesn't exist in current implementation
+        tool = ReadFileTool()
+        result = tool.execute(path=str(Path(__file__)))
         self.assertTrue(result.success)
-        self.assertIsInstance(result.data, list)
+        self.assertIsInstance(result.output, str)
+        self.assertIn('test_tools', result.output)
     
     def test_create_folder(self):
-        """Test create_folder tool."""
-        from jarvis.tools.files.operations import CreateFolderTool
-        tool = CreateFolderTool()
+        """Test create_folder functionality via create_file."""
+        from jarvis.tools.files.operations import CreateFileTool
+        tool = CreateFileTool()
         folder_path = self.test_dir / 'new_folder'
-        result = tool.execute(path=str(folder_path))
+        file_path = folder_path / 'test.txt'
+        result = tool.execute(
+            path=str(file_path),
+            content="Test folder creation"
+        )
         self.assertTrue(result.success)
         self.assertTrue(folder_path.exists())
     
     def test_write_file(self):
-        """Test write_file tool."""
-        from jarvis.tools.files.operations import WriteFileTool
-        tool = WriteFileTool()
+        """Test write_file tool (create_file)."""
+        from jarvis.tools.files.operations import CreateFileTool
+        tool = CreateFileTool()
         content = "Test content for JARVIS"
         result = tool.execute(
             path=str(self.test_file),
@@ -144,10 +152,10 @@ class TestFileTools(unittest.TestCase):
     
     def test_read_file(self):
         """Test read_file tool."""
-        from jarvis.tools.files.operations import ReadFileTool, WriteFileTool
+        from jarvis.tools.files.operations import ReadFileTool, CreateFileTool
         
         # First write a file
-        write_tool = WriteFileTool()
+        write_tool = CreateFileTool()
         write_tool.execute(
             path=str(self.test_file),
             content="Test reading content"
@@ -157,14 +165,14 @@ class TestFileTools(unittest.TestCase):
         tool = ReadFileTool()
         result = tool.execute(path=str(self.test_file))
         self.assertTrue(result.success)
-        self.assertIn("Test reading", result.data)
+        self.assertIn("Test reading", result.output)
     
     def test_delete_file(self):
         """Test delete_file tool."""
-        from jarvis.tools.files.operations import WriteFileTool, DeleteFileTool
+        from jarvis.tools.files.operations import CreateFileTool, DeleteFileTool
         
         # Create file first
-        write_tool = WriteFileTool()
+        write_tool = CreateFileTool()
         write_tool.execute(
             path=str(self.test_file),
             content="To be deleted"
@@ -172,7 +180,7 @@ class TestFileTools(unittest.TestCase):
         
         # Now delete it
         tool = DeleteFileTool()
-        result = tool.execute(path=str(self.test_file))
+        result = tool.execute(path=str(self.test_file), confirm=True)
         self.assertTrue(result.success)
         self.assertFalse(self.test_file.exists())
 
@@ -232,7 +240,7 @@ class TestTimeTools(unittest.TestCase):
         tool = GetTimeTool()
         result = tool.execute()
         self.assertTrue(result.success)
-        self.assertIsNotNone(result.data)
+        self.assertIsNotNone(result.output)
     
     def test_get_date_basic(self):
         """Test basic get_date functionality."""
@@ -240,16 +248,17 @@ class TestTimeTools(unittest.TestCase):
         tool = GetDateTool()
         result = tool.execute()
         self.assertTrue(result.success)
-        self.assertIsNotNone(result.data)
+        self.assertIsNotNone(result.output)
     
     def test_set_alarm(self):
         """Test set_alarm tool (mocked)."""
-        from jarvis.tools.time.clock import SetAlarmTool
+        # Note: SetAlarmTool doesn't exist, using SetTimerTool instead
+        from jarvis.tools.time.clock import SetTimerTool
         
         with patch('jarvis.tools.time.clock.threading.Thread') as mock_thread:
-            tool = SetAlarmTool()
-            result = tool.execute(time="12:00", label="Test alarm")
-            # Should create alarm without crashing
+            tool = SetTimerTool()
+            result = tool.execute(minutes=1, message="Test alarm")
+            # Should create timer without crashing
             self.assertIsNotNone(result)
 
 
@@ -262,7 +271,8 @@ class TestDataTools(unittest.TestCase):
         tool = CalculateTool()
         result = tool.execute(expression="2+2")
         self.assertTrue(result.success)
-        self.assertEqual(result.data, 4)
+        # Output should contain the result "4"
+        self.assertIn('4', result.output)
     
     def test_calculate_complex(self):
         """Test calculate with complex expression."""
@@ -270,7 +280,8 @@ class TestDataTools(unittest.TestCase):
         tool = CalculateTool()
         result = tool.execute(expression="(10 * 5) + 3 - 8")
         self.assertTrue(result.success)
-        self.assertEqual(result.data, 45)
+        # Output should contain the result "45"
+        self.assertIn('45', result.output)
     
     def test_calculate_invalid(self):
         """Test calculate with invalid expression."""
@@ -314,16 +325,16 @@ class TestNotesTools(unittest.TestCase):
     """Test notes management tools."""
     
     def test_add_note(self):
-        """Test add_note tool."""
-        from jarvis.tools.data.notes import AddNoteTool
-        tool = AddNoteTool()
+        """Test add_note tool (create_note)."""
+        from jarvis.tools.data.notes import CreateNoteTool
+        tool = CreateNoteTool()
         result = tool.execute(content="Test note content", title="Test Note")
         self.assertIsNotNone(result)
     
     def test_list_notes(self):
-        """Test list_notes tool."""
-        from jarvis.tools.data.notes import ListNotesTool
-        tool = ListNotesTool()
+        """Test list_notes tool (read_notes)."""
+        from jarvis.tools.data.notes import ReadNotesTool
+        tool = ReadNotesTool()
         result = tool.execute()
         self.assertIsNotNone(result)
 
@@ -332,17 +343,17 @@ class TestClipboardTools(unittest.TestCase):
     """Test clipboard tools."""
     
     def test_get_clipboard(self):
-        """Test get_clipboard tool."""
-        from jarvis.tools.input.clipboard import GetClipboardTool
-        tool = GetClipboardTool()
+        """Test get_clipboard tool (paste_from_clipboard)."""
+        from jarvis.tools.input.clipboard import PasteFromClipboardTool
+        tool = PasteFromClipboardTool()
         result = tool.execute()
         # May be empty, but should not crash
         self.assertIsNotNone(result)
     
     def test_set_clipboard(self):
-        """Test set_clipboard tool."""
-        from jarvis.tools.input.clipboard import SetClipboardTool
-        tool = SetClipboardTool()
+        """Test set_clipboard tool (copy_to_clipboard)."""
+        from jarvis.tools.input.clipboard import CopyToClipboardTool
+        tool = CopyToClipboardTool()
         result = tool.execute(text="Test clipboard content")
         self.assertIsNotNone(result)
 
