@@ -141,11 +141,12 @@ class Orchestrator:
             on_thinking=self._on_thinking
         )
         
-        # ReAct Agent for autonomous multi-step tasks
+        # ReAct Agent for autonomous multi-step tasks with vault access
         self.react_agent = ReActAgent(
             brain=self.brain,
             tool_registry=self.tool_registry,
-            max_iterations=15
+            max_iterations=15,
+            vault=self.credential_vault
         )
         
         # Perception

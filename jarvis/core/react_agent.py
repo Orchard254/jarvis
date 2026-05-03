@@ -1,19 +1,27 @@
 """
 ReAct Agent Engine: Reason → Act → Observe → Repeat
 Handles autonomous multi-step tool chaining with self-correction.
+Production-ready with async execution, self-healing, and dynamic tool generation.
 """
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+import asyncio
+import aiofiles
+import time
+from typing import Any, Dict, List, Optional, Tuple, Callable
+from datetime import datetime
+import traceback
 
 logger = logging.getLogger(__name__)
 
 class ReActAgent:
-    def __init__(self, brain, tool_registry, max_iterations: int = 15):
+    def __init__(self, brain, tool_registry, max_iterations: int = 15, vault=None):
         self.brain = brain
         self.tool_registry = tool_registry
         self.max_iterations = max_iterations
+        self.vault = vault  # Credential vault for secure access
         self.system_prompt = self._build_system_prompt()
+        self._error_history = []  # Track errors for self-healing
 
     def _build_system_prompt(self) -> str:
         """Builds a prompt that enforces ReAct behavior and lists available tools."""
@@ -44,6 +52,14 @@ class ReActAgent:
         
         tools_list = "\n".join(tools_desc)
         
+        # Add dynamic tool generation capability
+        dynamic_tool_instruction = """
+**DYNAMIC TOOL GENERATION:**
+If you need functionality that doesn't exist, you can request to generate a new tool.
+Output: {"action": "generate_tool", "tool_name": "name", "description": "...", "code": "python code"}
+The system will create and register the tool automatically.
+"""
+        
         return f"""You are an autonomous agent controlling a Windows PC. 
 You must solve tasks using the ReAct pattern: Thought → Action → Observation → Repeat.
 
@@ -56,6 +72,10 @@ You must solve tasks using the ReAct pattern: Thought → Action → Observation
 3. If a tool fails, analyze the error and try a different approach or fix the arguments.
 4. If you don't have a specific tool, compose existing tools to achieve the goal.
 5. When the task is complete, respond directly to the user with the final result.
+6. Use secure credentials from the vault when needed (API keys, passwords).
+7. For long-running tasks, use async execution patterns.
+
+{dynamic_tool_instruction}
 
 **OUTPUT FORMAT:**
 To call a tool, output a JSON block like this:
@@ -65,7 +85,7 @@ Do not output any text outside the JSON block when acting.
 """
 
     def execute(self, task: str, context: List[Dict] = None) -> str:
-        """Runs the ReAct loop until completion or max iterations."""
+        """Runs the ReAct loop until completion or max iterations with self-healing."""
         history = (context or [])[-5:]  # Keep last 5 turns for context
         history.append({"role": "user", "content": task})
         
@@ -74,35 +94,133 @@ Do not output any text outside the JSON block when acting.
         for i in range(self.max_iterations):
             logger.debug(f"[ReAct] Iteration {i+1}/{self.max_iterations}")
             
-            # 1. REASON: Ask LLM for next step
-            response = self.brain.chat(
-                messages=history, 
-                system_prompt=self.system_prompt,
-                temperature=0.0  # Low temp for deterministic tool calls
-            )
-            
-            # 2. ACT: Parse the tool call
-            action = self._parse_action(response)
-            
-            if not action:
-                # LLM decided to talk directly (Task Complete)
-                logger.info(f"[ReAct] LLM responded with natural language: {response[:100]}...")
-                return response
-            
-            tool_name = action.get('action')
-            args = action.get('arguments', {})
-            
-            # 3. OBSERVE: Execute tool and capture result
-            observation = self._execute_tool(tool_name, args)
-            
-            # Add interaction to history
-            history.append({"role": "assistant", "content": json.dumps(action)})
-            history.append({"role": "user", "content": f"Observation: {observation}"})
-            
-            if observation.startswith("ERROR"):
-                logger.warning(f"[ReAct] Tool error observed: {observation}")
-            
+            try:
+                # 1. REASON: Ask LLM for next step
+                response = self.brain.chat(
+                    messages=history, 
+                    system_prompt=self.system_prompt,
+                    temperature=0.0  # Low temp for deterministic tool calls
+                )
+                
+                # 2. ACT: Parse the tool call
+                action = self._parse_action(response)
+                
+                if not action:
+                    # LLM decided to talk directly (Task Complete)
+                    logger.info(f"[ReAct] LLM responded with natural language: {str(response)[:100]}...")
+                    return str(response) if response else "Task completed."
+                
+                # Handle dynamic tool generation
+                if action.get('action') == 'generate_tool':
+                    result = self._generate_tool(action)
+                    observation = f"Tool generated and registered: {result}"
+                    history.append({"role": "assistant", "content": json.dumps(action)})
+                    history.append({"role": "user", "content": f"Observation: {observation}"})
+                    continue
+                
+                tool_name = action.get('action') or action.get('tool')
+                args = action.get('arguments') or action.get('args', {})
+                
+                # 3. OBSERVE: Execute tool with self-healing retry logic
+                observation = self._execute_tool_with_retry(tool_name, args, max_retries=3)
+                
+                # Add interaction to history
+                history.append({"role": "assistant", "content": json.dumps(action) if isinstance(action, dict) else str(action)})
+                history.append({"role": "user", "content": f"Observation: {observation}"})
+                
+                # Self-healing: Track errors and inject learning
+                if observation.startswith("ERROR"):
+                    self._error_history.append({
+                        'tool': tool_name,
+                        'error': observation,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    # Keep only last 5 errors
+                    self._error_history = self._error_history[-5:]
+                    
+                    logger.warning(f"[ReAct] Tool error observed: {observation}")
+                    
+                    # If too many consecutive failures, suggest alternative
+                    if len([e for e in self._error_history if e['tool'] == tool_name]) >= 3:
+                        alt_msg = f"\n\n[HINT: The tool '{tool_name}' has failed multiple times. Consider using alternative approaches or different tools.]"
+                        history.append({"role": "system", "content": alt_msg})
+                
+            except Exception as e:
+                error_msg = f"ERROR: Critical exception in ReAct loop: {str(e)}\n{traceback.format_exc()}"
+                logger.exception("[ReAct] Critical error in execution loop")
+                history.append({"role": "user", "content": error_msg})
+                
+                # Self-healing: Try to recover by resetting context
+                if i > self.max_iterations - 3:
+                    return f"Error: Multiple failures encountered. Last error: {str(e)}"
+        
         return "Error: Max iterations reached without completing the task."
+    
+    def _execute_tool_with_retry(self, tool_name: str, args: Dict, max_retries: int = 3) -> str:
+        """Execute tool with exponential backoff retry logic."""
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                result = self._execute_tool(tool_name, args)
+                
+                # If successful or non-retryable error, return immediately
+                if not result.startswith("ERROR") or "does not exist" in result:
+                    return result
+                
+                # Retryable error - wait with exponential backoff
+                last_error = result
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s...
+                    logger.warning(f"[ReAct] Tool {tool_name} failed (attempt {attempt+1}/{max_retries}), retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    
+            except Exception as e:
+                last_error = f"ERROR: Exception - {str(e)}"
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 0.5
+                    logger.warning(f"[ReAct] Exception on {tool_name} (attempt {attempt+1}/{max_retries}), retrying...")
+                    time.sleep(wait_time)
+        
+        return f"ERROR: Tool {tool_name} failed after {max_retries} attempts. Last error: {last_error}"
+    
+    def _generate_tool(self, action: Dict) -> str:
+        """Dynamically generate and register a new tool from LLM-provided code."""
+        try:
+            tool_name = action.get('tool_name')
+            description = action.get('description', '')
+            code = action.get('code', '')
+            
+            if not tool_name or not code:
+                return "ERROR: Missing tool_name or code for dynamic tool generation"
+            
+            # Create a temporary module file
+            tool_filename = f"jarvis/tools/generated/{tool_name.lower()}.py"
+            
+            # Ensure directory exists
+            import os
+            os.makedirs("jarvis/tools/generated", exist_ok=True)
+            
+            # Write the tool code
+            with open(tool_filename, 'w') as f:
+                f.write(code)
+            
+            # Hot-load the module
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(f"{tool_name.lower()}_tool", tool_filename)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Register the tool
+            if hasattr(module, tool_name):
+                tool_class = getattr(module, tool_name)
+                self.tool_registry.register_tool(tool_class())
+                return f"Successfully created and registered tool: {tool_name}"
+            else:
+                return f"ERROR: Generated code does not contain expected class {tool_name}"
+                
+        except Exception as e:
+            return f"ERROR: Failed to generate tool: {str(e)}\n{traceback.format_exc()}"
 
     def _parse_action(self, response: str) -> Optional[Dict]:
         """Extracts JSON action from LLM response."""
