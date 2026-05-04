@@ -26,6 +26,7 @@ REQUIRED_PARAMETERS = {
     'click_element': ['selector'],
     'search_web': ['query'],
     'open_app': ['app_name'],
+    'close_app': ['app_name'],
     'press_key': ['key'],
     'type_text': ['text'],
     'focus_window': ['title'],
