@@ -238,8 +238,10 @@ class PressKeyTool(BaseTool):
             # Use PowerShell WScript.Shell for special keys
             # Extended key map including calculator symbols
             key_map = {
-                "win": "{LWIN}",
-                "windows": "{LWIN}",
+                "win": "#",
+                "windows": "#",
+                "lwin": "#",
+                "rwin": "#",
                 "alt": "%",
                 "ctrl": "^",
                 "shift": "+",
@@ -291,15 +293,15 @@ class PressKeyTool(BaseTool):
                 $shell = New-Object -ComObject WScript.Shell
                 $shell.SendKeys("{+}")
                 """
-            elif len(parts) > 1 and parts[0].strip() in ["ctrl", "alt", "shift", "win"]:
-                # It's a modifier combination like "ctrl+c"
+            elif len(parts) > 1 and parts[0].strip() in ["ctrl", "alt", "shift", "win", "windows", "lwin", "rwin"]:
+                # It's a modifier combination like "ctrl+c" or "win+d"
                 ps_keys = []
                 for i, part in enumerate(parts):
                     part = part.strip()
                     if part in key_map:
                         mapped = key_map[part]
                         # Modifiers should not be wrapped in braces when combined
-                        if part in ["ctrl", "alt", "shift", "win"]:
+                        if part in ["ctrl", "alt", "shift", "win", "windows", "lwin", "rwin"]:
                             ps_keys.append(mapped)
                         else:
                             ps_keys.append(f"{mapped}")
@@ -322,7 +324,7 @@ class PressKeyTool(BaseTool):
                         processed_parts.append(key_map[part])
                     elif len(part) == 1:
                         # Single character - escape if special in SendKeys
-                        if part in "+^%~(){}[]":
+                        if part in "+^%~(){{}}[]":
                             processed_parts.append("{" + part + "}")
                         else:
                             processed_parts.append(part)
