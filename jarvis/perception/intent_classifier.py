@@ -42,7 +42,7 @@ class IntentClassifier:
             'download', 'upload', 'extract', 'compress',
             
             # Text input (including specific text content phrases)
-            'write', 'input', 'enter text', 'paste text',
+            'write', 'input', 'enter text', 'paste text', 'clear text', 'delete text',
             'good morning', 'good afternoon', 'good evening', 'hello world',
             
             # Search & Navigation
@@ -213,10 +213,11 @@ class IntentClassifier:
         # Check for imperative verbs at start (action words)
         imperative_verbs = ['open', 'close', 'get', 'find', 'show', 'make', 
                            'create', 'delete', 'run', 'execute', 'click', 'type',
-                           'search', 'check', 'verify', 'launch', 'start', 'stop']
+                           'search', 'check', 'verify', 'launch', 'start', 'stop',
+                           'write', 'clear', 'input', 'paste']
         words = input_lower.split()
         if words and words[0] in imperative_verbs:
-            agent_score += 2
+            agent_score += 3  # Higher weight for clear command structure
         
         # Check for "i want" pattern (indicates request)
         if input_lower.startswith('i want') or input_lower.startswith('i need'):
@@ -235,16 +236,17 @@ class IntentClassifier:
         # Calculate confidence
         total = agent_score + chat_score
         if total == 0:
-            # Default to chat for ambiguous input
+            # Default to agent for ambiguous input (safer for task execution)
             return {
-                'mode': 'chat',
-                'confidence': 0.5,
-                'reasoning': 'No strong indicators, defaulting to chat mode',
-                'requires_action': False
+                'mode': 'agent',
+                'confidence': 0.6,
+                'reasoning': 'No strong indicators, defaulting to agent mode for safety',
+                'requires_action': True
             }
         
-        if agent_score > chat_score:
-            confidence = min(0.5 + (agent_score - chat_score) * 0.15, 0.95)
+        # Lower threshold for agent mode - prefer executing over chatting
+        if agent_score >= chat_score:
+            confidence = min(0.5 + (agent_score - chat_score) * 0.15 + 0.2, 0.98)
             return {
                 'mode': 'agent',
                 'confidence': confidence,
