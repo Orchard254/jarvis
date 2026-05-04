@@ -1,0 +1,280 @@
+{
+  "sessions": [
+    {
+      "session_id": "20260501_145530",
+      "filename": "session_20260501_145530.json",
+      "created_at": "2026-05-01T14:55:30.211307",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_150839",
+      "filename": "session_20260501_150839.json",
+      "created_at": "2026-05-01T15:08:39.308072",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_150856",
+      "filename": "session_20260501_150856.json",
+      "created_at": "2026-05-01T15:08:56.935398",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_150910",
+      "filename": "session_20260501_150910.json",
+      "created_at": "2026-05-01T15:09:10.390409",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_150935",
+      "filename": "session_20260501_150935.json",
+      "created_at": "2026-05-01T15:09:35.988269",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_152016",
+      "filename": "session_20260501_152016.json",
+      "created_at": "2026-05-01T15:20:16.711744",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_173252",
+      "filename": "session_20260501_173252.json",
+      "created_at": "2026-05-01T17:32:52.426383",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260501_212549",
+      "filename": "session_20260501_212549.json",
+      "created_at": "2026-05-01T21:25:49.774348",
+      "message_count": 1,
+      "first_message_preview": "Bye"
+    },
+    {
+      "session_id": "20260501_212624",
+      "filename": "session_20260501_212624.json",
+      "created_at": "2026-05-01T21:26:24.515563",
+      "message_count": 1,
+      "first_message_preview": "Bye"
+    },
+    {
+      "session_id": "20260501_212654",
+      "filename": "session_20260501_212654.json",
+      "created_at": "2026-05-01T21:26:54.041953",
+      "message_count": 1,
+      "first_message_preview": "Bye"
+    },
+    {
+      "session_id": "20260501_212704",
+      "filename": "session_20260501_212704.json",
+      "created_at": "2026-05-01T21:27:04.378760",
+      "message_count": 1,
+      "first_message_preview": "Bye"
+    },
+    {
+      "session_id": "20260501_212720",
+      "filename": "session_20260501_212720.json",
+      "created_at": "2026-05-01T21:27:20.882222",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213107",
+      "filename": "session_20260501_213107.json",
+      "created_at": "2026-05-01T21:31:07.995007",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213121",
+      "filename": "session_20260501_213121.json",
+      "created_at": "2026-05-01T21:31:21.481813",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213245",
+      "filename": "session_20260501_213245.json",
+      "created_at": "2026-05-01T21:32:45.600469",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213308",
+      "filename": "session_20260501_213308.json",
+      "created_at": "2026-05-01T21:33:08.876637",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213506",
+      "filename": "session_20260501_213506.json",
+      "created_at": "2026-05-01T21:35:06.340827",
+      "message_count": 2,
+      "first_message_preview": "Get user preference"
+    },
+    {
+      "session_id": "20260501_213550",
+      "filename": "session_20260501_213550.json",
+      "created_at": "2026-05-01T21:35:50.856159",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260501_213556",
+      "filename": "session_20260501_213556.json",
+      "created_at": "2026-05-01T21:35:56.394137",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260501_213606",
+      "filename": "session_20260501_213606.json",
+      "created_at": "2026-05-01T21:36:06.935947",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260501_215639",
+      "filename": "session_20260501_215639.json",
+      "created_at": "2026-05-01T21:56:39.711687",
+      "message_count": 2,
+      "first_message_preview": "What time is it?"
+    },
+    {
+      "session_id": "20260502_063625",
+      "filename": "session_20260502_063625.json",
+      "created_at": "2026-05-02T06:36:25.167360",
+      "message_count": 4,
+      "first_message_preview": "Remember that I like coffee"
+    },
+    {
+      "session_id": "20260502_153724",
+      "filename": "session_20260502_153724.json",
+      "created_at": "2026-05-02T15:37:24.520016",
+      "message_count": 1,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_155404",
+      "filename": "session_20260502_155404.json",
+      "created_at": "2026-05-02T15:54:04.702523",
+      "message_count": 1,
+      "first_message_preview": "list files"
+    },
+    {
+      "session_id": "20260502_161001",
+      "filename": "session_20260502_161001.json",
+      "created_at": "2026-05-02T16:10:01.900161",
+      "message_count": 1,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_161023",
+      "filename": "session_20260502_161023.json",
+      "created_at": "2026-05-02T16:10:23.002480",
+      "message_count": 1,
+      "first_message_preview": "what is 2+2"
+    },
+    {
+      "session_id": "20260502_161142",
+      "filename": "session_20260502_161142.json",
+      "created_at": "2026-05-02T16:11:42.787084",
+      "message_count": 2,
+      "first_message_preview": "system info"
+    },
+    {
+      "session_id": "20260502_161146",
+      "filename": "session_20260502_161146.json",
+      "created_at": "2026-05-02T16:11:46.087175",
+      "message_count": 2,
+      "first_message_preview": "system info"
+    },
+    {
+      "session_id": "20260502_184117",
+      "filename": "session_20260502_184117.json",
+      "created_at": "2026-05-02T18:41:17.418357",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185008",
+      "filename": "session_20260502_185008.json",
+      "created_at": "2026-05-02T18:50:08.866857",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185013",
+      "filename": "session_20260502_185013.json",
+      "created_at": "2026-05-02T18:50:13.630362",
+      "message_count": 2,
+      "first_message_preview": "what is 2+2"
+    },
+    {
+      "session_id": "20260502_185017",
+      "filename": "session_20260502_185017.json",
+      "created_at": "2026-05-02T18:50:17.924597",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_185126",
+      "filename": "session_20260502_185126.json",
+      "created_at": "2026-05-02T18:51:26.025967",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_200438",
+      "filename": "session_20260502_200438.json",
+      "created_at": "2026-05-02T20:04:38.723585",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260502_200527",
+      "filename": "session_20260502_200527.json",
+      "created_at": "2026-05-02T20:05:27.327137",
+      "message_count": 2,
+      "first_message_preview": "hello"
+    },
+    {
+      "session_id": "20260503_084643",
+      "filename": "session_20260503_084643.json",
+      "created_at": "2026-05-03T08:46:43.025318",
+      "message_count": 1,
+      "first_message_preview": "check system info and save it to a note"
+    },
+    {
+      "session_id": "20260503_112539",
+      "filename": "session_20260503_112539.json",
+      "created_at": "2026-05-03T11:25:39.258432",
+      "message_count": 1,
+      "first_message_preview": "open notepad"
+    },
+    {
+      "session_id": "20260503_112654",
+      "filename": "session_20260503_112654.json",
+      "created_at": "2026-05-03T11:26:54.004243",
+      "message_count": 1,
+      "first_message_preview": "open notepad"
+    },
+    {
+      "session_id": "20260503_112719",
+      "filename": "session_20260503_112719.json",
+      "created_at": "2026-05-03T11:27:19.207165",
+      "message_count": 2,
+      "first_message_preview": "open notepad"
+    }
+  ],
+  "total_sessions": 39,
+  "created_at": "2026-05-01T14:55:25.708878",
+  "updated_at": "2026-05-03T11:27:19.207429"
+}

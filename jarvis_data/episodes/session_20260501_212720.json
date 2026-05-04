@@ -1,0 +1,28 @@
+{
+  "session_id": "20260501_212720",
+  "created_at": "2026-05-01T21:27:20.882222",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Get user preference"
+    },
+    {
+      "role": "assistant",
+      "content": "Actions: [{'tool': 'ask_user', 'result': 'coffee'}]\nOutcome: User prefers coffee"
+    }
+  ],
+  "metadata": {
+    "goal": "Get user preference",
+    "actions": [
+      {
+        "tool": "ask_user",
+        "result": "coffee"
+      }
+    ],
+    "outcome": "User prefers coffee",
+    "success": true
+  },
+  "message_count": 2,
+  "first_message": "Get user preference",
+  "last_message": "Actions: [{'tool': 'ask_user', 'result': 'coffee'}]\nOutcome: User prefers coffee"
+}

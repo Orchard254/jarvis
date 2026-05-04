@@ -1,0 +1,471 @@
+{
+  "procedures": {
+    "successful_pattern_3789": {
+      "name": "successful_pattern_3789",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T15:09:10.232664",
+      "usage_count": 0
+    },
+    "successful_pattern_4791": {
+      "name": "successful_pattern_4791",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T15:09:35.911835",
+      "usage_count": 0
+    },
+    "successful_pattern_8732": {
+      "name": "successful_pattern_8732",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T15:20:16.629781",
+      "usage_count": 0
+    },
+    "successful_pattern_3901": {
+      "name": "successful_pattern_3901",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T17:32:52.366703",
+      "usage_count": 0
+    },
+    "successful_pattern_1205": {
+      "name": "successful_pattern_1205",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:27:20.893703",
+      "usage_count": 0
+    },
+    "successful_pattern_1721": {
+      "name": "successful_pattern_1721",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:31:07.995576",
+      "usage_count": 0
+    },
+    "successful_pattern_9292": {
+      "name": "successful_pattern_9292",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:31:21.482334",
+      "usage_count": 0
+    },
+    "successful_pattern_5251": {
+      "name": "successful_pattern_5251",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:32:45.601230",
+      "usage_count": 0
+    },
+    "successful_pattern_2050": {
+      "name": "successful_pattern_2050",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:33:08.877180",
+      "usage_count": 0
+    },
+    "successful_pattern_1942": {
+      "name": "successful_pattern_1942",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:06.341258",
+      "usage_count": 0
+    },
+    "successful_pattern_8399": {
+      "name": "successful_pattern_8399",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:50.854011",
+      "usage_count": 0
+    },
+    "successful_pattern_1287": {
+      "name": "successful_pattern_1287",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:35:56.380849",
+      "usage_count": 0
+    },
+    "successful_pattern_8718": {
+      "name": "successful_pattern_8718",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:36:06.933757",
+      "usage_count": 0
+    },
+    "successful_pattern_515": {
+      "name": "successful_pattern_515",
+      "steps": [
+        {
+          "goal_pattern": "What time is it?",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-01T21:56:39.712151",
+      "usage_count": 0
+    },
+    "successful_pattern_2864": {
+      "name": "successful_pattern_2864",
+      "steps": [
+        {
+          "goal_pattern": "Get user preference",
+          "action_sequence": [
+            "ask_user"
+          ],
+          "full_actions": [
+            {
+              "tool": "ask_user",
+              "result": "coffee"
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T06:36:25.165666",
+      "usage_count": 0
+    },
+    "successful_pattern_9649": {
+      "name": "successful_pattern_9649",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T18:41:17.417242",
+      "usage_count": 0
+    },
+    "successful_pattern_87": {
+      "name": "successful_pattern_87",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T18:50:08.865718",
+      "usage_count": 0
+    },
+    "successful_pattern_6390": {
+      "name": "successful_pattern_6390",
+      "steps": [
+        {
+          "goal_pattern": "what is 2+2",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T18:50:13.628500",
+      "usage_count": 0
+    },
+    "successful_pattern_1780": {
+      "name": "successful_pattern_1780",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T18:50:17.923187",
+      "usage_count": 0
+    },
+    "successful_pattern_1689": {
+      "name": "successful_pattern_1689",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T18:51:26.024753",
+      "usage_count": 0
+    },
+    "successful_pattern_7659": {
+      "name": "successful_pattern_7659",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T20:04:38.722352",
+      "usage_count": 0
+    },
+    "successful_pattern_258": {
+      "name": "successful_pattern_258",
+      "steps": [
+        {
+          "goal_pattern": "hello",
+          "action_sequence": [],
+          "full_actions": [],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-02T20:05:27.324306",
+      "usage_count": 0
+    },
+    "successful_pattern_5040": {
+      "name": "successful_pattern_5040",
+      "steps": [
+        {
+          "goal_pattern": "check system info and save it to a note",
+          "action_sequence": [
+            "unknown",
+            "unknown"
+          ],
+          "full_actions": [
+            {
+              "step": {
+                "id": "step_1",
+                "tool_or_skill": "system_info",
+                "params": {
+                  "type": "all"
+                },
+                "depends_on": [],
+                "success_criteria": "system_info returns a complete system information object without error",
+                "fallback_strategy": "retry the call once; if it still fails, fall back to using system_health to gather partial info",
+                "parallelizable": true
+              },
+              "result": {
+                "success": true,
+                "output": "CPU: 2.0% usage, 2 cores, 2500MHz | RAM: 41.1% used (0.6GB free of 1.0GB) | Disk: 14.7% used (0.4GB free of 0.5GB) | Battery: N/A (no sensor available)",
+                "error": "",
+                "exit_code": 0,
+                "verified": false,
+                "verify_msg": ""
+              },
+              "validated": true
+            },
+            {
+              "step": {
+                "id": "step_2",
+                "tool_or_skill": "create_note",
+                "params": {
+                  "content": "{{step_1.output}}",
+                  "title": "System Info"
+                },
+                "depends_on": [
+                  "step_1"
+                ],
+                "success_criteria": "A note titled \"System Info\" is created and can be retrieved with read_notes",
+                "fallback_strategy": "retry the creation; if it fails again, truncate the content to the most recent 500 characters and retry",
+                "parallelizable": false
+              },
+              "result": {
+                "success": true,
+                "output": "Note created: 'System Info'",
+                "error": "",
+                "exit_code": 0,
+                "verified": false,
+                "verify_msg": ""
+              },
+              "validated": true
+            }
+          ],
+          "success_count": 1
+        }
+      ],
+      "context": "",
+      "success_rate": 1.0,
+      "created_at": "2026-05-03T08:46:43.023928",
+      "usage_count": 0
+    }
+  },
+  "updated_at": "2026-05-03T08:46:43.023935"
+}

@@ -1,0 +1,16 @@
+{
+  "session_id": "20260501_212704",
+  "created_at": "2026-05-01T21:27:04.378760",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bye"
+    }
+  ],
+  "metadata": {
+    "summary": "Test session completed"
+  },
+  "message_count": 1,
+  "first_message": "Bye",
+  "last_message": "Bye"
+}
