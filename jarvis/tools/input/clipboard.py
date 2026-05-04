@@ -360,6 +360,70 @@ class TypeTextTool(BaseTool):
         return "medium"  # Can trigger unintended actions
 
 
+class ClearTextTool(BaseTool):
+    """Clear all text in the active window (e.g., Notepad)."""
+    
+    name = "clear_text"
+    description = "Clear all text content in the currently active window. Works by selecting all text (Ctrl+A) and deleting it. Use for clearing text editors like Notepad, text fields, or documents."
+    parameters = {
+        "target_app": {
+            "type": "string",
+            "description": "Optional: Name of the application whose text should be cleared (e.g., 'notepad', 'wordpad'). If provided, ensures this app is active before clearing.",
+        },
+    }
+    required_parameters = []
+    
+    def validate(self, **kwargs) -> tuple[bool, str]:
+        return True, ""
+    
+    def execute(self, **kwargs) -> ToolResult:
+        target_app = kwargs.get("target_app")
+        
+        # Ensure the target application is active if specified
+        if target_app:
+            success, message = ensure_window_active(target_app, target_app)
+            if not success:
+                log.warning(f"Target app {target_app} not active: {message}")
+                return ToolResult.fail(error=f"Cannot clear text: {target_app} is not active. {message}")
+            log.info(f"Verified {target_app} is active before clearing text")
+        
+        try:
+            import subprocess
+            
+            # Use PowerShell to send Ctrl+A then Delete in sequence
+            script = """
+            $shell = New-Object -ComObject WScript.Shell
+            # Select all
+            $shell.SendKeys("^a")
+            Start-Sleep -Milliseconds 100
+            # Delete selected text
+            $shell.SendKeys("{DELETE}")
+            """
+            
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            
+            if result.returncode == 0:
+                app_info = f" in {target_app}" if target_app else ""
+                return ToolResult.ok(f"Cleared all text{app_info}")
+            else:
+                return ToolResult.fail(error=f"Clear text failed: {result.stderr}")
+                
+        except Exception as e:
+            log.error(f"Clear text failed: {e}")
+            return ToolResult.fail(error=f"Clear text failed: {e}")
+    
+    def estimate_duration(self, **kwargs) -> float:
+        return 0.5
+    
+    def risk_level(self) -> str:
+        return "medium"  # Can delete unintended content
+
+
 class PressKeyTool(BaseTool):
     """Press a keyboard key or key combination."""
     
@@ -528,5 +592,6 @@ CLIPBOARD_TOOLS = [
     CopyToClipboardTool,
     PasteFromClipboardTool,
     TypeTextTool,
+    ClearTextTool,
     PressKeyTool,
 ]
