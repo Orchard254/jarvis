@@ -487,7 +487,7 @@ class Orchestrator:
                 details={
                     'command': command,
                     'mode': self.mode,
-                    'intent': intent,
+                    'intent': intent_analysis,
                     'result': result.get('success', False),
                     'duration_ms': int((time.time() - start_time) * 1000)
                 }
