@@ -21,6 +21,7 @@ from jarvis.core.memory import CoreMemory
 from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.core.react_agent import ReActAgent
+from jarvis.core.predictive_planner import PredictivePlanner
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
 from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
@@ -151,9 +152,6 @@ class Orchestrator:
         
         # Predictive Planner - uses LLM's internal knowledge for fast execution
         self.predictive_planner = PredictivePlanner(self.brain)
-        
-        # Adaptive Memory - learns from user interactions over time
-        self.adaptive_memory = AdaptiveMemory()
         
         # Perception
         self.intent_classifier = IntentClassifier(self.brain.client)
@@ -518,15 +516,10 @@ class Orchestrator:
         # Clear abort flag for new task
         self.clear_abort()
         
-        # Retrieve relevant memories and adaptive learnings
+        # Retrieve relevant memories
         context = self.memory.retrieve_context(query=command)
         memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
         logger.debug(f"Retrieved {len(memories)} relevant memories")
-        
-        # Check adaptive memory for known patterns
-        learning_summary = self.adaptive_memory.get_learning_summary()
-        if learning_summary['successful_patterns_count'] > 0:
-            logger.info(f"Adaptive memory has {learning_summary['successful_patterns_count']} learned patterns")
         
         # Select reasoning strategy
         classification = self.strategy_selector.classify(command)
@@ -554,22 +547,6 @@ class Orchestrator:
                 
                 # Execute the plan directly
                 result = self.predictive_planner.execute_plan(plan, self.tool_registry)
-                
-                # Record outcome in adaptive memory
-                if result['success']:
-                    self.adaptive_memory.record_success(
-                        intent=plan.get('intent', 'unknown'),
-                        steps=plan.get('steps', []),
-                    )
-                else:
-                    # Record failures to avoid repetition
-                    for step_result in result.get('results', []):
-                        if not step_result.get('success'):
-                            self.adaptive_memory.record_failure(
-                                intent=plan.get('intent', 'unknown'),
-                                failed_step={'tool': step_result.get('tool'), 'params': {}},
-                                error=step_result.get('error', 'Unknown error')
-                            )
                 
                 return {
                     'success': result['success'],
