@@ -186,14 +186,62 @@ class TypeTextTool(BaseTool):
         delay = kwargs.get("delay", 0.05)
         
         try:
+            # Try to use pyautogui for reliable keyboard input
+            try:
+                import pyautogui
+                pyautogui.FAILSAFE = True
+                pyautogui.PAUSE = delay
+                pyautogui.write(text, interval=delay)
+                log.info(f"Typed {len(text)} characters using pyautogui")
+                return ToolResult.ok(f"Typed {len(text)} characters")
+            except ImportError:
+                log.debug("pyautogui not available, falling back to ctypes")
+            except Exception as e:
+                log.warning(f"pyautogui failed: {e}, falling back to ctypes")
+            
+            # Fallback: Use ctypes with proper scan codes
             import ctypes
             
+            # Map for special characters that need shift
+            shift_chars = {
+                '!': ('1', True), '@': ('2', True), '#': ('3', True),
+                '$': ('4', True), '%': ('5', True), '^': ('6', True),
+                '&': ('7', True), '*': ('8', True), '(': ('9', True),
+                ')': ('0', True), '_': ('-', True), '+': ('=', True),
+                '{': ('[', True), '}': (']', True), '|': ('\\', True),
+                ':': (';', True), '"': ("'", True), '<': (',', True),
+                '>': ('.', True), '?': ('/', True), '~': ('`', True),
+            }
+            
+            VK_SHIFT = 0x10
+            
             for char in text:
-                # Send character via keybd_event
-                # This is a simplified approach - production should use proper scan codes
-                ctypes.windll.user32.keybd_event(ord(char.upper()), 0, 0, 0)
-                time.sleep(delay)
-                ctypes.windll.user32.keybd_event(ord(char.upper()), 0, 0x0002, 0)
+                if char in shift_chars:
+                    base_char, needs_shift = shift_chars[char]
+                    # Press shift
+                    ctypes.windll.user32.keybd_event(VK_SHIFT, 0, 0, 0)
+                    time.sleep(delay / 2)
+                    # Press base character
+                    ctypes.windll.user32.keybd_event(ord(base_char.upper()), 0, 0, 0)
+                    time.sleep(delay)
+                    ctypes.windll.user32.keybd_event(ord(base_char.upper()), 0, 0x0002, 0)
+                    time.sleep(delay / 2)
+                    # Release shift
+                    ctypes.windll.user32.keybd_event(VK_SHIFT, 0, 0x0002, 0)
+                elif char.isupper():
+                    # Uppercase letters need shift
+                    ctypes.windll.user32.keybd_event(VK_SHIFT, 0, 0, 0)
+                    time.sleep(delay / 2)
+                    ctypes.windll.user32.keybd_event(ord(char), 0, 0, 0)
+                    time.sleep(delay)
+                    ctypes.windll.user32.keybd_event(ord(char), 0, 0x0002, 0)
+                    time.sleep(delay / 2)
+                    ctypes.windll.user32.keybd_event(VK_SHIFT, 0, 0x0002, 0)
+                else:
+                    # Regular characters
+                    ctypes.windll.user32.keybd_event(ord(char.upper()), 0, 0, 0)
+                    time.sleep(delay)
+                    ctypes.windll.user32.keybd_event(ord(char.upper()), 0, 0x0002, 0)
             
             return ToolResult.ok(f"Typed {len(text)} characters")
             
