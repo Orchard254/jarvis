@@ -149,6 +149,12 @@ class Orchestrator:
             vault=self.vault
         )
         
+        # Predictive Planner - uses LLM's internal knowledge for fast execution
+        self.predictive_planner = PredictivePlanner(self.brain)
+        
+        # Adaptive Memory - learns from user interactions over time
+        self.adaptive_memory = AdaptiveMemory()
+        
         # Perception
         self.intent_classifier = IntentClassifier(self.brain.client)
         self.vision_analyzer = VisionAnalyzer(self.brain.client)
@@ -497,28 +503,32 @@ class Orchestrator:
     
     def _handle_agent_mode(self, command: str) -> Dict[str, Any]:
         """
-        Handle agent mode - full reasoning and tool execution.
+        Handle agent mode with predictive execution.
         
-        Implements the full pipeline:
-        retrieve memories → select strategy → plan if complex → critic review → execute → reflect → store → respond
+        NEW APPROACH:
+        1. Use LLM's internal knowledge to PREDICT the exact steps needed
+        2. Generate a direct execution plan (no searching for known URLs)
+        3. Execute immediately with high confidence
+        4. Learn from outcomes to improve future predictions
         
-        Args:
-            command: User command
-            
-        Returns:
-            Response dict
+        This eliminates wasteful ReAct loops for common tasks.
         """
         logger.info(f"Handling in agent mode: {command[:50]}...")
         
         # Clear abort flag for new task
         self.clear_abort()
         
-        # Retrieve relevant memories
+        # Retrieve relevant memories and adaptive learnings
         context = self.memory.retrieve_context(query=command)
         memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
         logger.debug(f"Retrieved {len(memories)} relevant memories")
         
-        # Select reasoning strategy based on task complexity
+        # Check adaptive memory for known patterns
+        learning_summary = self.adaptive_memory.get_learning_summary()
+        if learning_summary['successful_patterns_count'] > 0:
+            logger.info(f"Adaptive memory has {learning_summary['successful_patterns_count']} learned patterns")
+        
+        # Select reasoning strategy
         classification = self.strategy_selector.classify(command)
         strategy = self._map_complexity_to_strategy(classification.complexity)
         logger.info(f"Selected strategy: {strategy} (complexity: {classification.complexity.value})")
@@ -528,9 +538,53 @@ class Orchestrator:
         # Track consecutive failures
         task_key = hash(command) % 10000
         
-        # Simple direct execution for straightforward commands (trivial/simple tasks)
+        # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution
+        # This bypasses ReAct loops for tasks where the LLM already knows the answer
+        if strategy in ['direct', 'plan']:
+            logger.info(f"[Predictive] Using LLM's internal knowledge for direct execution...")
+            
+            # Generate predictive plan using LLM's world knowledge
+            tools_dict = {name: {'description': getattr(tool, 'description', '')} 
+                         for name, tool in self.tool_registry.get_all_tools().items()}
+            
+            plan = self.predictive_planner.generate_plan(command, tools_dict)
+            
+            if plan and plan.get('steps'):
+                logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
+                
+                # Execute the plan directly
+                result = self.predictive_planner.execute_plan(plan, self.tool_registry)
+                
+                # Record outcome in adaptive memory
+                if result['success']:
+                    self.adaptive_memory.record_success(
+                        intent=plan.get('intent', 'unknown'),
+                        steps=plan.get('steps', []),
+                    )
+                else:
+                    # Record failures to avoid repetition
+                    for step_result in result.get('results', []):
+                        if not step_result.get('success'):
+                            self.adaptive_memory.record_failure(
+                                intent=plan.get('intent', 'unknown'),
+                                failed_step={'tool': step_result.get('tool'), 'params': {}},
+                                error=step_result.get('error', 'Unknown error')
+                            )
+                
+                return {
+                    'success': result['success'],
+                    'response': result.get('summary', ''),
+                    'mode': 'predictive',
+                    'strategy': 'predictive',
+                    'actions': plan.get('steps', []),
+                    'iterations': len(plan.get('steps', []))
+                }
+            
+            # Fallback to ReAct if predictive planning fails
+            logger.warning("Predictive planning failed, falling back to ReAct agent...")
+        
+        # Traditional ReAct agent fallback
         if strategy == 'direct':
-            # Use ReAct agent for better multi-step handling even in simple tasks
             logger.info(f"[ReAct] Using autonomous agent mode for: {command[:50]}...")
             react_result = self.react_agent.execute(command, context=memories)
             result = {
