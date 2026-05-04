@@ -99,7 +99,8 @@ Do not output any text outside the JSON block when acting.
                 response = self.brain.chat(
                     messages=history, 
                     system_prompt=self.system_prompt,
-                    temperature=0.0  # Low temp for deterministic tool calls
+                    temperature=0.0,  # Low temp for deterministic tool calls
+                    include_tools=True  # Enable tool calling for ReAct agent
                 )
                 
                 # 2. ACT: Parse the tool call
