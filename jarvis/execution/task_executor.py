@@ -163,10 +163,13 @@ class TaskExecutor:
         recent_actions = self._action_history[-10:]
         
         for action in recent_actions:
+            # Only flag as duplicate if the previous action FAILED
+            # Success actions should not block retries (user may want to reopen an app they closed)
             if (action["tool_name"] == tool_name and 
                 action["parameters"] == parameters and
-                current_time - action["timestamp"] < 60):  # Within last minute
-                logger.warning(f"Duplicate action detected: {tool_name} with same parameters")
+                current_time - action["timestamp"] < 60 and  # Within last minute
+                not action["success"]):  # Only block if previous attempt failed
+                logger.warning(f"Duplicate action detected: {tool_name} with same parameters (previous attempt failed)")
                 return True
         
         return False

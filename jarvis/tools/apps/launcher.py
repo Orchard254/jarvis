@@ -44,7 +44,7 @@ class OpenAppTool(BaseTool):
     """Open an application."""
     
     name = "open_app"
-    description = "Open an application by name. Common apps: chrome, notepad, calculator, word, excel, edge, vscode, spotify."
+    description = "Open an application by name. If the app is already running, it will be brought to the foreground automatically. Common apps: chrome, notepad, calculator, word, excel, edge, vscode, spotify."
     parameters = {
         "app_name": {
             "type": "string",
@@ -70,6 +70,7 @@ class OpenAppTool(BaseTool):
             for proc in psutil.process_iter(["name"]):
                 if executable.lower() in proc.info["name"].lower():
                     log.info(f"{app_name} is already running")
+                    
                     # For Chrome, check if debug port is enabled
                     if app_name in ["chrome", "google chrome"]:
                         try:
@@ -79,8 +80,14 @@ class OpenAppTool(BaseTool):
                                 for part in cmdline.split():
                                     if part.startswith('--remote-debugging-port='):
                                         port = part.split('=')[1]
-                                        return ToolResult.ok(f"{app_name} is already running with automation support (debug port {port})")
-                                return ToolResult.ok(f"{app_name} is already running with automation support")
+                                        # Bring Chrome to foreground
+                                        from .window import find_window_by_title, bring_to_foreground
+                                        hwnd = find_window_by_title("Chrome") or find_window_by_title("Google Chrome")
+                                        if hwnd:
+                                            bring_to_foreground(hwnd)
+                                            return ToolResult.ok(f"Brought Chrome to foreground (already running with debug port {port})")
+                                        return ToolResult.ok(f"Chrome is already running with automation support (debug port {port})")
+                                return ToolResult.ok(f"Chrome is already running with automation support")
                             else:
                                 log.info("Chrome running without debug port. Launching second instance for automation...")
                                 # Don't kill existing Chrome - launch a second instance with debug port
@@ -107,6 +114,29 @@ class OpenAppTool(BaseTool):
                                     return ToolResult.ok(f"Launched additional Chrome instance for automation (debug port 9222). Your original Chrome session remains unchanged.")
                         except Exception as e:
                             log.warning(f"Error checking Chrome cmdline: {e}")
+                    
+                    # App is running - bring its window to the foreground instead of reopening
+                    from .window import find_window_by_title, bring_to_foreground
+                    
+                    # Try to find a window matching this app
+                    hwnd = find_window_by_title(executable.replace(".exe", ""))
+                    
+                    # If no exact match, try with common title patterns
+                    if hwnd is None:
+                        # Try with app name capitalized
+                        hwnd = find_window_by_title(app_name.capitalize())
+                    
+                    if hwnd is None:
+                        # Try any window from this process
+                        hwnd = find_window_by_title(proc.info["name"].replace(".exe", ""))
+                    
+                    if hwnd is not None:
+                        bring_to_foreground(hwnd)
+                        return ToolResult.ok(f"Brought {app_name} to foreground (was already running)")
+                    else:
+                        # App is running but no visible window found (might be minimized or background)
+                        log.info(f"{app_name} is running but no visible window found")
+                        return ToolResult.ok(f"{app_name} is already running (no visible window to focus)")
                     
                     return ToolResult.ok(f"{app_name} is already running")
             

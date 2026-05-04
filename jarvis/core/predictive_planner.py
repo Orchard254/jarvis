@@ -27,6 +27,8 @@ RULES:
 6. CHECK RECENT RESULTS: Before planning, review recent successful results below. If the answer is already available, respond directly without executing tools.
 7. AVOID FAILED ACTIONS: Review failed actions below. DO NOT retry tools that failed with the same parameters unless the error is clearly resolved.
 8. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
+9. SMART APP HANDLING: When user asks to "open" an app that may already be running, the open_app tool will automatically bring it to foreground. Do NOT add extra focus_window steps - just use open_app once.
+10. NATURAL LANGUAGE UNDERSTANDING: Understand that "open X again", "bring up X", "show X", "focus X" when X is already running should all use open_app tool (which handles focusing automatically).
 
 {context_section}
 AVAILABLE TOOLS:
