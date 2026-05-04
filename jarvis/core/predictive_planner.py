@@ -244,7 +244,24 @@ class PredictivePlanner:
         total_steps = len(results)
         
         if successful_steps == total_steps:
-            return f"Successfully completed '{plan.get('goal')}' in {total_steps} steps."
+            # Extract actual outputs from successful tool executions
+            outputs = []
+            for r in results:
+                if r.get("result"):
+                    result_obj = r["result"]
+                    # Handle ToolResult objects
+                    if hasattr(result_obj, 'output'):
+                        outputs.append(result_obj.output)
+                    elif isinstance(result_obj, dict):
+                        outputs.append(result_obj.get('output', str(result_obj)))
+                    else:
+                        outputs.append(str(result_obj))
+            
+            # If we have actual outputs, include them in the summary
+            if outputs:
+                return ". ".join(outputs)
+            else:
+                return f"Successfully completed '{plan.get('goal')}' in {total_steps} steps."
         else:
             failed_tools = [r["tool"] for r in results if not r["success"]]
             return f"Partially completed '{plan.get('goal')}'. Failed at: {', '.join(failed_tools)}."
