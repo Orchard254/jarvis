@@ -1,0 +1,20 @@
+{
+  "session_id": "20260504_101120",
+  "created_at": "2026-05-04T10:11:20.692359",
+  "messages": [
+    {
+      "role": "user",
+      "content": "open notepad",
+      "timestamp": "2026-05-04T10:11:16.917413",
+      "metadata": {
+        "source": "text"
+      }
+    }
+  ],
+  "metadata": {
+    "summary": "User initiated shutdown"
+  },
+  "message_count": 1,
+  "first_message": "open notepad",
+  "last_message": "open notepad"
+}
