@@ -9,10 +9,6 @@ from typing import Any, Optional
 import logging
 import asyncio
 
-from jarvis.config.config import get_config
-from jarvis.safety.audit_log import AuditLog
-from jarvis.execution.rollback import RollbackAction
-
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +19,7 @@ class ToolResult:
     output: Any = None
     error: Optional[str] = None
     duration_ms: float = 0.0
-    rollback_actions: list[RollbackAction] = field(default_factory=list)
+    rollback_actions: list = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -86,6 +82,12 @@ if __name__ == "__main__":
         result = ToolResult(success=False, error=str(e))
         print(json.dumps({"success": result.success, "output": result.output, "error": result.error}))
         sys.exit(1)
+
+
+# These imports are only needed when used as a module (not subprocess)
+from jarvis.config.config import get_config
+from jarvis.safety.audit_log import AuditLog
+from jarvis.execution.rollback import RollbackAction
 
 
 class ToolRunner:
