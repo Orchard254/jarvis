@@ -35,8 +35,9 @@ class IntentClassifier:
             'create', 'delete', 'move', 'copy', 'rename', 'save', 'load',
             'download', 'upload', 'extract', 'compress',
             
-            # Text input
+            # Text input (including specific text content phrases)
             'write', 'input', 'enter text', 'paste text',
+            'good morning', 'good afternoon', 'good evening', 'hello world',
             
             # Search & Navigation
             'search', 'find', 'locate', 'navigate', 'browse', 'visit', 'go to',
@@ -85,8 +86,8 @@ class IntentClassifier:
             'explain', 'tell me about', 'define', 'describe',
             'what do you think', 'opinion', 'idea', 'your thoughts',
             
-            # Greetings and social
-            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+            # Greetings and social (without time-specific phrases that could be text content)
+            'hello', 'hi', 'hey',
             'how are you', 'how is it going', 'whats up',
             
             # Farewells and thanks
