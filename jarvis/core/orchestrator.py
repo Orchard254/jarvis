@@ -545,19 +545,24 @@ class Orchestrator:
             
             # Get LLM response
             try:
-                llm_response = self.brain.client.chat(
+                llm_response = self.brain.chat(
                     messages=messages,
                     temperature=0.1,  # Low temp for consistent JSON
-                    stream=False
+                    stream=False,
+                    include_tools=False  # Disable tool calling - we handle JSON parsing manually
                 )
                 
-                assistant_message = llm_response.get('message', {}).get('content', '')
+                assistant_message = llm_response.get('content', '')
                 
-                # Validate and parse JSON
-                parsed = self._validate_and_parse_json(assistant_message)
+                # Debug: Log the raw response
+                logger.debug(f"LLM raw response: {assistant_message[:200]}...")
+                
+                # Parse response for tool calls or final answer
+                parsed = self._parse_natural_response(assistant_message)
                 if not parsed:
-                    # Invalid JSON - ask LLM to retry
-                    messages.append({"role": "user", "content": "Invalid JSON format. Please respond with valid JSON using either {\"type\": \"TOOL\", ...} or {\"type\": \"FINAL\", ...}."})
+                    logger.warning(f"Could not parse response: '{assistant_message}' (length: {len(assistant_message)})")
+                    # Could not parse - ask LLM to clarify and remind about single tool rule
+                    messages.append({"role": "user", "content": f"I didn't understand your response: '{assistant_message[:100]}...'. Remember: output ONLY ONE tool call per response using 'TOOL: tool_name(params)' format, or give a final answer. Never multiple tools at once."})
                     continue
                 
                 action_type = parsed.get('type', '').upper()
@@ -569,7 +574,7 @@ class Orchestrator:
                     thought = parsed.get('thought', '')
                     
                     if not tool_name:
-                        messages.append({"role": "user", "content": "Missing 'tool' field in TOOL response. Please specify which tool to call."})
+                        messages.append({"role": "user", "content": "Missing tool name in TOOL response. Please specify which tool to call."})
                         continue
                     
                     # Validate tool exists
@@ -593,12 +598,12 @@ class Orchestrator:
                     messages.append({"role": "assistant", "content": assistant_message})
                     messages.append({
                         "role": "user", 
-                        "content": f"Tool '{tool_name}' returned: {tool_result}. Continue with next step or provide FINAL response."
+                        "content": f"Tool '{tool_name}' returned: {tool_result}. Continue with next step or provide final response."
                     })
                     
                 elif action_type == 'FINAL':
                     # Final response - exit loop
-                    final_response = parsed.get('response', '')
+                    final_response = parsed.get('response', assistant_message)
                     thought = parsed.get('thought', '')
                     
                     logger.info(f"Final response generated after {iteration} iterations")
@@ -618,8 +623,24 @@ class Orchestrator:
                         'iterations': iteration
                     }
                 else:
-                    # Unknown action type
-                    messages.append({"role": "user", "content": f"Unknown action type: '{action_type}'. Must be 'TOOL' or 'FINAL'."})
+                    # Unknown action type or natural response - treat as final
+                    logger.info(f"Treating as final response: {assistant_message[:50]}...")
+                    final_response = assistant_message
+                    
+                    # Learn from successful execution if tools were used
+                    if tool_calls:
+                        self.intent_scorer.learn_from_interaction(command, executed=True)
+                    
+                    # Speak response
+                    self._speak(final_response)
+                    
+                    return {
+                        'success': True,
+                        'response': final_response,
+                        'mode': 'unified',
+                        'actions': tool_calls,
+                        'iterations': iteration
+                    }
                     
             except Exception as e:
                 logger.error(f"LLM iteration error: {e}", exc_info=True)
@@ -647,37 +668,42 @@ class Orchestrator:
         return json.dumps(tools_list[:50])  # Limit to first 50 tools
     
     def _build_single_loop_prompt(self, tools_json: str) -> str:
-        """Build system prompt for strict JSON output."""
-        return f"""You are JARVIS, an AI assistant. You MUST respond with valid JSON ONLY.
+        """Build system prompt for single-loop execution with natural language parsing."""
+        return f"""You are JARVIS, an AI assistant that can use tools to help users.
 
-Every response must be ONE of these two formats:
+CRITICAL: You must ONLY output ONE tool call at a time. Never plan multiple steps.
 
-1. To use a tool:
-{{"type": "TOOL", "tool": "tool_name", "params": {{"param1": "value1"}}, "thought": "why you're calling this tool"}}
+When the user asks something you can handle directly, just respond naturally.
 
-2. To give final answer:
-{{"type": "FINAL", "response": "your text response", "thought": "summary of what was accomplished"}}
+When you need to use a tool, respond with: "TOOL: tool_name(parameters)" 
+For example: "TOOL: open_app(app_name='notepad')"
 
-RULES:
-- ALWAYS output valid JSON - no markdown, no explanations outside JSON
-- Execute tools one at a time - wait for result before next tool
-- Use FINAL when task is complete or for simple chat
-- Keep thoughts concise
-- If user asks something simple (greeting, question), respond with FINAL immediately
+After each tool execution, you'll receive the result and can decide the next single action.
+
+When you're done with tools and ready to respond, give your final answer.
 
 Available tools:
 {tools_json}
 
 Examples:
-User: "hello"
-Assistant: {{"type": "FINAL", "response": "Hello! How can I help you?", "thought": "Simple greeting"}}
+User: hello
+Assistant: Hello! How can I help you today?
 
-User: "open notepad"
-Assistant: {{"type": "TOOL", "tool": "open_app", "params": {{"app_name": "notepad"}}, "thought": "Opening Notepad as requested"}}
-User: Tool 'open_app' returned: Opening notepad
-Assistant: {{"type": "FINAL", "response": "Notepad is now open.", "thought": "Task completed"}}
+User: open notepad
+Assistant: TOOL: open_app(app_name='notepad')
+[Tool result: Opening notepad]
+Assistant: Notepad is now open.
 
-Start now. Respond with valid JSON only."""
+User: what's the current time
+Assistant: TOOL: get_time()
+[Tool result: 3:45 PM]
+Assistant: The current time is 3:45 PM.
+
+RULES:
+- ONE tool call per response
+- Wait for tool result before deciding next action
+- Use FINAL when task is complete
+- Never output multiple TOOL calls in one response"""
     
     def _validate_and_parse_json(self, text: str) -> Optional[Dict]:
         """Validate and parse JSON from LLM response."""
@@ -698,6 +724,83 @@ Start now. Respond with valid JSON only."""
                 return parsed
         except json.JSONDecodeError:
             pass
+        
+        return None
+    
+    def _parse_natural_response(self, text: str) -> Optional[Dict]:
+        """
+        Parse natural language response for tool calls or final answers.
+        
+        CRITICAL: Only allows SINGLE tool calls. Multiple tools in one response are rejected.
+        
+        Looks for patterns like:
+        - "TOOL: tool_name(params)"
+        - JSON format (fallback)
+        - Natural text (treated as final)
+        """
+        import re
+        import json
+        
+        if not text or not text.strip():
+            return None
+        
+        text = text.strip()
+        
+        # Check for multiple TOOL calls (reject if more than one)
+        tool_matches = re.findall(r'TOOL:\s*\w+\s*\([^)]*\)', text, re.IGNORECASE)
+        if len(tool_matches) > 1:
+            logger.warning(f"Multiple tool calls detected in response: {tool_matches}")
+            return None  # Reject multiple tool calls
+        
+        # Check for TOOL: pattern (case insensitive, flexible spacing)
+        tool_match = re.search(r'TOOL:\s*(\w+)\s*\(([^)]*)\)', text, re.IGNORECASE)
+        if tool_match:
+            tool_name = tool_match.group(1)
+            params_str = tool_match.group(2)
+            
+            # Parse parameters
+            params = {}
+            if params_str.strip():
+                # Simple parameter parsing: param1='value1', param2='value2'
+                param_matches = re.findall(r'(\w+)\s*=\s*[\'"]([^\'"]*)[\'"]', params_str)
+                params = {k: v for k, v in param_matches}
+            
+            return {
+                'type': 'TOOL',
+                'tool': tool_name,
+                'params': params,
+                'thought': 'Single tool call from natural language'
+            }
+        
+        # Check for simpler tool patterns like "use tool_name" or "call tool_name"
+        simple_tool_matches = re.findall(r'(?:use|call|run)\s+(\w+)', text, re.IGNORECASE)
+        if len(simple_tool_matches) == 1:  # Only allow exactly one
+            tool_name = simple_tool_matches[0]
+            return {
+                'type': 'TOOL',
+                'tool': tool_name,
+                'params': {},
+                'thought': 'Simple single tool call detected'
+            }
+        elif len(simple_tool_matches) > 1:
+            logger.warning(f"Multiple simple tool calls detected: {simple_tool_matches}")
+            return None  # Reject multiple tool calls
+        
+        # Check for JSON format (backward compatibility)
+        json_parsed = self._validate_and_parse_json(text)
+        if json_parsed:
+            # Also validate JSON doesn't contain multiple tools
+            if json_parsed.get('type') == 'TOOL':
+                # Single tool in JSON is OK
+                return json_parsed
+        
+        # Default: treat as final response if it's not empty
+        if text:
+            return {
+                'type': 'FINAL',
+                'response': text,
+                'thought': 'Natural language response'
+            }
         
         return None
     
