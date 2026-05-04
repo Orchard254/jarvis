@@ -74,16 +74,16 @@ class OpenAppTool(BaseTool):
                     if app_name in ["chrome", "google chrome"]:
                         try:
                             cmdline = ' '.join(proc.cmdline())
-                            if '--remote-debugging-port=' not in cmdline:
-                                log.info("Chrome running without debug port. Restarting with debug enabled...")
-                                # Close existing Chrome and restart with debug port
-                                try:
-                                    proc.terminate()
-                                    proc.wait(timeout=5)
-                                except Exception:
-                                    proc.kill()
-                                
-                                # Launch Chrome with debug port
+                            if '--remote-debugging-port=' in cmdline:
+                                # Extract the port number
+                                for part in cmdline.split():
+                                    if part.startswith('--remote-debugging-port='):
+                                        port = part.split('=')[1]
+                                        return ToolResult.ok(f"{app_name} is already running with automation support (debug port {port})")
+                                return ToolResult.ok(f"{app_name} is already running with automation support")
+                            else:
+                                log.info("Chrome running without debug port. Launching second instance for automation...")
+                                # Don't kill existing Chrome - launch a second instance with debug port
                                 chrome_paths = [
                                     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                                     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -101,9 +101,10 @@ class OpenAppTool(BaseTool):
                                         "--remote-debugging-port=9222",
                                         "--no-first-run",
                                         "--no-default-browser-check",
+                                        "--user-data-dir=" + os.path.join(os.getenv('TEMP', ''), 'jarvis_chrome_profile'),
                                     ]
                                     subprocess.Popen(args)
-                                    return ToolResult.ok(f"Restarted {app_name} with automation support (debug port 9222)")
+                                    return ToolResult.ok(f"Launched additional Chrome instance for automation (debug port 9222). Your original Chrome session remains unchanged.")
                         except Exception as e:
                             log.warning(f"Error checking Chrome cmdline: {e}")
                     
