@@ -551,6 +551,11 @@ class Orchestrator:
                     stream=False
                 )
                 
+                # Check if response is None (LLM failure)
+                if llm_response is None:
+                    logger.error("LLM client returned None - all endpoints unreachable")
+                    raise Exception("LLM service unavailable")
+                
                 assistant_message = llm_response.get('message', {}).get('content', '')
                 
                 # Validate and parse JSON
@@ -623,7 +628,12 @@ class Orchestrator:
                     
             except Exception as e:
                 logger.error(f"LLM iteration error: {e}", exc_info=True)
-                messages.append({"role": "user", "content": f"Error occurred: {str(e)}. Please try again."})
+                # Check if brain.chat returned None due to LLM failure
+                if 'llm_response' in locals() and llm_response is None:
+                    error_msg = "LLM service unavailable. Please check your Ollama connection or API key."
+                else:
+                    error_msg = f"Error occurred: {str(e)}. Please try again."
+                messages.append({"role": "user", "content": error_msg})
         
         # Max iterations reached
         logger.warning(f"Max iterations ({max_iterations}) reached")

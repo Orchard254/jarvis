@@ -128,6 +128,9 @@ class OllamaClient:
                         log.info(f"[OLLAMA] Rate limited. Retrying in {backoff:.1f}s...")
                         time.sleep(backoff)
                     continue
+                elif resp.status_code == 400:  # Bad request - don't retry, this is a model/config issue
+                    log.error(f"[OLLAMA] Bad request (400) from {endpoint_name}: Check model configuration or API compatibility")
+                    break
                 else:
                     break  # Other client error, don't retry
                     

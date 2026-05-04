@@ -191,15 +191,8 @@ class Brain:
             # Stop timer on error
             self._stop_thinking_timer()
             logger.error(f"LLM chat failed: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'content': None,
-                'thinking_sections': [],
-                'thinking_duration': None,
-                'tool_calls': [],
-                'finish_reason': 'error'
-            }
+            # Return None to signal complete failure (not just a failed response)
+            return None
     
     def chat_with_tools(self, user_message: str,
                        system_prompt: Optional[str] = None,
