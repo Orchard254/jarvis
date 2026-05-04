@@ -128,7 +128,8 @@ class Brain:
              system_prompt: Optional[str] = None,
              temperature: float = 0.7,
              max_tokens: int = 2048,
-             stream: bool = False) -> Dict[str, Any]:
+             stream: bool = False,
+             include_tools: bool = True) -> Dict[str, Any]:
         """
         Send a chat message to the LLM.
         
@@ -138,6 +139,7 @@ class Brain:
             temperature: Sampling temperature
             max_tokens: Maximum tokens in response
             stream: Whether to stream the response
+            include_tools: Whether to include tool schemas for function calling
             
         Returns:
             Response dict with content and metadata
@@ -145,8 +147,8 @@ class Brain:
         # Prepare messages
         prepared_messages = self._prepare_messages(messages, system_prompt)
         
-        # Get tools schema for function calling
-        tools_schema = self._get_tools_schema()
+        # Get tools schema for function calling (only if requested)
+        tools_schema = self._get_tools_schema() if include_tools else None
         
         # Start thinking timer
         self._start_thinking_timer()

@@ -91,7 +91,7 @@ class ToolRegistry:
             **kwargs: Tool parameters
             
         Returns:
-            ToolResult from execution (string for predictive planner compatibility)
+            ToolResult from execution
         """
         tool = self.get(name)
         
@@ -108,11 +108,7 @@ class ToolRegistry:
         result.tool_name = name
         result.parameters = kwargs
         
-        # Return string result for predictive planner (raises on failure)
-        if result.success:
-            return str(result.output) if result.output else "Success"
-        else:
-            raise Exception(result.error or "Tool execution failed")
+        return result
     
     def get_all_tools(self) -> Dict[str, BaseTool]:
         """Get all registered tools."""

@@ -502,12 +502,13 @@ class Orchestrator:
         
         system_prompt = get_system_prompt(mode='chat')
         
-        # Use streaming for low latency
+        # Use streaming for low latency - NO TOOLS in chat mode for clean responses
         response = self.brain.chat(
             messages=[{'role': 'user', 'content': command}],
             system_prompt=system_prompt,
             temperature=0.7,
-            stream=True  # Enable streaming for low latency
+            stream=True,  # Enable streaming for low latency
+            include_tools=False  # Disable tool calling in pure chat mode
         )
         
         if response['success']:
