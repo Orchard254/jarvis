@@ -56,8 +56,12 @@ if __name__ == "__main__":
     
     # Import and execute the tool
     try:
-        from jarvis.tools.registry import execute_tool
+        from jarvis.tools.registry import execute_tool, get_registry
         from jarvis.tools.base import ToolResult as BaseToolResult
+        
+        # Load all tools into the registry before executing
+        registry = get_registry()
+        registry.load_all_tools()
         
         result_value = execute_tool(tool_name, **params)
         
