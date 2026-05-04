@@ -166,6 +166,10 @@ class TaskExecutor:
             if (action["tool_name"] == tool_name and 
                 action["parameters"] == parameters and
                 current_time - action["timestamp"] < 60):  # Within last minute
+                # Allow open_app to be called repeatedly (for bringing apps to foreground)
+                if tool_name == "open_app":
+                    logger.debug(f"Allowing repeated open_app call for {parameters.get('app_name', 'unknown')}")
+                    return False
                 logger.warning(f"Duplicate action detected: {tool_name} with same parameters")
                 return True
         
