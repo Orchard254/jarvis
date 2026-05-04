@@ -6,6 +6,11 @@ import json
 import logging
 from typing import Dict, List, Optional, Any
 from jarvis.core.brain import Brain
+from jarvis.core.json_utils import (
+    parse_json_safely,
+    validate_plan_structure,
+    normalize_plan_parameters
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,25 +83,17 @@ class PredictivePlanner:
                     return None
                 response = response_content
             
-            # Parse JSON from the content string
-            if isinstance(response, str):
-                # Extract JSON from markdown code blocks if present
-                if "```json" in response:
-                    response = response.split("```json")[1].split("```")[0]
-                elif "```" in response:
-                    response = response.split("```")[1].split("```")[0]
-                
-                plan = json.loads(response.strip())
-            else:
-                plan = response
+            # Use robust JSON parsing with multiple fallback strategies
+            plan = parse_json_safely(response, default=None)
             
-            # Validate plan structure
-            if not isinstance(plan, dict):
-                logger.error(f"Invalid plan structure (not a dict): {type(plan)}")
+            if plan is None:
+                logger.error(f"Failed to parse JSON from LLM response")
                 return None
             
-            if "steps" not in plan:
-                logger.error(f"Invalid plan structure (no 'steps' key): {plan.keys() if hasattr(plan, 'keys') else 'N/A'}")
+            # Validate plan structure
+            is_valid, error_msg = validate_plan_structure(plan)
+            if not is_valid:
+                logger.error(f"Invalid plan structure: {error_msg}")
                 return None
                 
             logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")
