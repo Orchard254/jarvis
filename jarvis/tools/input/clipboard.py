@@ -66,7 +66,7 @@ def ensure_window_active(title_pattern: str, app_name: Optional[str] = None) -> 
     Ensure a window is active, bringing it to foreground if needed.
     
     Args:
-        title_pattern: Pattern to match in window title
+        title_pattern: Pattern to match in window title or app name (e.g., 'notepad', 'cmd')
         app_name: Optional application name to search for if title not found
         
     Returns:
@@ -79,24 +79,43 @@ def ensure_window_active(title_pattern: str, app_name: Optional[str] = None) -> 
     # Try to find and bring to foreground
     try:
         from ..apps.window import find_window_by_title, bring_to_foreground
+        from ..apps.launcher import APP_MAPPINGS
         
+        # First try direct title match
         hwnd = find_window_by_title(title_pattern)
         
+        # If not found and we have an app_name, try mapping it to executable
         if hwnd is None and app_name:
-            # Try finding by app name
+            # Check if already active by process name
+            active_proc = get_active_process_name()
+            if active_proc and app_name.lower() in active_proc:
+                return True, f"{app_name} is already active"
+            
+            # Try finding by app name in title
             hwnd = find_window_by_title(app_name)
+            
+            # If still not found, try the mapped executable name
+            if hwnd is None and app_name.lower() in APP_MAPPINGS:
+                exe_name = APP_MAPPINGS[app_name.lower()]
+                # Remove .exe suffix for title search
+                title_candidate = exe_name.replace('.exe', '')
+                hwnd = find_window_by_title(title_candidate)
+                
+                # For cmd.exe, also try "Command Prompt" as title
+                if hwnd is None and app_name.lower() in ['cmd', 'command prompt']:
+                    hwnd = find_window_by_title('Command Prompt')
         
         if hwnd:
             bring_to_foreground(hwnd)
             time.sleep(0.3)  # Allow time for window to come to foreground
             
             # Verify it's now active
-            if is_window_active(title_pattern) or (app_name and get_active_process_name() == app_name.lower()):
+            if is_window_active(title_pattern) or (app_name and get_active_process_name() and app_name.lower() in get_active_process_name()):
                 return True, f"Brought {title_pattern or app_name} to foreground"
             else:
                 return True, f"Attemped to bring window to foreground (verification pending)"
         else:
-            return False, f"No window found matching '{title_pattern}'"
+            return False, f"No window found matching '{title_pattern}' or '{app_name}'"
             
     except Exception as e:
         log.error(f"Failed to ensure window active: {e}")

@@ -15,10 +15,13 @@ Key Features:
 
 import logging
 import time
+import subprocess
+import sys
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import json
 
 from ..tools.base import ToolResult
 from ..tools.registry import get_registry, execute_tool
@@ -108,8 +111,9 @@ class TaskExecutor:
         result = executor.execute_plan(plan)
     """
     
-    def __init__(self, enable_visual_verification: bool = True):
+    def __init__(self, enable_visual_verification: bool = True, use_separate_process: bool = True):
         self.enable_visual_verification = enable_visual_verification
+        self.use_separate_process = use_separate_process
         self._active_plans: Dict[str, TaskPlan] = {}
         self._completed_tasks: List[str] = []
         self._action_history: List[Dict] = []  # Track all actions for loop detection
@@ -344,18 +348,24 @@ class TaskExecutor:
                 
                 # Execute the tool - execute_tool returns string, need to wrap in ToolResult
                 from jarvis.tools.base import ToolResult
-                try:
-                    result_value = execute_tool(step.tool_name, **step.parameters)
-                    # If result is a string, wrap it in ToolResult
-                    if isinstance(result_value, str):
-                        result = ToolResult(success=True, output=result_value)
-                    elif isinstance(result_value, dict):
-                        result = ToolResult(**result_value)
-                    else:
-                        result = result_value
-                except Exception as exec_error:
-                    # If execution raises exception, create failed ToolResult
-                    result = ToolResult(success=False, error=str(exec_error))
+                
+                if self.use_separate_process:
+                    # Execute in a separate subprocess for isolation
+                    result = self._execute_in_subprocess(step.tool_name, step.parameters)
+                else:
+                    # Execute in the same process (original behavior)
+                    try:
+                        result_value = execute_tool(step.tool_name, **step.parameters)
+                        # If result is a string, wrap it in ToolResult
+                        if isinstance(result_value, str):
+                            result = ToolResult(success=True, output=result_value)
+                        elif isinstance(result_value, dict):
+                            result = ToolResult(**result_value)
+                        else:
+                            result = result_value
+                    except Exception as exec_error:
+                        # If execution raises exception, create failed ToolResult
+                        result = ToolResult(success=False, error=str(exec_error))
                 
                 step.result = result
                 step.duration = time.time() - start_time
@@ -401,6 +411,59 @@ class TaskExecutor:
         
         step.status = TaskStatus.FAILED
         return False
+    
+    def _execute_in_subprocess(self, tool_name: str, parameters: Dict[str, Any]) -> ToolResult:
+        """Execute a tool in a separate subprocess for isolation.
+        
+        This prevents issues like window focus conflicts when executing tools that
+        interact with GUI applications while the main JARVIS terminal is active.
+        """
+        from jarvis.tools.base import ToolResult
+        
+        try:
+            # Prepare the subprocess call
+            # We'll call a helper script that executes the tool and returns JSON
+            script_path = Path(__file__).parent / "tool_runner.py"
+            
+            # Serialize parameters to JSON
+            params_json = json.dumps(parameters)
+            
+            # Build the command
+            cmd = [
+                sys.executable,
+                str(script_path),
+                tool_name,
+                params_json
+            ]
+            
+            # Run the subprocess
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,  # 60 second timeout for subprocess
+                cwd=str(Path(__file__).parent.parent.parent)  # Run from project root
+            )
+            
+            # Parse the result
+            if process.returncode == 0:
+                try:
+                    result_data = json.loads(process.stdout.strip())
+                    return ToolResult(**result_data)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse subprocess output: {process.stdout}")
+                    return ToolResult(success=False, error=f"Invalid response format: {e}")
+            else:
+                error_msg = process.stderr.strip() or f"Subprocess exited with code {process.returncode}"
+                logger.error(f"Subprocess execution failed: {error_msg}")
+                return ToolResult(success=False, error=error_msg)
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"Subprocess timed out for tool: {tool_name}")
+            return ToolResult(success=False, error="Tool execution timed out")
+        except Exception as e:
+            logger.error(f"Subprocess execution failed: {e}")
+            return ToolResult(success=False, error=str(e))
     
     def execute_plan(self, plan: TaskPlan, stop_on_failure: bool = False) -> TaskPlan:
         """
