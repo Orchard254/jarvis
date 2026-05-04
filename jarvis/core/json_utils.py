@@ -313,6 +313,13 @@ def _apply_tool_specific_normalization(tool_name: str, params: Dict[str, Any],
                     normalized['keys'] = step_dict[field]
                     logger.debug(f"Found keys in alternative field: {field}")
                     break
+        # Also handle case where 'key' is in normalized params (already extracted)
+        elif 'key' in normalized and 'keys' in normalized:
+            # If both exist, prefer 'keys' but log warning
+            if normalized['key'] and not normalized['keys']:
+                normalized['keys'] = normalized['key']
+            del normalized['key']  # Remove to avoid conflicts
+            logger.debug("Normalized 'key' parameter for press_key tool")
     
     return normalized
 
