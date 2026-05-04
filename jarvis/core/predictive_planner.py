@@ -110,9 +110,10 @@ class PredictivePlanner:
             return None
 
     def execute_plan(self, plan: Dict, tool_executor) -> Dict[str, Any]:
-        """Execute a validated plan step-by-step."""
+        """Execute a validated plan step-by-step, passing results between dependent steps."""
         results = []
         success = True
+        step_outputs = {}  # Store outputs for inter-step dependencies
         
         logger.info(f"Starting execution of planned task: {plan.get('goal')}")
         
@@ -123,6 +124,10 @@ class PredictivePlanner:
             if not tool_name:
                 logger.warning(f"Step {i+1} missing tool name, skipping.")
                 continue
+            
+            # Replace placeholders with actual outputs from previous steps
+            # Look for patterns like [list of apps], {result}, etc.
+            params = self._resolve_placeholders(params, step_outputs)
             
             # Ensure reason text is ASCII-safe for Windows console logging
             reason = step.get('reason', '')
@@ -141,6 +146,9 @@ class PredictivePlanner:
                     "success": True,
                     "result": result
                 })
+                # Store result for potential use by subsequent steps
+                step_outputs[f"step_{i+1}"] = result
+                step_outputs[f"last_result"] = result
                 logger.debug(f"Step {i+1} completed successfully.")
                 
             except Exception as e:
@@ -153,6 +161,8 @@ class PredictivePlanner:
                     try:
                         result = tool_executor.execute(tool_name, **params)
                         results.append({"step": i+1, "tool": tool_name, "success": True, "result": result, "retried": True})
+                        step_outputs[f"step_{i+1}"] = result
+                        step_outputs[f"last_result"] = result
                         continue
                     except Exception as retry_err:
                         error_msg = str(retry_err)
@@ -174,6 +184,59 @@ class PredictivePlanner:
             "results": results,
             "summary": self._generate_summary(plan, results)
         }
+
+    def _resolve_placeholders(self, params: Dict, step_outputs: Dict) -> Dict:
+        """
+        Resolve placeholders in parameters using outputs from previous steps.
+        
+        Handles patterns like:
+        - [list of apps] -> replaced with the first non-trivial result (typically data retrieval)
+        - {step_1} -> replaced with specific step output
+        - {last_result} -> replaced with most recent result
+        - {first_result} -> replaced with the first meaningful data result
+        """
+        import re
+        
+        resolved_params = {}
+        for key, value in params.items():
+            if isinstance(value, str):
+                resolved_value = value
+                
+                # Replace {last_result} or {step_X} placeholders first (explicit references)
+                for step_key, step_output in step_outputs.items():
+                    if step_output is not None:
+                        output_str = str(step_output)
+                        resolved_value = resolved_value.replace(f"{{{step_key}}}", output_str)
+                
+                # Handle bracketed placeholders like [list of apps], [results], etc.
+                # These should use the FIRST meaningful data result, not the last one
+                bracket_pattern = r'\[([^\]]+)\]'
+                matches = re.findall(bracket_pattern, resolved_value)
+                if matches:
+                    # Find the first meaningful result (skip trivial responses like "Success" or "Opened X")
+                    meaningful_result = None
+                    for i in range(1, len(step_outputs) + 1):
+                        step_key = f"step_{i}"
+                        if step_key in step_outputs and step_outputs[step_key] is not None:
+                            result_str = str(step_outputs[step_key])
+                            # Skip trivial results
+                            if not any(trivial in result_str.lower() for trivial in ['success', 'opened ', 'closed ', 'done']):
+                                meaningful_result = result_str
+                                break
+                    
+                    # If no meaningful result found, use the first non-None result
+                    if meaningful_result is None and "step_1" in step_outputs:
+                        meaningful_result = str(step_outputs["step_1"])
+                    
+                    if meaningful_result:
+                        # Replace all bracket placeholders with the meaningful result
+                        resolved_value = re.sub(bracket_pattern, meaningful_result, resolved_value)
+                
+                resolved_params[key] = resolved_value
+            else:
+                resolved_params[key] = value
+        
+        return resolved_params
 
     def _generate_summary(self, plan: Dict, results: List[Dict]) -> str:
         """Generate a natural language summary of the execution."""
