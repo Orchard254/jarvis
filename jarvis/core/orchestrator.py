@@ -654,7 +654,7 @@ class Orchestrator:
         for step in plan['steps']:
             task_step = TaskStep(
                 tool_name=step['tool'],
-                params=step.get('params', {}),
+                parameters=step.get('params', {}),
                 description=step.get('reason', '')
             )
             task_steps.append(task_step)
