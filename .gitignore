@@ -1,1 +1,4 @@
-Nothing needs to be added to .gitignore since only a markdown documentation file (CLEANUP_GUIDE.md) was added, which doesn't fall under any of the categories that should be ignored.
+```
+__pycache__/
+*.pyc
+```

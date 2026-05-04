@@ -22,6 +22,7 @@ from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.core.react_agent import ReActAgent
 from jarvis.core.predictive_planner import PredictivePlanner
+from jarvis.execution.task_executor import TaskExecutor, TaskStep, VerificationStrategy
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
 from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
@@ -31,6 +32,8 @@ from jarvis.reasoning.planner import TaskPlanner
 from jarvis.reasoning.critic import PlanCritic, CriticDecision
 from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
+from jarvis.reasoning.evaluator import PathEvaluator, get_evaluator
+from jarvis.core.tot_engine import TreeOfThoughtsEngine
 from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
 from jarvis.config.config import get_config
 from jarvis.memory.persistent import PersistentMemory
@@ -50,7 +53,8 @@ class TTSManager:
     def __init__(self, config: Dict[str, Any]):
         """Initialize TTS manager."""
         self.config = config
-        self.enabled = config.get('tts_enabled', True)
+        # Default to False to avoid warnings when voice is not explicitly enabled
+        self.enabled = config.get('tts_enabled', False) or config.get('voice_enabled', False)
         
     def speak(self, text: str) -> None:
         """
@@ -71,8 +75,7 @@ class TTSManager:
             from jarvis.output.tts import speak as tts_speak
             tts_speak(text)
         except (ImportError, Exception) as e:
-            logger.warning(f"TTS not available: {e}")
-            print(f"JARVIS: {text}")
+            logger.debug(f"TTS not available: {e}")
 
 
 def get_system_prompt(mode: str = 'agent', **kwargs) -> str:
@@ -157,14 +160,38 @@ class Orchestrator:
         self.intent_classifier = IntentClassifier(self.brain.client)
         self.vision_analyzer = VisionAnalyzer(self.brain.client)
         
-        # Reasoning
-        self.planner = TaskPlanner(ollama_client=self.brain.client, tool_registry=self.tool_registry)
+        # Reasoning - Tree of Thoughts Integration
+        # Initialize ToT engine for multi-path strategic planning
+        self.tot_engine = TreeOfThoughtsEngine(
+            llm_interface=self.brain.client,
+            max_depth=5,
+            beam_width=3,
+            max_branches=4
+        )
+        
+        # Initialize Path Evaluator for scoring reasoning paths
+        self.path_evaluator = PathEvaluator(llm_interface=self.brain.client)
+        
+        # Initialize Planner with ToT support
+        self.planner = TaskPlanner(
+            ollama_client=self.brain.client,
+            tool_registry=self.tool_registry,
+            tot_engine=self.tot_engine,
+            path_evaluator=self.path_evaluator
+        )
+        
         self.critic = PlanCritic(ollama_client=self.brain.client)
         self.reflector = OutcomeReflector(ollama_client=self.brain.client, memory_manager=self.memory)
         self.strategy_selector = StrategySelector()
         
         # Output
         self.tts = TTSManager(config)
+        
+        # Task Executor for Plan-Execute-Verify loop (with visual verification disabled by default)
+        self.task_executor = TaskExecutor(enable_visual_verification=False)
+        
+        # Action Memory for loop prevention (tracks last 50 actions within 60 seconds)
+        self._action_memory: Dict[str, float] = {}  # action_hash -> timestamp
         
         # State
         self.state = {
@@ -478,7 +505,19 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
+            thinking_duration = response.get('thinking_duration')
+            thinking_sections = response.get('thinking_sections', [])
+            
             # Don't store assistant messages in chat mode to reduce memory usage
+            
+            # Display thinking sections if present (from reasoning models)
+            if thinking_sections:
+                print("\n\n[Reasoning Process]:")
+                for i, section in enumerate(thinking_sections, 1):
+                    print(f"\n--- Thinking Path {i} ---")
+                    print(section[:500] + "..." if len(section) > 500 else section)
+                if thinking_duration:
+                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
             
             # Start speaking immediately for low latency (before full response if streaming)
             self._speak(response_text)
@@ -488,7 +527,9 @@ class Orchestrator:
                 'response': response_text,
                 'mode': 'chat',
                 'actions': [],
-                'streamed': True
+                'streamed': True,
+                'thinking_duration': thinking_duration,
+                'thinking_sections': thinking_sections
             }
         else:
             return {
@@ -531,7 +572,7 @@ class Orchestrator:
         # Track consecutive failures
         task_key = hash(command) % 10000
         
-        # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution
+        # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution with TaskExecutor verification
         # This bypasses ReAct loops for tasks where the LLM already knows the answer
         if strategy in ['direct', 'plan']:
             logger.info(f"[Predictive] Using LLM's internal knowledge for direct execution...")
@@ -545,16 +586,85 @@ class Orchestrator:
             if plan and plan.get('steps'):
                 logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
                 
-                # Execute the plan directly
-                result = self.predictive_planner.execute_plan(plan, self.tool_registry)
+                # Convert predictive plan steps to TaskStep objects for TaskExecutor
+                task_steps = []
+                for step_dict in plan['steps']:
+                    tool_name = step_dict.get('tool') or step_dict.get('tool_or_skill')
+                    
+                    # Use robust parameter normalization that handles all edge cases
+                    from jarvis.core.json_utils import normalize_plan_parameters
+                    arguments = normalize_plan_parameters(step_dict, tool_name)
+                    
+                    description = step_dict.get('description', f"Execute {tool_name}")
+                    
+                    # Determine verification strategy based on tool type
+                    verification_strategy = VerificationStrategy.TOOL_RESULT
+                    verification_keyword = None
+                    
+                    # Enable visual verification for web/UI operations
+                    if any(keyword in tool_name.lower() for keyword in ['click', 'fill', 'navigate', 'scroll', 'type']):
+                        if self.task_executor.enable_visual_verification:
+                            verification_strategy = VerificationStrategy.VISUAL
+                            verification_keyword = description.split()[0] if description else tool_name
+                    
+                    task_step = TaskStep(
+                        tool_name=tool_name,
+                        parameters=arguments,
+                        description=description,
+                        verification_strategy=verification_strategy,
+                        verification_keyword=verification_keyword,
+                        timeout=30.0,
+                        max_retries=2
+                    )
+                    task_steps.append(task_step)
+                
+                # Create TaskPlan for TaskExecutor
+                import uuid
+                task_plan = self.task_executor.create_plan(
+                    task_id=f"task_{uuid.uuid4().hex[:8]}",
+                    description=command,
+                    steps=task_steps
+                )
+                
+                # Execute the plan using TaskExecutor with verification and loop prevention
+                executed_plan = self.task_executor.execute_plan(task_plan, stop_on_failure=False)
+                
+                # Get task summary for response
+                task_summary = self.task_executor.get_task_summary(executed_plan)
+                
+                # Extract actual outputs from executed steps for display
+                output_parts = []
+                for step in executed_plan.steps:
+                    if step.result and hasattr(step.result, 'output') and step.result.output:
+                        output_parts.append(step.result.output)
+                    elif step.result and isinstance(step.result, dict) and step.result.get('output'):
+                        output_parts.append(step.result['output'])
+                
+                # Generate response with actual tool outputs
+                if output_parts:
+                    response_text = ". ".join(output_parts)
+                else:
+                    successful = task_summary['successful_steps']
+                    total = task_summary['total_steps']
+                    response_text = f"Task completed: {successful}/{total} steps successful."
                 
                 return {
-                    'success': result['success'],
-                    'response': result.get('summary', ''),
+                    'success': executed_plan.status.value == 'completed',
+                    'response': response_text,
                     'mode': 'predictive',
                     'strategy': 'predictive',
-                    'actions': plan.get('steps', []),
-                    'iterations': len(plan.get('steps', []))
+                    'actions': [
+                        {
+                            'step': {'tool': step.tool_name, 'parameters': step.parameters, 'description': step.description},
+                            'result': step.result,
+                            'status': step.status.value,
+                            'error': step.error_message,
+                            'duration': step.duration
+                        }
+                        for step in executed_plan.steps
+                    ],
+                    'task_summary': task_summary,
+                    'iterations': len(executed_plan.steps)
                 }
             
             # Fallback to ReAct if predictive planning fails
@@ -621,7 +731,19 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
+            thinking_duration = response.get('thinking_duration')
+            thinking_sections = response.get('thinking_sections', [])
+            
             # Don't store assistant messages to reduce memory usage
+            
+            # Display thinking sections if present (from reasoning models)
+            if thinking_sections:
+                print("\n\n[Reasoning Process]:")
+                for i, section in enumerate(thinking_sections, 1):
+                    print(f"\n--- Thinking Path {i} ---")
+                    print(section[:500] + "..." if len(section) > 500 else section)
+                if thinking_duration:
+                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
             
             # Start speaking before full response is generated for low latency
             self._speak(response_text)
@@ -632,7 +754,9 @@ class Orchestrator:
                 'mode': 'agent',
                 'strategy': 'direct',
                 'actions': response.get('tool_calls', []),
-                'iterations': response.get('iterations', 0)
+                'iterations': response.get('iterations', 0),
+                'total_thinking_time': thinking_duration,
+                'thinking_sections': thinking_sections
             }
         else:
             error_msg = response.get('error', 'Execution failed')
@@ -660,7 +784,7 @@ class Orchestrator:
     
     def _execute_with_planning(self, command: str, system_prompt: str) -> Dict[str, Any]:
         """
-        Execute command with planning phase.
+        Execute command with planning phase using TaskExecutor for Plan-Execute-Verify loop.
         
         Only called for complex/strategic tasks as determined by strategy_selector.
         Always runs critic before execution.
@@ -701,10 +825,10 @@ class Orchestrator:
                 'actions': []
             }
         
-        plan = [step.to_dict() for step in execution_graph.steps]
+        plan_steps = [step.to_dict() for step in execution_graph.steps]
         
         # Phase 3 Safety: Plan validation (second safety layer)
-        plan_validation = self.plan_validator.review(plan)
+        plan_validation = self.plan_validator.review(plan_steps)
         
         if not plan_validation.is_valid:
             logger.warning(f"Plan blocked by validator: {plan_validation.warnings}")
@@ -753,7 +877,7 @@ class Orchestrator:
             )
         
         # ALWAYS run critic before execution (required by spec)
-        critique = self.critic.review_plan(plan, command)
+        critique = self.critic.review_plan(plan_steps, command)
         
         # Handle critic results
         if critique.decision == CriticDecision.BLOCKED:
@@ -771,89 +895,115 @@ class Orchestrator:
         elif critique.decision == CriticDecision.NEEDS_REVISION:
             logger.info(f"Plan needs revision: {critique.fixes_needed}")
             # Attempt to fix the plan
-            revised_plan = self.planner.revise_plan(command, plan, critique.fixes_needed)
+            revised_plan = self.planner.revise_plan(command, plan_steps, critique.fixes_needed)
             if revised_plan.get('success'):
-                plan = revised_plan.get('plan', plan)
+                plan_steps = revised_plan.get('plan', plan_steps)
                 logger.info("Plan revised successfully")
             else:
                 logger.warning("Plan revision failed, proceeding with original plan")
         
-        # Execute plan steps with safety validation and abort checking
-        executed_steps = []
-        for idx, step in enumerate(plan):
-            # Check for abort during execution
-            if self.check_abort():
-                logger.info("Execution aborted by user")
-                # Rollback completed steps
-                self._rollback_steps(executed_steps)
+        # Check for duplicate action (loop prevention) using action memory
+        action_hash = hash(command) % 100000
+        current_time = time.time()
+        if action_hash in self._action_memory:
+            last_executed = self._action_memory[action_hash]
+            if current_time - last_executed < 30:  # Within 30 seconds
+                logger.warning(f"Duplicate command detected within 30s, skipping: {command[:50]}...")
                 return {
                     'success': False,
-                    'error': 'Task aborted by user',
-                    'response': "Task cancelled. Changes rolled back.",
+                    'error': 'Duplicate command',
+                    'response': "I just executed that command. Please wait or try something different.",
                     'mode': 'agent',
                     'strategy': 'plan',
-                    'actions': executed_steps
+                    'actions': []
                 }
-            
-            # Extract tool name and arguments from step (handle both formats)
-            # LLM may output 'tool_or_skill'/'params' or 'tool'/'arguments'
-            tool_name = step.get('tool') or step.get('tool_or_skill')
-            arguments = step.get('arguments', {}) or step.get('params', {})
-            
-            # Phase 3 Safety: Tool guard validation (third safety layer)
-            is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, arguments)
-            if not is_valid:
-                logger.warning(f"Tool call blocked by guard at step {idx}: {tool_name} - {error_msg}")
-                self.audit_log.log_security_event(
-                    event_type='tool_blocked',
-                    details={
-                        'step_index': idx,
-                        'tool': tool_name,
-                        'reason': error_msg,
-                        'parameters': arguments
-                    }
-                )
-                continue
-            
-            # Execute with retry logic
-            result = None
-            max_retries = 2
-            for attempt in range(max_retries):
-                result = self.tool_registry.execute(tool_name, **arguments)
-                
-                if result.success:
-                    break
-                    
-                # Retry on failure with exponential backoff
-                if attempt < max_retries - 1:
-                    logger.warning(f"Tool {tool_name} failed (attempt {attempt + 1}/{max_retries}), retrying...")
-                    time.sleep(0.5 * (attempt + 1))
-                else:
-                    logger.error(f"Tool {tool_name} failed after {max_retries} attempts")
-            
-            executed_steps.append({
-                'step': step,
-                'result': result,
-                'validated': True
-            })
-            
-            # Don't add tool results to memory to reduce memory usage
         
-        # Skip reflection to reduce memory usage
-        # self.reflector.reflect(...)
+        # Record this action for loop prevention
+        self._action_memory[action_hash] = current_time
+        # Keep only recent actions (cleanup old entries)
+        cutoff = current_time - 60
+        self._action_memory = {k: v for k, v in self._action_memory.items() if v > cutoff}
         
-        # Generate response
-        response_text = f"Task completed. Steps executed: {len(executed_steps)}"
+        # Convert plan steps to TaskStep objects for TaskExecutor
+        task_steps = []
+        for step_dict in plan_steps:
+            tool_name = step_dict.get('tool') or step_dict.get('tool_or_skill')
+            arguments = step_dict.get('arguments', {}) or step_dict.get('params', {})
+            description = step_dict.get('description', f"Execute {tool_name}")
+            
+            # Determine verification strategy based on tool type
+            verification_strategy = VerificationStrategy.TOOL_RESULT
+            verification_keyword = None
+            
+            # Enable visual verification for web/UI operations
+            if any(keyword in tool_name.lower() for keyword in ['click', 'fill', 'navigate', 'scroll', 'type']):
+                if self.task_executor.enable_visual_verification:
+                    verification_strategy = VerificationStrategy.VISUAL
+                    # Extract keyword from description or use tool name
+                    verification_keyword = description.split()[0] if description else tool_name
+            
+            task_step = TaskStep(
+                tool_name=tool_name,
+                parameters=arguments,
+                description=description,
+                verification_strategy=verification_strategy,
+                verification_keyword=verification_keyword,
+                timeout=30.0,
+                max_retries=2
+            )
+            task_steps.append(task_step)
+        
+        # Create TaskPlan for TaskExecutor
+        import uuid
+        task_plan = self.task_executor.create_plan(
+            task_id=f"task_{uuid.uuid4().hex[:8]}",
+            description=command,
+            steps=task_steps
+        )
+        
+        # Execute plan using TaskExecutor with verification and loop prevention
+        logger.info(f"Executing plan with TaskExecutor: {len(task_steps)} steps")
+        executed_plan = self.task_executor.execute_plan(task_plan, stop_on_failure=False)
+        
+        # Get task summary for response
+        task_summary = self.task_executor.get_task_summary(executed_plan)
+        
+        # Extract actual outputs from executed steps for display
+        output_parts = []
+        for step in executed_plan.steps:
+            if step.result and hasattr(step.result, 'output') and step.result.output:
+                output_parts.append(step.result.output)
+            elif step.result and isinstance(step.result, dict) and step.result.get('output'):
+                output_parts.append(step.result['output'])
+        
+        # Generate response with actual tool outputs
+        if output_parts:
+            response_text = ". ".join(output_parts)
+        else:
+            # Fallback to summary
+            successful = task_summary['successful_steps']
+            total = task_summary['total_steps']
+            response_text = f"Task completed: {successful}/{total} steps successful."
+        
         # Don't store assistant message to reduce memory usage
         self._speak(response_text)
         
         return {
-            'success': True,
+            'success': executed_plan.status.value == 'completed',
             'response': response_text,
             'mode': 'agent',
             'strategy': 'plan',
-            'actions': executed_steps,
-            'plan': plan,
+            'actions': [
+                {
+                    'step': {'tool': step.tool_name, 'parameters': step.parameters, 'description': step.description},
+                    'result': step.result,
+                    'status': step.status.value,
+                    'error': step.error_message,
+                    'duration': step.duration
+                }
+                for step in executed_plan.steps
+            ],
+            'task_summary': task_summary,
             'critique': critique.to_dict()
         }
     
@@ -937,6 +1087,8 @@ class Orchestrator:
     def _on_thinking(self, message: str) -> None:
         """Callback when LLM is thinking."""
         logger.debug(f"Brain: {message}")
+        # Show thinking indicator in console
+        print(f"\r[{message}]", end="", flush=True)
     
     def _speak(self, text: str) -> None:
         """Speak text using TTS."""
@@ -944,7 +1096,8 @@ class Orchestrator:
         if not text or not text.strip():
             return
             
-        if self.config.get('tts_enabled', True):
+        # Check both tts_enabled and voice_enabled config keys
+        if self.config.get('tts_enabled', False) or self.config.get('voice_enabled', False):
             self.tts.speak(text)
     
     def _interaction_loop(self) -> None:

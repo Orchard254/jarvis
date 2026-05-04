@@ -7,6 +7,10 @@ Replaces blind "open URL" with precise element interaction and state verificatio
 import logging
 import time
 import urllib.parse
+import subprocess
+import json
+import socket
+import os
 from typing import Any, Optional, List, Dict
 from pathlib import Path
 
@@ -30,6 +34,7 @@ class WebAutomationEngine:
     """
     Singleton engine managing Playwright browser instance.
     Provides persistent browser session for multi-step tasks.
+    Supports connecting to existing Chrome instances via Chrome DevTools Protocol.
     """
     
     _instance: Optional['WebAutomationEngine'] = None
@@ -51,39 +56,173 @@ class WebAutomationEngine:
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
+        self._use_existing_chrome = False
+        self._chrome_debug_port = 9222
         self._initialized = True
         logger.info("WebAutomationEngine initialized")
     
-    def start(self, headless: bool = False):
-        """Start browser instance."""
+    def find_existing_chrome(self) -> Optional[int]:
+        """
+        Check if Chrome is already running with debug port enabled.
+        Returns the debug port if found, None otherwise.
+        """
+        # Common debug ports to check
+        debug_ports = [9222, 9223, 9224, 9225]
+        
+        for port in debug_ports:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex(('127.0.0.1', port))
+                sock.close()
+                if result == 0:
+                    logger.info(f"Found existing Chrome debug port: {port}")
+                    return port
+            except Exception:
+                continue
+        
+        # Check for running Chrome processes
+        try:
+            import psutil
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if 'chrome' in proc.info['name'].lower():
+                        cmdline = ' '.join(proc.info.get('cmdline', []))
+                        if '--remote-debugging-port=' in cmdline:
+                            # Extract port from command line
+                            for part in cmdline.split():
+                                if part.startswith('--remote-debugging-port='):
+                                    port = int(part.split('=')[1])
+                                    logger.info(f"Found Chrome with debug port {port} from process cmdline")
+                                    return port
+                except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+                    continue
+        except Exception as e:
+            logger.debug(f"Error checking Chrome processes: {e}")
+        
+        return None
+    
+    def launch_chrome_with_debug(self) -> subprocess.Popen:
+        """Launch Chrome with remote debugging enabled."""
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe",
+            r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe",
+        ]
+        
+        chrome_path = None
+        for path in chrome_paths:
+            expanded = os.path.expandvars(path) if '%' in path else path
+            if os.path.exists(expanded):
+                chrome_path = expanded
+                break
+        
+        if not chrome_path:
+            # Try using 'chrome' from PATH
+            chrome_path = "chrome"
+        
+        args = [
+            chrome_path,
+            f"--remote-debugging-port={self._chrome_debug_port}",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+        
+        logger.info(f"Launching Chrome with debug port {self._chrome_debug_port}")
+        return subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0)
+    
+    def start(self, headless: bool = False, use_existing: bool = True):
+        """Start browser instance, optionally connecting to existing Chrome."""
         if self.browser is not None:
             return
+        
+        debug_port = None
+        
+        # Try to find existing Chrome if requested
+        if use_existing:
+            debug_port = self.find_existing_chrome()
+            if debug_port:
+                self._use_existing_chrome = True
+                self._chrome_debug_port = debug_port
+        
+        if self._use_existing_chrome and debug_port:
+            # Connect to existing Chrome via CDP
+            try:
+                logger.info(f"Connecting to existing Chrome on port {debug_port}")
+                self.playwright = sync_playwright().start()
+                self.browser = self.playwright.chromium.connect_over_cdp(
+                    f"http://127.0.0.1:{debug_port}"
+                )
+                # Use the first existing context or create new one
+                contexts = self.browser.contexts
+                if contexts:
+                    self.context = contexts[0]
+                else:
+                    self.context = self.browser.new_context(
+                        viewport={"width": 1920, "height": 1080}
+                    )
+                self.page = self.context.new_page()
+                logger.info(f"Connected to existing Chrome (port {debug_port})")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to connect to existing Chrome: {e}. Starting new instance.")
+                self._use_existing_chrome = False
+        
+        # Start a new Chrome instance with debug port
+        try:
+            self.playwright = sync_playwright().start()
             
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=headless)
-        self.context = self.browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-        self.page = self.context.new_page()
-        logger.info(f"Browser started (headless={headless})")
+            # Launch with args to enable CDP
+            self.browser = self.playwright.chromium.launch(
+                headless=headless,
+                args=[f"--remote-debugging-port={self._chrome_debug_port}"]
+            )
+            self.context = self.browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            self.page = self.context.new_page()
+            logger.info(f"Browser started (headless={headless}, debug_port={self._chrome_debug_port})")
+        except Exception as e:
+            logger.error(f"Failed to start browser: {e}")
+            raise
     
     def stop(self):
-        """Close browser and cleanup."""
+        """Close browser and cleanup. Only closes if we started a new instance."""
         if self.browser:
-            self.browser.close()
-            self.browser = None
+            try:
+                # Don't close the browser if we connected to an existing Chrome
+                if not self._use_existing_chrome:
+                    self.browser.close()
+                else:
+                    # Just close our page and context, leave Chrome running
+                    if self.page:
+                        self.page.close()
+                    if self.context:
+                        self.context.close()
+                    logger.info("Detached from existing Chrome (browser left running)")
+            except Exception as e:
+                logger.warning(f"Error closing browser: {e}")
+            finally:
+                self.browser = None
+                self.page = None
+                self.context = None
+                
         if self.playwright:
-            self.playwright.stop()
+            try:
+                self.playwright.stop()
+            except Exception:
+                pass
             self.playwright = None
-        self.page = None
-        self.context = None
-        logger.info("Browser stopped")
+        
+        self._use_existing_chrome = False
+        logger.info("Browser stopped" if not self._use_existing_chrome else "Disconnected from Chrome")
     
-    def ensure_browser(self, headless: bool = False):
+    def ensure_browser(self, headless: bool = False, use_existing: bool = True):
         """Ensure browser is running, start if needed."""
         if self.browser is None:
-            self.start(headless=headless)
+            self.start(headless=headless, use_existing=use_existing)
         return self.page
     
     def get_page(self) -> Optional[Page]:
@@ -162,7 +301,7 @@ class NavigateToUrlTool(BaseTool):
         
         try:
             engine = get_automation_engine()
-            page = engine.ensure_browser(headless=False)
+            page = engine.ensure_browser(headless=False, use_existing=True)
             
             logger.info(f"Navigating to: {url}")
             page.goto(url, timeout=timeout, wait_until="domcontentloaded")
@@ -603,83 +742,135 @@ class SearchAndNavigateTool(BaseTool):
         
         try:
             engine = get_automation_engine()
-            page = engine.ensure_browser(headless=False)
+            page = engine.ensure_browser(headless=False, use_existing=True)
             
-            # Step 1: Search for the site using Google via Playwright
-            logger.info(f"Searching for site: {site_query}")
-            search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
-            page.goto(search_url, timeout=30000)
+            # Step 1: Try direct navigation first for common sites (faster and more reliable)
+            known_domains = {
+                "kilimall": "https://www.kilimall.co.ke",
+                "kilimall kenya": "https://www.kilimall.co.ke",
+                "kilimall uganda": "https://www.kilimall.ug",
+                "amazon": "https://www.amazon.com",
+                "google": "https://www.google.com",
+                "facebook": "https://www.facebook.com",
+                "twitter": "https://www.twitter.com",
+                "youtube": "https://www.youtube.com",
+                "instagram": "https://www.instagram.com",
+                "linkedin": "https://www.linkedin.com",
+                "github": "https://www.github.com",
+                "stackoverflow": "https://stackoverflow.com",
+                "reddit": "https://www.reddit.com",
+                "wikipedia": "https://www.wikipedia.org",
+                "ebay": "https://www.ebay.com",
+                "aliexpress": "https://www.aliexpress.com",
+                "alibaba": "https://www.alibaba.com",
+                "jumia": "https://www.jumia.co.ke",
+            }
             
-            # Wait for search results with multiple fallback selectors
-            selectors = ["div#search", "div.g", "h3", "a[href^='http']"]
-            loaded = False
-            for selector in selectors:
+            target_url = None
+            query_lower = site_query.lower().strip()
+            
+            # Check for exact match
+            if query_lower in known_domains:
+                target_url = known_domains[query_lower]
+                logger.info(f"Recognized site '{site_query}' -> {target_url}")
+            else:
+                # Check for partial match
+                for key, url in known_domains.items():
+                    if key in query_lower or query_lower in key:
+                        target_url = url
+                        logger.info(f"Partial match '{site_query}' -> {target_url}")
+                        break
+            
+            # If we found a known domain, navigate directly
+            if target_url:
+                logger.info(f"Navigating directly to: {target_url}")
                 try:
-                    page.wait_for_selector(selector, timeout=5000)
-                    loaded = True
-                    logger.debug(f"Found search results with selector: {selector}")
-                    break
-                except:
-                    continue
+                    page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+                    time.sleep(2)
+                except Exception as nav_error:
+                    error_msg = str(nav_error)
+                    if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                        logger.warning("Browser crashed during navigation. Restarting...")
+                        engine.stop()
+                        return ToolResult.fail(error="Browser crashed. Please try again.")
+                    raise
             
-            if not loaded:
-                logger.warning("No search results found immediately, waiting longer...")
-                time.sleep(5)
-            
-            # Step 2: Extract first organic result URL using JavaScript (most reliable)
-            first_link = page.evaluate("""
-                () => {
-                    // Strategy 1: Find first search result link excluding Google
-                    const links = document.querySelectorAll('a[href^="http"]');
-                    for (let link of links) {
-                        const href = link.href;
-                        if (!href.includes('google.com') && 
-                            !href.includes('/search?') &&
-                            href.length > 20) {
-                            return href;
+            # Step 2: If not a known site, use Google search
+            if not target_url:
+                logger.info(f"Searching for site: {site_query}")
+                search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
+                page.goto(search_url, timeout=30000)
+                
+                # Wait for search results with multiple fallback selectors
+                selectors = ["div#search", "div.g", "h3", "a[href^='http']"]
+                loaded = False
+                for selector in selectors:
+                    try:
+                        page.wait_for_selector(selector, timeout=5000)
+                        loaded = True
+                        logger.debug(f"Found search results with selector: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if not loaded:
+                    logger.warning("No search results found immediately, waiting longer...")
+                    time.sleep(5)
+                
+                # Extract first organic result URL using JavaScript (most reliable)
+                first_link = page.evaluate("""
+                    () => {
+                        // Strategy 1: Find first search result link excluding Google
+                        const links = document.querySelectorAll('a[href^="http"]');
+                        for (let link of links) {
+                            const href = link.href;
+                            if (!href.includes('google.com') && 
+                                !href.includes('/search?') &&
+                                href.length > 20) {
+                                return href;
+                            }
                         }
-                    }
-                    
-                    // Strategy 2: Try to find any result div's link
-                    const resultDivs = document.querySelectorAll('div.g, div[data-sokoban-result]');
-                    for (const div of resultDivs) {
-                        const link = div.querySelector('a[href^="http"]');
-                        if (link && !link.href.includes('google.com')) {
-                            return link.href;
+                        
+                        // Strategy 2: Try to find any result div's link
+                        const resultDivs = document.querySelectorAll('div.g, div[data-sokoban-result]');
+                        for (const div of resultDivs) {
+                            const link = div.querySelector('a[href^="http"]');
+                            if (link && !link.href.includes('google.com')) {
+                                return link.href;
+                            }
                         }
-                    }
-                    
-                    // Strategy 3: Just get first external link
-                    const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
-                    const exclude = ['google.com', 'youtube.com', 'googleusercontent'];
-                    for (const link of allLinks) {
-                        if (!exclude.some(ex => link.href.includes(ex))) {
-                            return link.href;
+                        
+                        // Strategy 3: Just get first external link
+                        const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
+                        const exclude = ['google.com', 'youtube.com', 'googleusercontent'];
+                        for (const link of allLinks) {
+                            if (!exclude.some(ex => link.href.includes(ex))) {
+                                return link.href;
+                            }
                         }
+                        
+                        return null;
                     }
-                    
-                    return null;
-                }
-            """)
-            
-            if not first_link:
-                return ToolResult.fail(error="No valid URL found in search results")
-            
-            target_url = first_link
-            logger.info(f"Found URL: {target_url}")
-            
-            # Step 3: Navigate to the site with error recovery
-            logger.info(f"Navigating to: {target_url}")
-            try:
-                page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
-                time.sleep(2)
-            except Exception as nav_error:
-                error_msg = str(nav_error)
-                if "closed" in error_msg.lower() or "context" in error_msg.lower():
-                    logger.warning("Browser crashed during navigation. Restarting...")
-                    engine.stop()
-                    return ToolResult.fail(error="Browser crashed. Please try again.")
-                raise
+                """)
+                
+                if not first_link:
+                    return ToolResult.fail(error="No valid URL found in search results")
+                
+                target_url = first_link
+                logger.info(f"Found URL: {target_url}")
+                
+                # Navigate to the site with error recovery
+                logger.info(f"Navigating to: {target_url}")
+                try:
+                    page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+                    time.sleep(2)
+                except Exception as nav_error:
+                    error_msg = str(nav_error)
+                    if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                        logger.warning("Browser crashed during navigation. Restarting...")
+                        engine.stop()
+                        return ToolResult.fail(error="Browser crashed. Please try again.")
+                    raise
             
             # Step 4: If internal search requested, perform it
             if internal_search:

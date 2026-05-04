@@ -1,0 +1,28 @@
+{
+  "session_id": "20260504_101113",
+  "created_at": "2026-05-04T10:11:13.300990",
+  "messages": [
+    {
+      "role": "user",
+      "content": "check current time",
+      "timestamp": "2026-05-04T10:11:07.951065",
+      "metadata": {
+        "source": "text"
+      }
+    },
+    {
+      "role": "user",
+      "content": "check current date",
+      "timestamp": "2026-05-04T10:11:10.955588",
+      "metadata": {
+        "source": "text"
+      }
+    }
+  ],
+  "metadata": {
+    "summary": "User initiated shutdown"
+  },
+  "message_count": 2,
+  "first_message": "check current time",
+  "last_message": "check current date"
+}

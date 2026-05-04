@@ -6,6 +6,7 @@ Uses subprocess and psutil for app management.
 """
 
 import logging
+import os
 import subprocess
 from typing import Any
 
@@ -68,6 +69,45 @@ class OpenAppTool(BaseTool):
             # Check if already running
             for proc in psutil.process_iter(["name"]):
                 if executable.lower() in proc.info["name"].lower():
+                    log.info(f"{app_name} is already running")
+                    # For Chrome, check if debug port is enabled
+                    if app_name in ["chrome", "google chrome"]:
+                        try:
+                            cmdline = ' '.join(proc.cmdline())
+                            if '--remote-debugging-port=' in cmdline:
+                                # Extract the port number
+                                for part in cmdline.split():
+                                    if part.startswith('--remote-debugging-port='):
+                                        port = part.split('=')[1]
+                                        return ToolResult.ok(f"{app_name} is already running with automation support (debug port {port})")
+                                return ToolResult.ok(f"{app_name} is already running with automation support")
+                            else:
+                                log.info("Chrome running without debug port. Launching second instance for automation...")
+                                # Don't kill existing Chrome - launch a second instance with debug port
+                                chrome_paths = [
+                                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                                    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+                                ]
+                                chrome_path = None
+                                for path in chrome_paths:
+                                    if os.path.exists(path):
+                                        chrome_path = path
+                                        break
+                                
+                                if chrome_path:
+                                    args = [
+                                        chrome_path,
+                                        "--remote-debugging-port=9222",
+                                        "--no-first-run",
+                                        "--no-default-browser-check",
+                                        "--user-data-dir=" + os.path.join(os.getenv('TEMP', ''), 'jarvis_chrome_profile'),
+                                    ]
+                                    subprocess.Popen(args)
+                                    return ToolResult.ok(f"Launched additional Chrome instance for automation (debug port 9222). Your original Chrome session remains unchanged.")
+                        except Exception as e:
+                            log.warning(f"Error checking Chrome cmdline: {e}")
+                    
                     return ToolResult.ok(f"{app_name} is already running")
             
             # Try to start the app
@@ -75,6 +115,29 @@ class OpenAppTool(BaseTool):
                 # Special URI handler (e.g., ms-settings:)
                 subprocess.Popen(["start", executable], shell=True)
             else:
+                # For Chrome, always launch with debug port
+                if app_name in ["chrome", "google chrome"]:
+                    chrome_paths = [
+                        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+                    ]
+                    chrome_path = None
+                    for path in chrome_paths:
+                        if os.path.exists(path):
+                            chrome_path = path
+                            break
+                    
+                    if chrome_path:
+                        args = [
+                            chrome_path,
+                            "--remote-debugging-port=9222",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                        ]
+                        subprocess.Popen(args)
+                        return ToolResult.ok(f"Opening {app_name} with automation support (debug port 9222)")
+                
                 subprocess.Popen([executable], shell=True)
             
             return ToolResult.ok(f"Opening {app_name}")

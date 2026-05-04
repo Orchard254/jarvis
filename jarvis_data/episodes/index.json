@@ -272,9 +272,65 @@
       "created_at": "2026-05-03T11:27:19.207165",
       "message_count": 2,
       "first_message_preview": "open notepad"
+    },
+    {
+      "session_id": "20260504_095952",
+      "filename": "session_20260504_095952.json",
+      "created_at": "2026-05-04T09:59:52.125663",
+      "message_count": 1,
+      "first_message_preview": "check current time"
+    },
+    {
+      "session_id": "20260504_095958",
+      "filename": "session_20260504_095958.json",
+      "created_at": "2026-05-04T09:59:58.296810",
+      "message_count": 1,
+      "first_message_preview": "check current date"
+    },
+    {
+      "session_id": "20260504_100030",
+      "filename": "session_20260504_100030.json",
+      "created_at": "2026-05-04T10:00:30.643978",
+      "message_count": 1,
+      "first_message_preview": "check current time"
+    },
+    {
+      "session_id": "20260504_100036",
+      "filename": "session_20260504_100036.json",
+      "created_at": "2026-05-04T10:00:36.914617",
+      "message_count": 1,
+      "first_message_preview": "check current date"
+    },
+    {
+      "session_id": "20260504_101022",
+      "filename": "session_20260504_101022.json",
+      "created_at": "2026-05-04T10:10:22.868783",
+      "message_count": 2,
+      "first_message_preview": "check current time"
+    },
+    {
+      "session_id": "20260504_101053",
+      "filename": "session_20260504_101053.json",
+      "created_at": "2026-05-04T10:10:53.173483",
+      "message_count": 2,
+      "first_message_preview": "check current time"
+    },
+    {
+      "session_id": "20260504_101113",
+      "filename": "session_20260504_101113.json",
+      "created_at": "2026-05-04T10:11:13.300990",
+      "message_count": 2,
+      "first_message_preview": "check current time"
+    },
+    {
+      "session_id": "20260504_101120",
+      "filename": "session_20260504_101120.json",
+      "created_at": "2026-05-04T10:11:20.692359",
+      "message_count": 1,
+      "first_message_preview": "open notepad"
     }
   ],
-  "total_sessions": 39,
+  "total_sessions": 47,
   "created_at": "2026-05-01T14:55:25.708878",
-  "updated_at": "2026-05-03T11:27:19.207429"
+  "updated_at": "2026-05-04T10:11:20.692571"
 }
