@@ -189,7 +189,8 @@ class Orchestrator:
         self.tts = TTSManager(config)
         
         # Task Executor for Plan-Execute-Verify loop (with visual verification disabled by default)
-        self.task_executor = TaskExecutor(enable_visual_verification=False)
+        # use_separate_process=True spawns a separate subprocess per task for isolation
+        self.task_executor = TaskExecutor(enable_visual_verification=False, use_separate_process=True)
         
         # Action Memory for loop prevention (tracks last 50 actions within 60 seconds)
         self._action_memory: Dict[str, float] = {}  # action_hash -> timestamp

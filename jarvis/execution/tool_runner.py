@@ -27,6 +27,67 @@ class ToolResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# Standalone subprocess runner entry point
+if __name__ == "__main__":
+    """Execute a tool when called as a subprocess.
+    
+    Usage: python tool_runner.py <tool_name> <params_json>
+    
+    Outputs JSON result to stdout.
+    """
+    import sys
+    import json
+    from pathlib import Path
+    
+    # Add project root to path
+    project_root = Path(__file__).parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    
+    if len(sys.argv) != 3:
+        result = ToolResult(success=False, error="Usage: python tool_runner.py <tool_name> <params_json>")
+        print(json.dumps({"success": result.success, "output": result.output, "error": result.error}))
+        sys.exit(1)
+    
+    tool_name = sys.argv[1]
+    params_json = sys.argv[2]
+    
+    try:
+        params = json.loads(params_json)
+    except json.JSONDecodeError as e:
+        result = ToolResult(success=False, error=f"Invalid JSON parameters: {e}")
+        print(json.dumps({"success": result.success, "output": result.output, "error": result.error}))
+        sys.exit(1)
+    
+    # Import and execute the tool
+    try:
+        from jarvis.tools.registry import execute_tool
+        from jarvis.tools.base import ToolResult as BaseToolResult
+        
+        result_value = execute_tool(tool_name, **params)
+        
+        # Convert to serializable format
+        if isinstance(result_value, BaseToolResult):
+            result = {
+                "success": result_value.success,
+                "output": result_value.output,
+                "error": result_value.error
+            }
+        elif isinstance(result_value, str):
+            result = {"success": True, "output": result_value, "error": None}
+        elif isinstance(result_value, dict):
+            result = result_value
+        else:
+            result = {"success": True, "output": str(result_value), "error": None}
+        
+        print(json.dumps(result))
+        sys.exit(0)
+        
+    except Exception as e:
+        result = ToolResult(success=False, error=str(e))
+        print(json.dumps({"success": result.success, "output": result.output, "error": result.error}))
+        sys.exit(1)
+
+
 class ToolRunner:
     """Executes individual tools with safety checks and timeout handling.
     
