@@ -22,6 +22,7 @@ from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.core.react_agent import ReActAgent
 from jarvis.core.predictive_planner import PredictivePlanner
+from jarvis.execution.task_executor import TaskExecutor, TaskStep, VerificationStrategy
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
 from jarvis.safety import InputFilter, PlanValidator, ToolGuard, AuditLog
@@ -185,6 +186,12 @@ class Orchestrator:
         
         # Output
         self.tts = TTSManager(config)
+        
+        # Task Executor for Plan-Execute-Verify loop (with visual verification disabled by default)
+        self.task_executor = TaskExecutor(enable_visual_verification=False)
+        
+        # Action Memory for loop prevention (tracks last 50 actions within 60 seconds)
+        self._action_memory: Dict[str, float] = {}  # action_hash -> timestamp
         
         # State
         self.state = {
@@ -798,6 +805,28 @@ class Orchestrator:
             else:
                 logger.warning("Plan revision failed, proceeding with original plan")
         
+        # Check for duplicate action (loop prevention) using action memory
+        action_hash = hash(command) % 100000
+        current_time = time.time()
+        if action_hash in self._action_memory:
+            last_executed = self._action_memory[action_hash]
+            if current_time - last_executed < 30:  # Within 30 seconds
+                logger.warning(f"Duplicate command detected within 30s, skipping: {command[:50]}...")
+                return {
+                    'success': False,
+                    'error': 'Duplicate command',
+                    'response': "I just executed that command. Please wait or try something different.",
+                    'mode': 'agent',
+                    'strategy': 'plan',
+                    'actions': []
+                }
+        
+        # Record this action for loop prevention
+        self._action_memory[action_hash] = current_time
+        # Keep only recent actions (cleanup old entries)
+        cutoff = current_time - 60
+        self._action_memory = {k: v for k, v in self._action_memory.items() if v > cutoff}
+        
         # Execute plan steps with safety validation and abort checking
         executed_steps = []
         for idx, step in enumerate(plan):
@@ -859,11 +888,21 @@ class Orchestrator:
             
             # Don't add tool results to memory to reduce memory usage
         
-        # Skip reflection to reduce memory usage
-        # self.reflector.reflect(...)
+        # Extract actual outputs from executed steps for display
+        output_parts = []
+        for step_info in executed_steps:
+            result = step_info.get('result')
+            if result and hasattr(result, 'output') and result.output:
+                output_parts.append(result.output)
+            elif result and isinstance(result, dict) and result.get('output'):
+                output_parts.append(result['output'])
         
-        # Generate response
-        response_text = f"Task completed. Steps executed: {len(executed_steps)}"
+        # Generate response with actual tool outputs
+        if output_parts:
+            response_text = ". ".join(output_parts)
+        else:
+            response_text = f"Task completed. Steps executed: {len(executed_steps)}"
+        
         # Don't store assistant message to reduce memory usage
         self._speak(response_text)
         
