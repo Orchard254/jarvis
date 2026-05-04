@@ -255,7 +255,9 @@ def _apply_tool_specific_normalization(tool_name: str, params: Dict[str, Any],
                 # Check in normalized params first (already extracted from params container)
                 if field in normalized and normalized[field]:
                     normalized['app_name'] = normalized[field]
-                    logger.debug(f"Found app_name in normalized params field: {field}")
+                    # Remove the alternative field to avoid "multiple values" error
+                    del normalized[field]
+                    logger.debug(f"Mapped {field} -> app_name")
                     break
                 # Then check in top-level step_dict
                 elif field in step_dict and step_dict[field]:
