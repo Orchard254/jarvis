@@ -605,81 +605,133 @@ class SearchAndNavigateTool(BaseTool):
             engine = get_automation_engine()
             page = engine.ensure_browser(headless=False)
             
-            # Step 1: Search for the site using Google via Playwright
-            logger.info(f"Searching for site: {site_query}")
-            search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
-            page.goto(search_url, timeout=30000)
+            # Step 1: Try direct navigation first for common sites (faster and more reliable)
+            known_domains = {
+                "kilimall": "https://www.kilimall.co.ke",
+                "kilimall kenya": "https://www.kilimall.co.ke",
+                "kilimall uganda": "https://www.kilimall.ug",
+                "amazon": "https://www.amazon.com",
+                "google": "https://www.google.com",
+                "facebook": "https://www.facebook.com",
+                "twitter": "https://www.twitter.com",
+                "youtube": "https://www.youtube.com",
+                "instagram": "https://www.instagram.com",
+                "linkedin": "https://www.linkedin.com",
+                "github": "https://www.github.com",
+                "stackoverflow": "https://stackoverflow.com",
+                "reddit": "https://www.reddit.com",
+                "wikipedia": "https://www.wikipedia.org",
+                "ebay": "https://www.ebay.com",
+                "aliexpress": "https://www.aliexpress.com",
+                "alibaba": "https://www.alibaba.com",
+                "jumia": "https://www.jumia.co.ke",
+            }
             
-            # Wait for search results with multiple fallback selectors
-            selectors = ["div#search", "div.g", "h3", "a[href^='http']"]
-            loaded = False
-            for selector in selectors:
+            target_url = None
+            query_lower = site_query.lower().strip()
+            
+            # Check for exact match
+            if query_lower in known_domains:
+                target_url = known_domains[query_lower]
+                logger.info(f"Recognized site '{site_query}' -> {target_url}")
+            else:
+                # Check for partial match
+                for key, url in known_domains.items():
+                    if key in query_lower or query_lower in key:
+                        target_url = url
+                        logger.info(f"Partial match '{site_query}' -> {target_url}")
+                        break
+            
+            # If we found a known domain, navigate directly
+            if target_url:
+                logger.info(f"Navigating directly to: {target_url}")
                 try:
-                    page.wait_for_selector(selector, timeout=5000)
-                    loaded = True
-                    logger.debug(f"Found search results with selector: {selector}")
-                    break
-                except:
-                    continue
+                    page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+                    time.sleep(2)
+                except Exception as nav_error:
+                    error_msg = str(nav_error)
+                    if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                        logger.warning("Browser crashed during navigation. Restarting...")
+                        engine.stop()
+                        return ToolResult.fail(error="Browser crashed. Please try again.")
+                    raise
             
-            if not loaded:
-                logger.warning("No search results found immediately, waiting longer...")
-                time.sleep(5)
-            
-            # Step 2: Extract first organic result URL using JavaScript (most reliable)
-            first_link = page.evaluate("""
-                () => {
-                    // Strategy 1: Find first search result link excluding Google
-                    const links = document.querySelectorAll('a[href^="http"]');
-                    for (let link of links) {
-                        const href = link.href;
-                        if (!href.includes('google.com') && 
-                            !href.includes('/search?') &&
-                            href.length > 20) {
-                            return href;
+            # Step 2: If not a known site, use Google search
+            if not target_url:
+                logger.info(f"Searching for site: {site_query}")
+                search_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(site_query)}"
+                page.goto(search_url, timeout=30000)
+                
+                # Wait for search results with multiple fallback selectors
+                selectors = ["div#search", "div.g", "h3", "a[href^='http']"]
+                loaded = False
+                for selector in selectors:
+                    try:
+                        page.wait_for_selector(selector, timeout=5000)
+                        loaded = True
+                        logger.debug(f"Found search results with selector: {selector}")
+                        break
+                    except:
+                        continue
+                
+                if not loaded:
+                    logger.warning("No search results found immediately, waiting longer...")
+                    time.sleep(5)
+                
+                # Extract first organic result URL using JavaScript (most reliable)
+                first_link = page.evaluate("""
+                    () => {
+                        // Strategy 1: Find first search result link excluding Google
+                        const links = document.querySelectorAll('a[href^="http"]');
+                        for (let link of links) {
+                            const href = link.href;
+                            if (!href.includes('google.com') && 
+                                !href.includes('/search?') &&
+                                href.length > 20) {
+                                return href;
+                            }
                         }
-                    }
-                    
-                    // Strategy 2: Try to find any result div's link
-                    const resultDivs = document.querySelectorAll('div.g, div[data-sokoban-result]');
-                    for (const div of resultDivs) {
-                        const link = div.querySelector('a[href^="http"]');
-                        if (link && !link.href.includes('google.com')) {
-                            return link.href;
+                        
+                        // Strategy 2: Try to find any result div's link
+                        const resultDivs = document.querySelectorAll('div.g, div[data-sokoban-result]');
+                        for (const div of resultDivs) {
+                            const link = div.querySelector('a[href^="http"]');
+                            if (link && !link.href.includes('google.com')) {
+                                return link.href;
+                            }
                         }
-                    }
-                    
-                    // Strategy 3: Just get first external link
-                    const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
-                    const exclude = ['google.com', 'youtube.com', 'googleusercontent'];
-                    for (const link of allLinks) {
-                        if (!exclude.some(ex => link.href.includes(ex))) {
-                            return link.href;
+                        
+                        // Strategy 3: Just get first external link
+                        const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
+                        const exclude = ['google.com', 'youtube.com', 'googleusercontent'];
+                        for (const link of allLinks) {
+                            if (!exclude.some(ex => link.href.includes(ex))) {
+                                return link.href;
+                            }
                         }
+                        
+                        return null;
                     }
-                    
-                    return null;
-                }
-            """)
-            
-            if not first_link:
-                return ToolResult.fail(error="No valid URL found in search results")
-            
-            target_url = first_link
-            logger.info(f"Found URL: {target_url}")
-            
-            # Step 3: Navigate to the site with error recovery
-            logger.info(f"Navigating to: {target_url}")
-            try:
-                page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
-                time.sleep(2)
-            except Exception as nav_error:
-                error_msg = str(nav_error)
-                if "closed" in error_msg.lower() or "context" in error_msg.lower():
-                    logger.warning("Browser crashed during navigation. Restarting...")
-                    engine.stop()
-                    return ToolResult.fail(error="Browser crashed. Please try again.")
-                raise
+                """)
+                
+                if not first_link:
+                    return ToolResult.fail(error="No valid URL found in search results")
+                
+                target_url = first_link
+                logger.info(f"Found URL: {target_url}")
+                
+                # Navigate to the site with error recovery
+                logger.info(f"Navigating to: {target_url}")
+                try:
+                    page.goto(target_url, timeout=30000, wait_until='domcontentloaded')
+                    time.sleep(2)
+                except Exception as nav_error:
+                    error_msg = str(nav_error)
+                    if "closed" in error_msg.lower() or "context" in error_msg.lower():
+                        logger.warning("Browser crashed during navigation. Restarting...")
+                        engine.stop()
+                        return ToolResult.fail(error="Browser crashed. Please try again.")
+                    raise
             
             # Step 4: If internal search requested, perform it
             if internal_search:
