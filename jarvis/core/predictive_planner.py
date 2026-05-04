@@ -67,6 +67,7 @@ RULES:
     - search_web requires "query"
     - focus_window requires "title"
     - create_file/write_file/read_file/delete_file require "path"
+11. CLARIFICATION FLAG: Set "needs_clarification": true ONLY if the request is ambiguous, dangerous, or missing critical information. Set to false for clear, straightforward requests.
 
 {context_section}
 AVAILABLE TOOLS:
@@ -79,6 +80,7 @@ Output ONLY valid JSON in this exact format (no markdown wrapping):
     "goal": "Clear restatement of the goal",
     "corrections": ["List of typos or ambiguities you fixed"],
     "confidence": "high/medium/low",
+    "needs_clarification": false,
     "steps": [
         {{
             "tool": "tool_name",

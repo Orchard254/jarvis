@@ -804,6 +804,7 @@ class Orchestrator:
     def _handle_agent_mode_with_confirm(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
         """
         Handle medium-confidence intents (60-84) by showing plan and asking for confirmation.
+        Only asks for confirmation if the LLM indicates clarification is needed.
         
         Args:
             command: User command
@@ -835,80 +836,74 @@ class Orchestrator:
             )
             
             if plan and plan.get('steps'):
-                # Show plan to user
-                print(f"\n{'='*60}")
-                print(f"📋 Proposed Plan (Confidence: {intent_analysis['confidence']})")
-                print(f"{'='*60}")
-                print(f"Goal: {plan.get('goal', command)}")
-                print(f"\nSteps:")
-                for i, step in enumerate(plan['steps'], 1):
-                    tool_name = step.get('tool', 'unknown')
-                    params = step.get('params', {})
-                    reason = step.get('reason', '')
-                    print(f"  {i}. {tool_name}({', '.join(f'{k}={v}' for k,v in params.items())})")
-                    if reason:
-                        print(f"     → {reason}")
-                print(f"{'='*60}")
+                # Check if LLM requested clarification
+                needs_clarification = plan.get('needs_clarification', False)
                 
-                # Ask for confirmation
-                response_text = f"Ready to execute {len(plan['steps'])} step(s). Type 'yes' to proceed, or describe changes."
-                print(f"\nJARVIS: {response_text}")
-                
-                # Get user confirmation
-                try:
-                    confirm = input("\nYou: ").strip().lower()
+                # Only show confirmation if LLM explicitly requested it
+                if needs_clarification:
+                    # Show plan to user and ask for clarification
+                    print(f"\n{'='*60}")
+                    print(f"📋 Proposed Plan (Confidence: {intent_analysis['confidence']})")
+                    print(f"{'='*60}")
+                    print(f"Goal: {plan.get('goal', command)}")
+                    print(f"\nSteps:")
+                    for i, step in enumerate(plan['steps'], 1):
+                        tool_name = step.get('tool', 'unknown')
+                        params = step.get('params', {})
+                        reason = step.get('reason', '')
+                        print(f"  {i}. {tool_name}({', '.join(f'{k}={v}' for k,v in params.items())})")
+                        if reason:
+                            print(f"     → {reason}")
+                    print(f"{'='*60}")
                     
-                    if confirm in ['yes', 'y', 'ok', 'go', 'proceed', 'do it']:
-                        # User confirmed - execute the plan
-                        logger.info("User confirmed plan - executing...")
-                        result = self._handle_agent_mode(command)
-                        result['confirmed'] = True
-                        return result
-                    elif confirm in ['no', 'n', 'cancel', 'stop']:
-                        # User declined
-                        logger.info("User declined plan")
+                    # Ask for confirmation
+                    response_text = f"Ready to execute {len(plan['steps'])} step(s). Type 'yes' to proceed, or describe changes."
+                    print(f"\nJARVIS: {response_text}")
+                    
+                    # Get user confirmation
+                    try:
+                        confirm = input("\nYou: ").strip().lower()
+                        
+                        if confirm in ['yes', 'y', 'ok', 'go', 'proceed', 'do it']:
+                            # User confirmed - execute the plan
+                            logger.info("User confirmed plan - executing...")
+                            result = self._handle_agent_mode(command)
+                            result['confirmed'] = True
+                            return result
+                        elif confirm in ['no', 'n', 'cancel', 'stop']:
+                            # User declined
+                            logger.info("User declined plan")
+                            return {
+                                'success': False,
+                                'response': "Cancelled as requested.",
+                                'confirmed': False,
+                                'mode': 'agent_confirm'
+                            }
+                        else:
+                            # User wants modifications - treat as new command
+                            logger.info(f"User suggested modification: {confirm}")
+                            modified_command = f"{command} but {confirm}"
+                            return self._handle_agent_mode(modified_command)
+                            
+                    except (EOFError, KeyboardInterrupt):
                         return {
                             'success': False,
-                            'response': "Cancelled as requested.",
+                            'response': "Cancelled.",
                             'confirmed': False,
                             'mode': 'agent_confirm'
                         }
-                    else:
-                        # User wants modifications - treat as new command
-                        logger.info(f"User suggested modification: {confirm}")
-                        modified_command = f"{command} but {confirm}"
-                        return self._handle_agent_mode(modified_command)
-                        
-                except (EOFError, KeyboardInterrupt):
-                    return {
-                        'success': False,
-                        'response': "Cancelled.",
-                        'confirmed': False,
-                        'mode': 'agent_confirm'
-                    }
+                else:
+                    # No clarification needed - execute directly without confirmation
+                    logger.info(f"No clarification needed (confidence: {plan.get('confidence', 'unknown')}) - executing directly...")
+                    result = self._handle_agent_mode(command)
+                    result['confirmed'] = True
+                    return result
         
-        # Fallback: just ask yes/no without showing plan
-        print(f"\nJARVIS: I can help with that. Should I proceed? (yes/no)")
-        try:
-            confirm = input("\nYou: ").strip().lower()
-            if confirm in ['yes', 'y', 'ok', 'go']:
-                result = self._handle_agent_mode(command)
-                result['confirmed'] = True
-                return result
-            else:
-                return {
-                    'success': False,
-                    'response': "Cancelled.",
-                    'confirmed': False,
-                    'mode': 'agent_confirm'
-                }
-        except (EOFError, KeyboardInterrupt):
-            return {
-                'success': False,
-                'response': "Cancelled.",
-                'confirmed': False,
-                'mode': 'agent_confirm'
-            }
+        # Fallback: just execute without confirmation for simple cases
+        logger.info("Fallback - executing without confirmation")
+        result = self._handle_agent_mode(command)
+        result['confirmed'] = True
+        return result
     
     def _get_active_app_name(self) -> Optional[str]:
         """Get the name of the currently active application."""
