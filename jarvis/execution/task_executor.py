@@ -17,6 +17,7 @@ import logging
 import time
 import subprocess
 import sys
+import os
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -428,7 +429,10 @@ class TaskExecutor:
             # Serialize parameters to JSON
             params_json = json.dumps(parameters)
             
-            # Build the command
+            # Get the project root directory
+            project_root = str(Path(__file__).parent.parent.parent)
+            
+            # Build the command with proper environment
             cmd = [
                 sys.executable,
                 str(script_path),
@@ -436,13 +440,24 @@ class TaskExecutor:
                 params_json
             ]
             
+            # Create environment that inherits current venv
+            env = os.environ.copy()
+            
+            # Ensure PYTHONPATH includes project root
+            current_pythonpath = env.get('PYTHONPATH', '')
+            if current_pythonpath:
+                env['PYTHONPATH'] = f"{project_root}{os.pathsep}{current_pythonpath}"
+            else:
+                env['PYTHONPATH'] = project_root
+            
             # Run the subprocess
             process = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=60,  # 60 second timeout for subprocess
-                cwd=str(Path(__file__).parent.parent.parent)  # Run from project root
+                cwd=project_root,  # Run from project root
+                env=env  # Pass the modified environment
             )
             
             # Parse the result
