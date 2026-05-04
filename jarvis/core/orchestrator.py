@@ -207,6 +207,12 @@ class Orchestrator:
         self._consecutive_failures = 0
         self._failure_cache: Dict[str, int] = {}  # task_hash -> failure_count
         
+        # Context awareness - track recent results and failed actions
+        self._recent_results: List[Dict[str, Any]] = []  # Last 20 successful results
+        self._failed_actions: List[Dict[str, Any]] = []  # Last 10 failed actions
+        self._max_recent_results = 20
+        self._max_failed_actions = 10
+        
         # Abort mechanism
         self._abort_flag = threading.Event()
         self._abort_queue = queue.Queue()
@@ -588,7 +594,12 @@ class Orchestrator:
             tools_dict = {name: {'description': getattr(tool, 'description', '')} 
                          for name, tool in self.tool_registry.get_all_tools().items()}
             
-            plan = self.predictive_planner.generate_plan(command, tools_dict)
+            plan = self.predictive_planner.generate_plan(
+                command, 
+                tools_dict,
+                recent_results=self._recent_results,
+                failed_actions=self._failed_actions
+            )
             
             if plan and plan.get('steps'):
                 logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
@@ -638,6 +649,33 @@ class Orchestrator:
                 
                 # Get task summary for response
                 task_summary = self.task_executor.get_task_summary(executed_plan)
+                
+                # Update context awareness tracking with results
+                for step in executed_plan.steps:
+                    if step.status.value == 'completed' and step.result:
+                        # Store successful result
+                        result_entry = {
+                            'tool': step.tool_name,
+                            'command': command[:100],
+                            'result': str(step.result.output if hasattr(step.result, 'output') else step.result),
+                            'timestamp': time.time()
+                        }
+                        self._recent_results.append(result_entry)
+                        # Keep only last N results
+                        if len(self._recent_results) > self._max_recent_results:
+                            self._recent_results.pop(0)
+                    elif step.status.value in ['failed', 'error'] and step.error_message:
+                        # Store failed action
+                        failure_entry = {
+                            'tool': step.tool_name,
+                            'command': command[:100],
+                            'error': step.error_message,
+                            'timestamp': time.time()
+                        }
+                        self._failed_actions.append(failure_entry)
+                        # Keep only last N failures
+                        if len(self._failed_actions) > self._max_failed_actions:
+                            self._failed_actions.pop(0)
                 
                 # Extract actual outputs from executed steps for display
                 output_parts = []
