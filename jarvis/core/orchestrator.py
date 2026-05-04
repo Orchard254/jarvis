@@ -102,7 +102,7 @@ class Orchestrator:
         """
         self.config = config
         self.running = False
-        self.mode = 'agent'  # 'chat' or 'agent'
+        self.mode = 'unified'  # Unified mode - LLM decides everything
         self.current_task = None
         
         # Initialize core components
@@ -427,25 +427,14 @@ class Orchestrator:
             intent_score = intent_analysis['score']
             recommended_mode = intent_analysis['mode']
             
-            logger.info(f"Intent score: {intent_score}/100 - {intent_analysis['reasoning']} -> Mode: {recommended_mode}")
+            logger.info(f"Intent score: {intent_score}/100 - {intent_analysis['reasoning']}")
             
-            # Add to memory only for agent mode (to reduce memory usage)
-            if intent_score >= 60:  # Agent or confirm modes
-                self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
+            # Add to memory for all commands
+            self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
-            # Route based on adaptive score with conflict resolution
-            # Let the LLM decide the mode based on intent analysis
-            if recommended_mode == 'chat' or intent_score < 60:
-                # Handle in chat mode - simple conversation
-                result = self._handle_chat_mode(command)
-            elif recommended_mode == 'agent_confirm' or intent_score >= 60:
-                # Handle with confirmation for medium-confidence intents
-                result = self._handle_agent_mode_with_confirm(command, intent_analysis)
-            else:
-                # Default to agent mode for clear action commands
-                result = self._handle_agent_mode(command)
-                # Learn from successful execution
-                self.intent_scorer.learn_from_interaction(command, executed=True)
+            # Unified mode - LLM decides everything via predictive planner
+            # The intent scorer is only used for learning patterns, not routing
+            result = self._handle_unified_mode(command, intent_analysis)
             
             # Update state
             self.state['total_interactions'] += 1
@@ -455,7 +444,7 @@ class Orchestrator:
                 self.state['failed_tasks'] += 1
             
             # Store experience only for significant tasks (not simple chat)
-            if result.get('mode') == 'agent' and result.get('actions'):
+            if result.get('mode') in ['unified', 'agent'] and result.get('actions'):
                 self.memory.store_experience(
                     goal=command,
                     actions=result.get('actions', []),
@@ -471,7 +460,7 @@ class Orchestrator:
                         context={
                             'success': result.get('success', False),
                             'actions_count': len(result.get('actions', [])),
-                            'mode': 'agent'
+                            'mode': result.get('mode', 'unified')
                         }
                     )
                 except Exception as e:
@@ -482,7 +471,7 @@ class Orchestrator:
                 action_type='user_command',
                 details={
                     'command': command,
-                    'mode': self.mode,
+                    'mode': result.get('mode', 'unified'),
                     'intent': intent_analysis,
                     'result': result.get('success', False),
                     'duration_ms': int((time.time() - start_time) * 1000)
@@ -503,6 +492,214 @@ class Orchestrator:
             }
         finally:
             self.state['current_activity'] = 'idle'
+    
+    def _handle_unified_mode(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
+        """
+        Unified mode - LLM decides everything via predictive planner.
+        
+        The predictive planner's needs_clarification flag determines if confirmation is shown.
+        No separate chat/agent modes - single pipeline for all requests.
+        
+        Args:
+            command: User command
+            intent_analysis: Analysis result from intent scorer (used for learning only)
+            
+        Returns:
+            Response dict
+        """
+        logger.info(f"Handling in unified mode: {command[:50]}...")
+        
+        # Clear abort flag for new task
+        self.clear_abort()
+        
+        # Retrieve relevant memories
+        context = self.memory.retrieve_context(query=command)
+        memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
+        logger.debug(f"Retrieved {len(memories)} relevant memories")
+        
+        # Select reasoning strategy
+        classification = self.strategy_selector.classify(command)
+        strategy = self._map_complexity_to_strategy(classification.complexity)
+        logger.info(f"Selected strategy: {strategy} (complexity: {classification.complexity.value})")
+        
+        system_prompt = get_system_prompt(mode='agent')
+        
+        # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution with TaskExecutor verification
+        if strategy in ['direct', 'plan']:
+            logger.info(f"[Predictive] Using LLM's internal knowledge for direct execution...")
+            
+            # Generate predictive plan using LLM's world knowledge
+            tools_dict = {name: {'description': getattr(tool, 'description', '')} 
+                         for name, tool in self.tool_registry.get_all_tools().items()}
+            
+            plan = self.predictive_planner.generate_plan(
+                command, 
+                tools_dict,
+                recent_results=self._recent_results,
+                failed_actions=self._failed_actions
+            )
+            
+            if plan and plan.get('steps'):
+                # Check if LLM requested clarification
+                needs_clarification = plan.get('needs_clarification', False)
+                
+                # Only show confirmation if LLM explicitly requested it
+                if needs_clarification:
+                    # Show plan to user and ask for clarification
+                    print(f"\n{'='*60}")
+                    print(f"📋 Proposed Plan (Confidence: {plan.get('confidence', 'unknown')})")
+                    print(f"{'='*60}")
+                    print(f"Goal: {plan.get('goal', command)}")
+                    if plan.get('corrections'):
+                        print(f"Corrections: {', '.join(plan['corrections'])}")
+                    print(f"\nSteps:")
+                    for i, step in enumerate(plan['steps'], 1):
+                        tool_name = step.get('tool', 'unknown')
+                        params = step.get('params', {})
+                        reason = step.get('reason', '')
+                        print(f"  {i}. {tool_name}({', '.join(f'{k}={v}' for k,v in params.items())})")
+                        if reason:
+                            print(f"     → {reason}")
+                    print(f"{'='*60}")
+                    
+                    # Ask for confirmation
+                    response_text = f"Ready to execute {len(plan['steps'])} step(s). Type 'yes' to proceed, or describe changes."
+                    print(f"\nJARVIS: {response_text}")
+                    
+                    # Get user confirmation
+                    try:
+                        confirm = input("\nYou: ").strip().lower()
+                        
+                        if confirm in ['yes', 'y', 'ok', 'go', 'proceed', 'do it']:
+                            # User confirmed - execute the plan
+                            logger.info("User confirmed plan - executing...")
+                            return self._execute_plan(command, plan)
+                        elif confirm in ['no', 'n', 'cancel', 'stop']:
+                            # User declined
+                            logger.info("User declined plan")
+                            return {
+                                'success': False,
+                                'response': "Cancelled as requested.",
+                                'mode': 'unified',
+                                'actions': []
+                            }
+                        else:
+                            # User wants modifications - treat as new command
+                            logger.info(f"User suggested modification: {confirm}")
+                            modified_command = f"{command} but {confirm}"
+                            return self._handle_unified_mode(modified_command, intent_analysis)
+                            
+                    except (EOFError, KeyboardInterrupt):
+                        return {
+                            'success': False,
+                            'response': "Cancelled.",
+                            'mode': 'unified',
+                            'actions': []
+                        }
+                else:
+                    # No clarification needed - execute directly without confirmation
+                    logger.info(f"No clarification needed (confidence: {plan.get('confidence', 'unknown')}) - executing directly...")
+                    return self._execute_plan(command, plan)
+        
+        # Fallback: Use ReAct agent for complex tasks that need iterative reasoning
+        logger.info(f"Falling back to ReAct agent for complex reasoning...")
+        return self._handle_react_fallback(command)
+    
+    def _execute_plan(self, command: str, plan: Dict) -> Dict[str, Any]:
+        """Execute a generated plan and return results."""
+        logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
+        
+        # Create task plan
+        task_steps = []
+        for step in plan['steps']:
+            task_step = TaskStep(
+                tool_name=step['tool'],
+                params=step.get('params', {}),
+                description=step.get('reason', '')
+            )
+            task_steps.append(task_step)
+        
+        # Execute the plan
+        result = self.task_executor.execute_plan(
+            goal=plan.get('goal', command),
+            steps=task_steps,
+            verification_strategy=VerificationStrategy.TOOL_RESULT
+        )
+        
+        # Learn from successful execution
+        if result['success']:
+            self.intent_scorer.learn_from_interaction(command, executed=True)
+            
+            # Store recent result for context
+            self._recent_results.append({
+                'command': command,
+                'result': result['output'],
+                'timestamp': time.time()
+            })
+            if len(self._recent_results) > self._max_recent_results:
+                self._recent_results.pop(0)
+        
+        # Build response
+        response_parts = []
+        if result.get('step_results'):
+            for step_result in result['step_results']:
+                if step_result.get('success'):
+                    response_parts.append(step_result.get('output', ''))
+        
+        response_text = '. '.join(filter(None, response_parts)) if response_parts else result.get('output', 'Task completed')
+        
+        # Speak response
+        self._speak(response_text)
+        
+        return {
+            'success': result['success'],
+            'response': response_text,
+            'mode': 'unified',
+            'actions': plan['steps'],
+            'confirmed': not plan.get('needs_clarification', False)
+        }
+    
+    def _handle_react_fallback(self, command: str) -> Dict[str, Any]:
+        """Fallback to ReAct agent for complex tasks needing iterative reasoning."""
+        logger.info(f"Using ReAct agent for complex task: {command[:50]}...")
+        
+        try:
+            result = self.react_agent.run(command)
+            
+            if result['success']:
+                # Learn from successful execution
+                self.intent_scorer.learn_from_interaction(command, executed=True)
+                
+                # Speak response
+                response_text = result.get('response', 'Task completed')
+                self._speak(response_text)
+                
+                return {
+                    'success': True,
+                    'response': response_text,
+                    'mode': 'unified',
+                    'actions': result.get('actions', [])
+                }
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"ReAct agent failed: {error_msg}")
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'response': "I wasn't able to complete that task.",
+                    'mode': 'unified',
+                    'actions': []
+                }
+                
+        except Exception as e:
+            logger.error(f"ReAct fallback error: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e),
+                'response': "I encountered an error processing your request.",
+                'mode': 'unified',
+                'actions': []
+            }
     
     def _handle_chat_mode(self, command: str) -> Dict[str, Any]:
         """
@@ -1442,9 +1639,9 @@ class Orchestrator:
         Set operating mode.
         
         Args:
-            mode: 'chat' or 'agent'
+            mode: 'unified', 'chat', or 'agent' (chat/agent kept for backward compatibility but unified is default)
         """
-        if mode in ['chat', 'agent']:
+        if mode in ['chat', 'agent', 'unified']:
             self.mode = mode
             logger.info(f"Mode set to: {mode}")
         else:
