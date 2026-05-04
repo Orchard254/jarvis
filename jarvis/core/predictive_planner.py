@@ -66,7 +66,19 @@ class PredictivePlanner:
                 temperature=0.1,  # Low temp for deterministic planning
             )
             
-            # Parse JSON
+            # Extract content from brain response dict
+            if isinstance(response, dict):
+                if not response.get('success', False):
+                    logger.error(f"Brain chat failed: {response.get('error', 'Unknown error')}")
+                    return None
+                # Get the actual content string from the response dict
+                response_content = response.get('content', '')
+                if not response_content:
+                    logger.error("Empty content in brain response")
+                    return None
+                response = response_content
+            
+            # Parse JSON from the content string
             if isinstance(response, str):
                 # Extract JSON from markdown code blocks if present
                 if "```json" in response:
@@ -79,8 +91,12 @@ class PredictivePlanner:
                 plan = response
             
             # Validate plan structure
-            if not isinstance(plan, dict) or "steps" not in plan:
-                logger.error(f"Invalid plan structure: {plan}")
+            if not isinstance(plan, dict):
+                logger.error(f"Invalid plan structure (not a dict): {type(plan)}")
+                return None
+            
+            if "steps" not in plan:
+                logger.error(f"Invalid plan structure (no 'steps' key): {plan.keys() if hasattr(plan, 'keys') else 'N/A'}")
                 return None
                 
             logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")

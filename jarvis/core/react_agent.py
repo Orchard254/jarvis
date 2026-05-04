@@ -225,23 +225,39 @@ Do not output any text outside the JSON block when acting.
         except Exception as e:
             return f"ERROR: Failed to generate tool: {str(e)}\n{traceback.format_exc()}"
 
-    def _parse_action(self, response: str) -> Optional[Dict]:
+    def _parse_action(self, response) -> Optional[Dict]:
         """Extracts JSON action from LLM response."""
-        # Handle dict response directly (from tool_calls)
+        # Handle dict response directly (from tool_calls or brain.chat return value)
         if isinstance(response, dict):
-            # Check for natural language response (no tool calls)
+            # Check for tool calls in Ollama format
             if 'tool_calls' in response and response['tool_calls']:
                 tool_call = response['tool_calls'][0]
                 return {
                     'action': tool_call['function']['name'],
                     'arguments': tool_call['function']['arguments']
                 }
-            elif 'content' in response and response.get('content'):
-                # LLM returned natural language - task complete
+            # Check for natural language response in content field
+            elif 'content' in response:
+                content = response.get('content', '')
+                if content:
+                    # Try to parse content as JSON action
+                    try:
+                        clean_resp = content.strip()
+                        if clean_resp.startswith("```json"):
+                            clean_resp = clean_resp[7:]
+                        if clean_resp.endswith("```"):
+                            clean_resp = clean_resp[:-3]
+                        data = json.loads(clean_resp.strip())
+                        if 'action' in data or 'tool' in data:
+                            return data
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                # If no action found, task is complete
                 return None
             else:
                 return None
         
+        # Handle string response
         try:
             # Handle markdown code blocks if present
             clean_resp = response.strip()
@@ -251,7 +267,7 @@ Do not output any text outside the JSON block when acting.
                 clean_resp = clean_resp[:-3]
 
             data = json.loads(clean_resp.strip())
-            if 'action' in data:
+            if 'action' in data or 'tool' in data:
                 return data
         except (json.JSONDecodeError, AttributeError):
             pass

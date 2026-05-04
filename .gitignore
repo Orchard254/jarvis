@@ -1,16 +1,41 @@
 ```
-# Python
+# Python cache files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Logs
-*.log
-logs/
+# Development environments
+.venv/
+venv/
+env/
 
-# Environment
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swo
+*.swp
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Local environment settings
 .env
 .env.local
 *.env.*
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```
