@@ -304,6 +304,16 @@ def _apply_tool_specific_normalization(tool_name: str, params: Dict[str, Any],
                     logger.debug(f"Found path in alternative field: {field}")
                     break
     
+    # press_key: LLM might use 'key' instead of 'keys'
+    if tool_name == 'press_key':
+        if 'keys' not in normalized:
+            alt_fields = ['key', 'keystroke', 'shortcut', 'combination']
+            for field in alt_fields:
+                if field in step_dict and step_dict[field]:
+                    normalized['keys'] = step_dict[field]
+                    logger.debug(f"Found keys in alternative field: {field}")
+                    break
+    
     return normalized
 
 
