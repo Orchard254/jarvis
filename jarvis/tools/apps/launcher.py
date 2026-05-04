@@ -8,13 +8,30 @@ Uses subprocess and psutil for app management.
 import logging
 import os
 import subprocess
-from typing import Any
+import time
+from typing import Any, Optional
 
 import psutil
 
 from ..base import BaseTool, ToolResult
 
 log = logging.getLogger("app_tools")
+
+# Global tracking of last opened window handle (hwnd) for focus management
+_last_opened_hwnd: Optional[int] = None
+_last_opened_app: Optional[str] = None
+
+
+def get_last_opened_hwnd() -> Optional[int]:
+    """Get the hwnd of the last opened application."""
+    return _last_opened_hwnd
+
+
+def clear_last_opened_tracking():
+    """Clear the last opened window tracking."""
+    global _last_opened_hwnd, _last_opened_app
+    _last_opened_hwnd = None
+    _last_opened_app = None
 
 
 # Complete app mappings as required - all entries from original pc_control.py
@@ -60,6 +77,8 @@ class OpenAppTool(BaseTool):
         return True, ""
     
     def execute(self, **kwargs) -> ToolResult:
+        global _last_opened_hwnd, _last_opened_app
+        
         app_name = kwargs["app_name"].strip().lower()
         
         # Use the complete app_mappings dict
@@ -108,6 +127,13 @@ class OpenAppTool(BaseTool):
                         except Exception as e:
                             log.warning(f"Error checking Chrome cmdline: {e}")
                     
+                    # App already running - still try to bring its window to foreground
+                    hwnd = find_window_by_process(executable)
+                    if hwnd:
+                        bring_to_foreground(hwnd)
+                        _last_opened_hwnd = hwnd
+                        _last_opened_app = app_name
+                        log.info(f"Brought existing {app_name} window to foreground")
                     return ToolResult.ok(f"{app_name} is already running")
             
             # Try to start the app
@@ -136,9 +162,25 @@ class OpenAppTool(BaseTool):
                             "--no-default-browser-check",
                         ]
                         subprocess.Popen(args)
+                        # Wait for window to appear and bring to foreground
+                        time.sleep(1.0)
+                        hwnd = find_window_by_process(executable)
+                        if hwnd:
+                            bring_to_foreground(hwnd)
+                            _last_opened_hwnd = hwnd
+                            _last_opened_app = app_name
                         return ToolResult.ok(f"Opening {app_name} with automation support (debug port 9222)")
                 
                 subprocess.Popen([executable], shell=True)
+            
+            # Wait briefly for window to appear and bring to foreground
+            time.sleep(0.5)
+            hwnd = find_window_by_process(executable)
+            if hwnd:
+                bring_to_foreground(hwnd)
+                _last_opened_hwnd = hwnd
+                _last_opened_app = app_name
+                log.info(f"Brought newly opened {app_name} to foreground (hwnd={hwnd})")
             
             return ToolResult.ok(f"Opening {app_name}")
             
@@ -271,3 +313,98 @@ LAUNCHER_TOOLS = [
     CloseAppTool,
     ListRunningAppsTool,
 ]
+
+
+# Helper functions for window management (using ctypes for Windows API)
+
+def find_window_by_process(process_name: str) -> Optional[int]:
+    """
+    Find a window handle (hwnd) by process name.
+    
+    Returns the hwnd of the first matching window, or None if not found.
+    """
+    import ctypes
+    from ctypes import wintypes
+    
+    # Get the process ID
+    target_proc = process_name.lower()
+    pid = None
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            if target_proc in proc.info["name"].lower():
+                pid = proc.info["pid"]
+                break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    if pid is None:
+        return None
+    
+    # Find window by PID
+    found_hwnd = None
+    
+    def callback(hwnd: int, lparam: int) -> bool:
+        nonlocal found_hwnd
+        from ctypes import windll
+        
+        # Check if window is visible
+        if windll.user32.IsWindowVisible(hwnd):
+            # Get the process ID for this window
+            window_pid = ctypes.c_ulong()
+            windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+            
+            if window_pid.value == pid:
+                # Get window title to verify it's a real window
+                title_buf = ctypes.create_unicode_buffer(256)
+                windll.user32.GetWindowTextW(hwnd, title_buf, 256)
+                if title_buf.value:  # Only consider windows with titles
+                    found_hwnd = hwnd
+                    return False  # Stop enumeration
+        
+        return True  # Continue enumeration
+    
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    enum_func = WNDENUMPROC(callback)
+    ctypes.windll.user32.EnumWindows(enum_func, 0)
+    
+    return found_hwnd
+
+
+def bring_to_foreground(hwnd: int) -> bool:
+    """
+    Bring a window to the foreground.
+    
+    This uses proper Windows API calls to ensure the window actually receives focus.
+    """
+    import ctypes
+    from ctypes import wintypes
+    
+    # Restore if minimized
+    SW_RESTORE = 9
+    ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+    
+    # Try to set foreground - Windows may block this if another app is active
+    # Use AttachThreadInput to bypass some restrictions
+    try:
+        # Get the foreground window and its thread
+        fg_window = ctypes.windll.user32.GetForegroundWindow()
+        fg_thread = ctypes.windll.user32.GetWindowThreadProcessId(fg_window, None)
+        
+        # Get our thread ID
+        current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+        
+        # Attach our thread to the foreground thread
+        ctypes.windll.user32.AttachThreadInput(fg_thread, current_thread, True)
+        
+        # Set focus and foreground
+        ctypes.windll.user32.SetFocus(hwnd)
+        result = ctypes.windll.user32.SetForegroundWindow(hwnd) != 0
+        
+        # Detach threads
+        ctypes.windll.user32.AttachThreadInput(fg_thread, current_thread, False)
+        
+        return result
+    except Exception as e:
+        log.debug(f"AttachThreadInput failed, using simple SetForegroundWindow: {e}")
+        # Fallback to simple approach
+        return ctypes.windll.user32.SetForegroundWindow(hwnd) != 0
