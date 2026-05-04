@@ -675,11 +675,17 @@ class Orchestrator:
             )
             task_steps.append(task_step)
         
+        # Create plan object
+        task_plan = self.task_executor.create_plan(
+            task_id=f"task_{hash(command) % 100000:08x}",
+            description=plan.get('goal', command),
+            steps=task_steps
+        )
+        
         # Execute the plan
         result = self.task_executor.execute_plan(
-            goal=plan.get('goal', command),
-            steps=task_steps,
-            verification_strategy=VerificationStrategy.TOOL_RESULT
+            task_plan,
+            stop_on_failure=False
         )
         
         # Learn from successful execution
