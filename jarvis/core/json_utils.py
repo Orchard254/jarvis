@@ -249,10 +249,16 @@ def _apply_tool_specific_normalization(tool_name: str, params: Dict[str, Any],
     # open_app tool: LLM often puts app name in various fields
     if tool_name == 'open_app':
         if 'app_name' not in normalized or not normalized.get('app_name'):
-            # Try alternative field names
+            # Try alternative field names in both step_dict and normalized params
             alt_fields = ['application', 'app', 'name', 'program', 'software']
             for field in alt_fields:
-                if field in step_dict and step_dict[field]:
+                # Check in normalized params first (already extracted from params container)
+                if field in normalized and normalized[field]:
+                    normalized['app_name'] = normalized[field]
+                    logger.debug(f"Found app_name in normalized params field: {field}")
+                    break
+                # Then check in top-level step_dict
+                elif field in step_dict and step_dict[field]:
                     normalized['app_name'] = step_dict[field]
                     logger.debug(f"Found app_name in alternative field: {field}")
                     break

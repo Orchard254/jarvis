@@ -86,11 +86,20 @@ class OpenAppTool(BaseTool):
         
         try:
             # Check if already running
-            for proc in psutil.process_iter(["name"]):
-                if executable.lower() in proc.info["name"].lower():
-                    log.info(f"{app_name} is already running")
-                    # For Chrome, check if debug port is enabled
-                    if app_name in ["chrome", "google chrome"]:
+            running_procs = []
+            for proc in psutil.process_iter(["name", "pid", "cmdline"]):
+                try:
+                    if executable.lower() in proc.info["name"].lower():
+                        running_procs.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if running_procs:
+                log.info(f"{app_name} is already running ({len(running_procs)} instance(s))")
+                
+                # For Chrome, check if debug port is enabled
+                if app_name in ["chrome", "google chrome"]:
+                    for proc in running_procs:
                         try:
                             cmdline = ' '.join(proc.cmdline())
                             if '--remote-debugging-port=' in cmdline:
@@ -98,43 +107,56 @@ class OpenAppTool(BaseTool):
                                 for part in cmdline.split():
                                     if part.startswith('--remote-debugging-port='):
                                         port = part.split('=')[1]
-                                        return ToolResult.ok(f"{app_name} is already running with automation support (debug port {port})")
-                                return ToolResult.ok(f"{app_name} is already running with automation support")
-                            else:
-                                log.info("Chrome running without debug port. Launching second instance for automation...")
-                                # Don't kill existing Chrome - launch a second instance with debug port
-                                chrome_paths = [
-                                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                                    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-                                ]
-                                chrome_path = None
-                                for path in chrome_paths:
-                                    if os.path.exists(path):
-                                        chrome_path = path
-                                        break
-                                
-                                if chrome_path:
-                                    args = [
-                                        chrome_path,
-                                        "--remote-debugging-port=9222",
-                                        "--no-first-run",
-                                        "--no-default-browser-check",
-                                        "--user-data-dir=" + os.path.join(os.getenv('TEMP', ''), 'jarvis_chrome_profile'),
-                                    ]
-                                    subprocess.Popen(args)
-                                    return ToolResult.ok(f"Launched additional Chrome instance for automation (debug port 9222). Your original Chrome session remains unchanged.")
+                                        # Find and focus the Chrome window
+                                        hwnd = find_window_by_process(executable)
+                                        if hwnd:
+                                            bring_to_foreground(hwnd)
+                                            _last_opened_hwnd = hwnd
+                                            _last_opened_app = app_name
+                                        return ToolResult.ok(f"Chrome is already running with automation support (debug port {port}). Brought to foreground.")
+                                # If port found but no specific window focused yet
+                                hwnd = find_window_by_process(executable)
+                                if hwnd:
+                                    bring_to_foreground(hwnd)
+                                    _last_opened_hwnd = hwnd
+                                    _last_opened_app = app_name
+                                return ToolResult.ok(f"Chrome is already running with automation support. Brought to foreground.")
                         except Exception as e:
                             log.warning(f"Error checking Chrome cmdline: {e}")
-                    
-                    # App already running - still try to bring its window to foreground
-                    hwnd = find_window_by_process(executable)
+                
+                # App already running - find the most relevant window and bring it to foreground
+                # Try to find a window with the app name in its title first
+                best_hwnd = None
+                target_title_keywords = app_name.replace("_", " ").replace("-", " ").split()
+                
+                for proc in running_procs:
+                    hwnd = find_window_by_process(proc.info["name"])
                     if hwnd:
-                        bring_to_foreground(hwnd)
-                        _last_opened_hwnd = hwnd
-                        _last_opened_app = app_name
-                        log.info(f"Brought existing {app_name} window to foreground")
-                    return ToolResult.ok(f"{app_name} is already running")
+                        # Get window title to prioritize
+                        title = get_window_title(hwnd)
+                        if title:
+                            # Prefer windows that have the app name in the title
+                            if any(keyword.lower() in title.lower() for keyword in target_title_keywords):
+                                best_hwnd = hwnd
+                                break
+                        # Fallback to first window found
+                        if best_hwnd is None:
+                            best_hwnd = hwnd
+                
+                if best_hwnd:
+                    bring_to_foreground(best_hwnd)
+                    _last_opened_hwnd = best_hwnd
+                    _last_opened_app = app_name
+                    log.info(f"Brought existing {app_name} window to foreground")
+                    
+                    # Provide helpful context about what was found
+                    window_count = sum(1 for p in running_procs if find_window_by_process(p.info["name"]))
+                    if window_count > 1:
+                        return ToolResult.ok(f"{app_name} is already running with {window_count} windows. Brought one to the foreground.")
+                    else:
+                        return ToolResult.ok(f"{app_name} is already running. Brought to foreground.")
+                else:
+                    return ToolResult.ok(f"{app_name} is already running in the background (no visible windows found)")
             
             # Try to start the app
             if executable.startswith("shell:") or executable.endswith(":"):
@@ -368,6 +390,22 @@ def find_window_by_process(process_name: str) -> Optional[int]:
     ctypes.windll.user32.EnumWindows(enum_func, 0)
     
     return found_hwnd
+
+
+def get_window_title(hwnd: int) -> Optional[str]:
+    """
+    Get the title of a window given its handle (hwnd).
+    
+    Returns the window title as a string, or None if not found.
+    """
+    import ctypes
+    from ctypes import windll
+    
+    title_buf = ctypes.create_unicode_buffer(256)
+    length = windll.user32.GetWindowTextW(hwnd, title_buf, 256)
+    if length > 0:
+        return title_buf.value
+    return None
 
 
 def bring_to_foreground(hwnd: int) -> bool:
