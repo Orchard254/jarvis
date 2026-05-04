@@ -11,6 +11,8 @@ Coordinates all LLM interactions including:
 import logging
 from typing import Dict, List, Any, Optional, Callable
 import json
+import time
+import re
 
 from jarvis.models.ollama_client import OllamaClient
 from jarvis.tools.registry import ToolRegistry
@@ -57,6 +59,10 @@ class Brain:
         self.on_tool_call: Optional[Callable] = None
         self.on_thinking: Optional[Callable] = None
         
+        # Timing tracking
+        self.thinking_start_time: Optional[float] = None
+        self.last_thinking_duration: Optional[float] = None
+        
         logger.info("Brain initialized with model: %s", 
                    config.get('model', 'nemotron-3-nano:30b-cloud'))
     
@@ -71,6 +77,49 @@ class Brain:
         """
         self.on_tool_call = on_tool_call
         self.on_thinking = on_thinking
+    
+    def _parse_thinking_content(self, content: str) -> tuple[str, list[str]]:
+        """
+        Parse <think>...</think> sections from reasoning model output.
+        
+        Args:
+            content: Raw LLM response content
+            
+        Returns:
+            Tuple of (cleaned_content, thinking_sections)
+        """
+        thinking_sections = []
+        cleaned_content = content
+        
+        # Find all <think>...</think> sections
+        think_pattern = r'<think>(.*?)</think>'
+        matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
+        
+        if matches:
+            thinking_sections = [match.strip() for match in matches]
+            # Remove thinking tags from content
+            cleaned_content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE).strip()
+        
+        return cleaned_content, thinking_sections
+    
+    def _start_thinking_timer(self) -> None:
+        """Start timing the LLM thinking phase."""
+        self.thinking_start_time = time.time()
+    
+    def _stop_thinking_timer(self) -> Optional[float]:
+        """
+        Stop the thinking timer and return duration.
+        
+        Returns:
+            Duration in seconds, or None if timer wasn't started
+        """
+        if self.thinking_start_time is None:
+            return None
+        
+        duration = time.time() - self.thinking_start_time
+        self.last_thinking_duration = duration
+        self.thinking_start_time = None
+        return duration
     
     def chat(self, messages: List[Dict], 
              system_prompt: Optional[str] = None,
@@ -96,6 +145,9 @@ class Brain:
         # Get tools schema for function calling
         tools_schema = self._get_tools_schema()
         
+        # Start thinking timer
+        self._start_thinking_timer()
+        
         if self.on_thinking:
             self.on_thinking("Thinking...")
         
@@ -108,12 +160,22 @@ class Brain:
                 stream=stream
             )
             
-            # Update conversation history
+            # Stop thinking timer
+            thinking_duration = self._stop_thinking_timer()
+            
+            # Parse thinking content from reasoning models
+            raw_content = response.get('content', '')
+            cleaned_content, thinking_sections = self._parse_thinking_content(raw_content)
+            
+            # Update conversation history with cleaned content
+            response['content'] = cleaned_content
             self._update_history(prepared_messages, response)
             
             return {
                 'success': True,
-                'content': response.get('content', ''),
+                'content': cleaned_content,
+                'thinking_sections': thinking_sections,
+                'thinking_duration': thinking_duration,
                 'tool_calls': response.get('tool_calls', []),
                 'finish_reason': response.get('finish_reason', 'stop'),
                 'usage': response.get('usage', {}),
@@ -121,11 +183,15 @@ class Brain:
             }
             
         except Exception as e:
+            # Stop timer on error
+            self._stop_thinking_timer()
             logger.error(f"LLM chat failed: {e}")
             return {
                 'success': False,
                 'error': str(e),
                 'content': None,
+                'thinking_sections': [],
+                'thinking_duration': None,
                 'tool_calls': [],
                 'finish_reason': 'error'
             }
@@ -157,6 +223,8 @@ class Brain:
         
         iteration = 0
         final_response = None
+        total_thinking_time = 0.0
+        all_thinking_sections = []
         
         while iteration < max_iterations:
             iteration += 1
@@ -171,12 +239,20 @@ class Brain:
                 temperature=temperature
             )
             
+            # Accumulate thinking time and sections
+            if response.get('thinking_duration'):
+                total_thinking_time += response['thinking_duration']
+            if response.get('thinking_sections'):
+                all_thinking_sections.extend(response['thinking_sections'])
+            
             if not response['success']:
                 return {
                     'success': False,
                     'error': response.get('error', 'LLM call failed'),
                     'content': None,
-                    'iterations': iteration
+                    'iterations': iteration,
+                    'total_thinking_time': total_thinking_time,
+                    'thinking_sections': all_thinking_sections
                 }
             
             # Check if there are tool calls
@@ -220,6 +296,8 @@ class Brain:
                 'content': "I reached the maximum number of tool call iterations without completing the task.",
                 'tool_calls': [],
                 'iterations': iteration,
+                'total_thinking_time': total_thinking_time,
+                'thinking_sections': all_thinking_sections,
                 'warning': 'max_iterations_reached'
             }
         
@@ -228,6 +306,8 @@ class Brain:
             'content': final_response['content'],
             'tool_calls': final_response.get('tool_calls', []),
             'iterations': iteration,
+            'total_thinking_time': total_thinking_time,
+            'thinking_sections': all_thinking_sections,
             'usage': final_response.get('usage', {})
         }
     

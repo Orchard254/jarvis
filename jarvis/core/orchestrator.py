@@ -505,7 +505,19 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
+            thinking_duration = response.get('thinking_duration')
+            thinking_sections = response.get('thinking_sections', [])
+            
             # Don't store assistant messages in chat mode to reduce memory usage
+            
+            # Display thinking sections if present (from reasoning models)
+            if thinking_sections:
+                print("\n\n[Reasoning Process]:")
+                for i, section in enumerate(thinking_sections, 1):
+                    print(f"\n--- Thinking Path {i} ---")
+                    print(section[:500] + "..." if len(section) > 500 else section)
+                if thinking_duration:
+                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
             
             # Start speaking immediately for low latency (before full response if streaming)
             self._speak(response_text)
@@ -515,7 +527,9 @@ class Orchestrator:
                 'response': response_text,
                 'mode': 'chat',
                 'actions': [],
-                'streamed': True
+                'streamed': True,
+                'thinking_duration': thinking_duration,
+                'thinking_sections': thinking_sections
             }
         else:
             return {
@@ -717,7 +731,19 @@ class Orchestrator:
         
         if response['success']:
             response_text = response['content']
+            thinking_duration = response.get('thinking_duration')
+            thinking_sections = response.get('thinking_sections', [])
+            
             # Don't store assistant messages to reduce memory usage
+            
+            # Display thinking sections if present (from reasoning models)
+            if thinking_sections:
+                print("\n\n[Reasoning Process]:")
+                for i, section in enumerate(thinking_sections, 1):
+                    print(f"\n--- Thinking Path {i} ---")
+                    print(section[:500] + "..." if len(section) > 500 else section)
+                if thinking_duration:
+                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
             
             # Start speaking before full response is generated for low latency
             self._speak(response_text)
@@ -728,7 +754,9 @@ class Orchestrator:
                 'mode': 'agent',
                 'strategy': 'direct',
                 'actions': response.get('tool_calls', []),
-                'iterations': response.get('iterations', 0)
+                'iterations': response.get('iterations', 0),
+                'total_thinking_time': thinking_duration,
+                'thinking_sections': thinking_sections
             }
         else:
             error_msg = response.get('error', 'Execution failed')
@@ -1059,6 +1087,8 @@ class Orchestrator:
     def _on_thinking(self, message: str) -> None:
         """Callback when LLM is thinking."""
         logger.debug(f"Brain: {message}")
+        # Show thinking indicator in console
+        print(f"\r[{message}]", end="", flush=True)
     
     def _speak(self, text: str) -> None:
         """Speak text using TTS."""
