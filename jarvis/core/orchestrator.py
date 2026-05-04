@@ -16,6 +16,7 @@ import time
 from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
 import queue
+import textwrap
 
 from jarvis.core.memory import CoreMemory
 from jarvis.core.context import ContextAssembler
@@ -512,12 +513,18 @@ class Orchestrator:
             
             # Display thinking sections if present (from reasoning models)
             if thinking_sections:
-                print("\n\n[Reasoning Process]:")
+                print("\n\n╔════════════════════════════════════════╗")
+                print("║       LLM REASONING PROCESS            ║")
+                print("╚════════════════════════════════════════╝")
                 for i, section in enumerate(thinking_sections, 1):
-                    print(f"\n--- Thinking Path {i} ---")
-                    print(section[:500] + "..." if len(section) > 500 else section)
+                    print(f"\n┌─── Thinking Path {i} ───")
+                    # Show full thinking content with word wrapping
+                    import textwrap
+                    wrapped = textwrap.fill(section, width=80)
+                    print(wrapped)
+                    print("└─── End Path ───\n")
                 if thinking_duration:
-                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
+                    print(f"\n⏱ Thinking completed in {thinking_duration:.2f}s\n")
             
             # Start speaking immediately for low latency (before full response if streaming)
             self._speak(response_text)
@@ -738,12 +745,18 @@ class Orchestrator:
             
             # Display thinking sections if present (from reasoning models)
             if thinking_sections:
-                print("\n\n[Reasoning Process]:")
+                print("\n\n╔════════════════════════════════════════╗")
+                print("║       LLM REASONING PROCESS            ║")
+                print("╚════════════════════════════════════════╝")
                 for i, section in enumerate(thinking_sections, 1):
-                    print(f"\n--- Thinking Path {i} ---")
-                    print(section[:500] + "..." if len(section) > 500 else section)
+                    print(f"\n┌─── Thinking Path {i} ───")
+                    # Show full thinking content with word wrapping
+                    import textwrap
+                    wrapped = textwrap.fill(section, width=80)
+                    print(wrapped)
+                    print("└─── End Path ───\n")
                 if thinking_duration:
-                    print(f"\n[Thinking completed in {thinking_duration:.2f}s]\n")
+                    print(f"\n⏱ Thinking completed in {thinking_duration:.2f}s\n")
             
             # Start speaking before full response is generated for low latency
             self._speak(response_text)
@@ -1004,7 +1017,8 @@ class Orchestrator:
                 for step in executed_plan.steps
             ],
             'task_summary': task_summary,
-            'critique': critique.to_dict()
+            'critique': critique.to_dict(),
+            'total_thinking_time': plan_result.get('thinking_duration')
         }
     
     def _rollback_steps(self, executed_steps: List[Dict]) -> None:
@@ -1087,8 +1101,12 @@ class Orchestrator:
     def _on_thinking(self, message: str) -> None:
         """Callback when LLM is thinking."""
         logger.debug(f"Brain: {message}")
-        # Show thinking indicator in console
-        print(f"\r[{message}]", end="", flush=True)
+        # Show thinking indicator in console with timestamp
+        if self.brain._thinking_callback_active and self.brain.thinking_start_time:
+            elapsed = time.time() - self.brain.thinking_start_time
+            print(f"\r[{message} {elapsed:.1f}s]", end="", flush=True)
+        else:
+            print(f"\r[{message}]", end="", flush=True)
     
     def _speak(self, text: str) -> None:
         """Speak text using TTS."""
@@ -1134,9 +1152,14 @@ class Orchestrator:
                 # Process command
                 result = self.process_command(command, voice=False)
                 
-                # Show result
+                # Show result with thinking duration if available
                 if result.get('success'):
-                    print(f"\nJARVIS: {result.get('response', '')}")
+                    response = result.get('response', '')
+                    thinking_duration = result.get('total_thinking_time') or result.get('thinking_duration')
+                    if thinking_duration:
+                        print(f"\nJARVIS: {response}  [Thought for {thinking_duration:.2f}s]")
+                    else:
+                        print(f"\nJARVIS: {response}")
                 else:
                     print(f"\nJARVIS: [Error] {result.get('error', 'Unknown error')}")
                 
