@@ -576,7 +576,19 @@ class Orchestrator:
                 task_steps = []
                 for step_dict in plan['steps']:
                     tool_name = step_dict.get('tool') or step_dict.get('tool_or_skill')
+                    # Try multiple parameter field names and extract app_name if needed
                     arguments = step_dict.get('arguments', {}) or step_dict.get('params', {})
+                    
+                    # Special handling for open_app: if params empty but app name mentioned, extract it
+                    if tool_name == 'open_app' and (not arguments or 'app_name' not in arguments):
+                        # Check if app_name is directly in step_dict
+                        if 'app_name' in step_dict:
+                            arguments = {'app_name': step_dict['app_name']}
+                        elif 'application' in step_dict:
+                            arguments = {'app_name': step_dict['application']}
+                        elif 'name' in step_dict:
+                            arguments = {'app_name': step_dict['name']}
+                    
                     description = step_dict.get('description', f"Execute {tool_name}")
                     
                     # Determine verification strategy based on tool type
