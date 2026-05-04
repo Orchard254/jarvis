@@ -31,6 +31,8 @@ from jarvis.reasoning.planner import TaskPlanner
 from jarvis.reasoning.critic import PlanCritic, CriticDecision
 from jarvis.reasoning.reflector import Reflector as OutcomeReflector
 from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
+from jarvis.reasoning.evaluator import PathEvaluator, get_evaluator
+from jarvis.core.tot_engine import TreeOfThoughtsEngine
 from jarvis.monitoring.ambient import get_ambient_monitor, start_monitoring
 from jarvis.config.config import get_config
 from jarvis.memory.persistent import PersistentMemory
@@ -157,8 +159,26 @@ class Orchestrator:
         self.intent_classifier = IntentClassifier(self.brain.client)
         self.vision_analyzer = VisionAnalyzer(self.brain.client)
         
-        # Reasoning
-        self.planner = TaskPlanner(ollama_client=self.brain.client, tool_registry=self.tool_registry)
+        # Reasoning - Tree of Thoughts Integration
+        # Initialize ToT engine for multi-path strategic planning
+        self.tot_engine = TreeOfThoughtsEngine(
+            llm_interface=self.brain.client,
+            max_depth=5,
+            beam_width=3,
+            max_branches=4
+        )
+        
+        # Initialize Path Evaluator for scoring reasoning paths
+        self.path_evaluator = PathEvaluator(llm_interface=self.brain.client)
+        
+        # Initialize Planner with ToT support
+        self.planner = TaskPlanner(
+            ollama_client=self.brain.client,
+            tool_registry=self.tool_registry,
+            tot_engine=self.tot_engine,
+            path_evaluator=self.path_evaluator
+        )
+        
         self.critic = PlanCritic(ollama_client=self.brain.client)
         self.reflector = OutcomeReflector(ollama_client=self.brain.client, memory_manager=self.memory)
         self.strategy_selector = StrategySelector()

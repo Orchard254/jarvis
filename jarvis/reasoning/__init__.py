@@ -6,6 +6,7 @@ from .planner import TaskPlanner, get_planner
 from .critic import PlanCritic, get_critic
 from .reflector import Reflector, get_reflector
 from .strategy_selector import StrategySelector, get_strategy_selector
+from .evaluator import PathEvaluator, get_evaluator, EvaluationCriteria, PathEvaluation
 
 __all__ = [
     'TaskPlanner',
@@ -15,5 +16,9 @@ __all__ = [
     'Reflector',
     'get_reflector',
     'StrategySelector',
-    'get_strategy_selector'
+    'get_strategy_selector',
+    'PathEvaluator',
+    'get_evaluator',
+    'EvaluationCriteria',
+    'PathEvaluation'
 ]
