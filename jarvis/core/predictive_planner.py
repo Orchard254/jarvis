@@ -24,8 +24,11 @@ RULES:
 3. BE SPECIFIC: Do not say "open site". Say "navigate_to_url: https://www.kilimall.co.ke".
 4. HANDLE TYPOS: "refubished" -> "refurbished", "kilimal" -> "kilimall".
 5. MINIMIZE STEPS: Combine actions where possible.
-6. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
+6. CHECK RECENT RESULTS: Before planning, review recent successful results below. If the answer is already available, respond directly without executing tools.
+7. AVOID FAILED ACTIONS: Review failed actions below. DO NOT retry tools that failed with the same parameters unless the error is clearly resolved.
+8. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
 
+{context_section}
 AVAILABLE TOOLS:
 {tools_description}
 
@@ -50,7 +53,9 @@ class PredictivePlanner:
     def __init__(self, brain: Brain):
         self.brain = brain
 
-    def generate_plan(self, user_request: str, available_tools: Dict[str, Any]) -> Optional[Dict]:
+    def generate_plan(self, user_request: str, available_tools: Dict[str, Any], 
+                      recent_results: Optional[List[Dict[str, Any]]] = None,
+                      failed_actions: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict]:
         """Generate a high-confidence plan using LLM's internal knowledge."""
         
         # Build tools description for context
@@ -59,7 +64,34 @@ class PredictivePlanner:
             for name, desc in available_tools.items()
         ])
         
+        # Build context section with recent results and failed actions
+        context_section = ""
+        if recent_results or failed_actions:
+            context_parts = []
+            
+            if recent_results:
+                # Show last 5 successful results
+                recent = recent_results[-5:] if len(recent_results) > 5 else recent_results
+                results_text = "\n".join([
+                    f"  - {r['tool']} returned: {r['result'][:150]}..." if len(r['result']) > 150 else f"  - {r['tool']} returned: {r['result']}"
+                    for r in recent
+                ])
+                context_parts.append(f"[RECENT SUCCESSFUL RESULTS]:\n{results_text}")
+            
+            if failed_actions:
+                # Show last 5 failed actions
+                failed = failed_actions[-5:] if len(failed_actions) > 5 else failed_actions
+                failed_text = "\n".join([
+                    f"  - {f['tool']} failed: {f['error'][:150]}... [DO NOT retry]" if len(f['error']) > 150 else f"  - {f['tool']} failed: {f['error']} [DO NOT retry]"
+                    for f in failed
+                ])
+                context_parts.append(f"[FAILED ACTIONS - AVOID]:\n{failed_text}")
+            
+            if context_parts:
+                context_section = "\n\n".join(context_parts) + "\n\n"
+        
         prompt = PLAN_PROMPT.format(
+            context_section=context_section,
             tools_description=tools_desc,
             user_request=user_request
         )
