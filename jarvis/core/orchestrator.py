@@ -600,10 +600,50 @@ class Orchestrator:
                     # No clarification needed - execute directly without confirmation
                     logger.info(f"No clarification needed (confidence: {plan.get('confidence', 'unknown')}) - executing directly...")
                     return self._execute_plan(command, plan)
+            else:
+                # Plan generation failed - likely a chat-only request, handle directly with LLM
+                logger.info("No valid plan generated - handling as chat request...")
+                return self._handle_chat_request(command)
         
         # Fallback: Use ReAct agent for complex tasks that need iterative reasoning
         logger.info(f"Falling back to ReAct agent for complex reasoning...")
         return self._handle_react_fallback(command)
+    
+    def _handle_chat_request(self, command: str) -> Dict[str, Any]:
+        """Handle simple chat requests that don't require tool execution."""
+        try:
+            response = self.brain.chat(
+                messages=[{"role": "user", "content": command}],
+                temperature=0.7,
+                include_tools=False
+            )
+            
+            # Extract content from response
+            if isinstance(response, dict):
+                response_text = response.get('content', 'Hello! How can I help you?')
+                success = response.get('success', True)
+            else:
+                response_text = str(response) if response else 'Hello! How can I help you?'
+                success = True
+            
+            # Speak response
+            self._speak(response_text)
+            
+            return {
+                'success': success,
+                'response': response_text,
+                'mode': 'unified',
+                'actions': []
+            }
+        except Exception as e:
+            logger.error(f"Chat request failed: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e),
+                'response': "I encountered an error processing your request.",
+                'mode': 'unified',
+                'actions': []
+            }
     
     def _execute_plan(self, command: str, plan: Dict) -> Dict[str, Any]:
         """Execute a generated plan and return results."""
@@ -664,28 +704,34 @@ class Orchestrator:
         logger.info(f"Using ReAct agent for complex task: {command[:50]}...")
         
         try:
-            result = self.react_agent.run(command)
+            result = self.react_agent.execute(command)
             
-            if result['success']:
+            # ReAct agent returns string response directly
+            if isinstance(result, str):
+                response_text = result
+                success = not result.startswith("Error:")
+            else:
+                response_text = result.get('response', 'Task completed')
+                success = result.get('success', True)
+            
+            if success:
                 # Learn from successful execution
                 self.intent_scorer.learn_from_interaction(command, executed=True)
                 
                 # Speak response
-                response_text = result.get('response', 'Task completed')
                 self._speak(response_text)
                 
                 return {
                     'success': True,
                     'response': response_text,
                     'mode': 'unified',
-                    'actions': result.get('actions', [])
+                    'actions': []
                 }
             else:
-                error_msg = result.get('error', 'Unknown error')
-                logger.error(f"ReAct agent failed: {error_msg}")
+                logger.error(f"ReAct agent failed: {response_text}")
                 return {
                     'success': False,
-                    'error': error_msg,
+                    'error': response_text,
                     'response': "I wasn't able to complete that task.",
                     'mode': 'unified',
                     'actions': []
