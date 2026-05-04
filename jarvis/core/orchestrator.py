@@ -23,6 +23,7 @@ from jarvis.core.context import ContextAssembler
 from jarvis.core.brain import Brain
 from jarvis.core.react_agent import ReActAgent
 from jarvis.core.predictive_planner import PredictivePlanner
+from jarvis.core.intent_scorer import AdaptiveIntentScorer
 from jarvis.execution.task_executor import TaskExecutor, TaskStep, VerificationStrategy
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
@@ -156,6 +157,9 @@ class Orchestrator:
         
         # Predictive Planner - uses LLM's internal knowledge for fast execution
         self.predictive_planner = PredictivePlanner(self.brain)
+        
+        # Adaptive Intent Scorer - learns and scores intents for chat/agent routing
+        self.intent_scorer = AdaptiveIntentScorer()
         
         # Perception
         self.intent_classifier = IntentClassifier(self.brain.client)
@@ -410,27 +414,42 @@ class Orchestrator:
             # Use sanitized input
             command = filter_result.sanitized_input
             
-            # Classify intent (chat vs agent mode) BEFORE adding to memory
-            intent = self.intent_classifier.classify(command)
-            intended_mode = intent.get('mode', 'agent')
+            # Classify intent using adaptive scoring system
+            # Get context for scoring
+            context = {
+                'active_app': self._get_active_app_name(),
+                'recent_commands': self.intent_scorer.context_window[-5:] if hasattr(self, 'intent_scorer') else [],
+                'current_mode': self.mode
+            }
+            
+            # Use adaptive intent scorer for continuous scoring
+            intent_analysis = self.intent_scorer.analyze_and_score(command, context)
+            intent_score = intent_analysis['score']
+            recommended_mode = intent_analysis['mode']
+            
+            logger.info(f"Intent score: {intent_score}/100 - {intent_analysis['reasoning']} -> Mode: {recommended_mode}")
             
             # Add to memory only for agent mode (to reduce memory usage)
-            if intended_mode == 'agent':
+            if intent_score >= 60:  # Agent or confirm modes
                 self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
-            # Route based on intent with conflict resolution
-            # Priority: 1) Explicit triggers, 2) Current mode persistence, 3) Intent classification
-            if intended_mode == 'agent':
-                # Always honor agent mode requests
+            # Route based on adaptive score with conflict resolution
+            # Priority: 1) High confidence auto-execute (85+), 2) Medium with confirm (60-84), 3) Chat (<60)
+            if intent_score >= 85:
+                # Auto-execute in agent mode
                 result = self._handle_agent_mode(command)
-            elif self.mode == 'agent' and intended_mode != 'chat':
-                # Stay in agent mode for consecutive commands (context awareness)
-                result = self._handle_agent_mode(command)
-            elif intended_mode == 'chat':
-                result = self._handle_chat_mode(command)
+                # Learn from successful execution
+                self.intent_scorer.learn_from_interaction(command, executed=True)
+            elif intent_score >= 60:
+                # Show plan and ask for quick confirmation
+                result = self._handle_agent_mode_with_confirm(command, intent_analysis)
+                if result.get('confirmed', False):
+                    self.intent_scorer.learn_from_interaction(command, executed=True)
+                else:
+                    self.intent_scorer.learn_from_interaction(command, executed=False)
             else:
-                # Default to agent mode for ambiguous cases
-                result = self._handle_agent_mode(command)
+                # Chat mode
+                result = self._handle_chat_mode(command)
             
             # Update state
             self.state['total_interactions'] += 1
@@ -785,6 +804,132 @@ class Orchestrator:
                 del self._failure_cache[task_key]
         
         return result
+    
+    def _handle_agent_mode_with_confirm(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
+        """
+        Handle medium-confidence intents (60-84) by showing plan and asking for confirmation.
+        
+        Args:
+            command: User command
+            intent_analysis: Analysis result from intent scorer
+            
+        Returns:
+            Response dict with confirmation status
+        """
+        logger.info(f"Handling with confirmation (score {intent_analysis['score']}): {command[:50]}...")
+        
+        # Generate the plan first
+        context = self.memory.retrieve_context(query=command)
+        memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
+        
+        classification = self.strategy_selector.classify(command)
+        strategy = self._map_complexity_to_strategy(classification.complexity)
+        system_prompt = get_system_prompt(mode='agent')
+        
+        # Generate predictive plan
+        if strategy in ['direct', 'plan']:
+            tools_dict = {name: {'description': getattr(tool, 'description', '')} 
+                         for name, tool in self.tool_registry.get_all_tools().items()}
+            
+            plan = self.predictive_planner.generate_plan(
+                command, 
+                tools_dict,
+                recent_results=self._recent_results,
+                failed_actions=self._failed_actions
+            )
+            
+            if plan and plan.get('steps'):
+                # Show plan to user
+                print(f"\n{'='*60}")
+                print(f"📋 Proposed Plan (Confidence: {intent_analysis['confidence']})")
+                print(f"{'='*60}")
+                print(f"Goal: {plan.get('goal', command)}")
+                print(f"\nSteps:")
+                for i, step in enumerate(plan['steps'], 1):
+                    tool_name = step.get('tool', 'unknown')
+                    params = step.get('params', {})
+                    reason = step.get('reason', '')
+                    print(f"  {i}. {tool_name}({', '.join(f'{k}={v}' for k,v in params.items())})")
+                    if reason:
+                        print(f"     → {reason}")
+                print(f"{'='*60}")
+                
+                # Ask for confirmation
+                response_text = f"Ready to execute {len(plan['steps'])} step(s). Type 'yes' to proceed, or describe changes."
+                print(f"\nJARVIS: {response_text}")
+                
+                # Get user confirmation
+                try:
+                    confirm = input("\nYou: ").strip().lower()
+                    
+                    if confirm in ['yes', 'y', 'ok', 'go', 'proceed', 'do it']:
+                        # User confirmed - execute the plan
+                        logger.info("User confirmed plan - executing...")
+                        result = self._handle_agent_mode(command)
+                        result['confirmed'] = True
+                        return result
+                    elif confirm in ['no', 'n', 'cancel', 'stop']:
+                        # User declined
+                        logger.info("User declined plan")
+                        return {
+                            'success': False,
+                            'response': "Cancelled as requested.",
+                            'confirmed': False,
+                            'mode': 'agent_confirm'
+                        }
+                    else:
+                        # User wants modifications - treat as new command
+                        logger.info(f"User suggested modification: {confirm}")
+                        modified_command = f"{command} but {confirm}"
+                        return self._handle_agent_mode(modified_command)
+                        
+                except (EOFError, KeyboardInterrupt):
+                    return {
+                        'success': False,
+                        'response': "Cancelled.",
+                        'confirmed': False,
+                        'mode': 'agent_confirm'
+                    }
+        
+        # Fallback: just ask yes/no without showing plan
+        print(f"\nJARVIS: I can help with that. Should I proceed? (yes/no)")
+        try:
+            confirm = input("\nYou: ").strip().lower()
+            if confirm in ['yes', 'y', 'ok', 'go']:
+                result = self._handle_agent_mode(command)
+                result['confirmed'] = True
+                return result
+            else:
+                return {
+                    'success': False,
+                    'response': "Cancelled.",
+                    'confirmed': False,
+                    'mode': 'agent_confirm'
+                }
+        except (EOFError, KeyboardInterrupt):
+            return {
+                'success': False,
+                'response': "Cancelled.",
+                'confirmed': False,
+                'mode': 'agent_confirm'
+            }
+    
+    def _get_active_app_name(self) -> Optional[str]:
+        """Get the name of the currently active application."""
+        try:
+            import win32gui
+            import win32process
+            
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                import psutil
+                process = psutil.Process(pid)
+                return process.name().replace('.exe', '').lower()
+        except Exception as e:
+            logger.debug(f"Could not get active app: {e}")
+        
+        return None
     
     def _execute_direct(self, command: str, system_prompt: str) -> Dict[str, Any]:
         """
