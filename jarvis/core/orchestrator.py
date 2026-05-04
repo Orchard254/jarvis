@@ -418,14 +418,18 @@ class Orchestrator:
             if intended_mode == 'agent':
                 self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
-            # Route based on intent - but respect explicit agent mode override
-            # If system is already in agent mode, stay in agent mode unless explicitly told to chat
-            if self.mode == 'agent' and intended_mode != 'chat':
-                # Stay in agent mode for consecutive commands
+            # Route based on intent with conflict resolution
+            # Priority: 1) Explicit triggers, 2) Current mode persistence, 3) Intent classification
+            if intended_mode == 'agent':
+                # Always honor agent mode requests
+                result = self._handle_agent_mode(command)
+            elif self.mode == 'agent' and intended_mode != 'chat':
+                # Stay in agent mode for consecutive commands (context awareness)
                 result = self._handle_agent_mode(command)
             elif intended_mode == 'chat':
                 result = self._handle_chat_mode(command)
             else:
+                # Default to agent mode for ambiguous cases
                 result = self._handle_agent_mode(command)
             
             # Update state
@@ -500,6 +504,13 @@ class Orchestrator:
             Response dict
         """
         logger.info(f"Handling in chat mode: {command[:50]}...")
+        
+        # Check if this looks like it should be agent mode (safety check)
+        # If user says something that sounds like a command, suggest switching to agent mode
+        quick_check = self.intent_classifier._heuristic_classify(command)
+        if quick_check['mode'] == 'agent' and quick_check['confidence'] > 0.7:
+            # This might be a misclassified agent request - add helpful suggestion
+            logger.warning(f"Chat mode received but input appears to be agent-mode: {command[:50]}")
         
         system_prompt = get_system_prompt(mode='chat')
         

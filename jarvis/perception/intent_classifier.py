@@ -25,6 +25,12 @@ class IntentClassifier:
         self.ollama_client = ollama_client
         self.classification_history = []
         
+        # Explicit mode triggers - force agent mode when detected
+        self.explicit_agent_triggers = [
+            'do this:', 'execute:', 'run:', 'perform:', 'action:',
+            'agent:', 'task:', 'make it:', 'actually ', 'just '
+        ]
+        
         # Keywords that strongly suggest agent mode
         self.agent_keywords = [
             # App/Window control
@@ -150,6 +156,16 @@ class IntentClassifier:
     def _heuristic_classify(self, user_input: str) -> Dict[str, Any]:
         """Quick heuristic-based classification."""
         input_lower = user_input.lower()
+        
+        # Check for explicit agent mode triggers FIRST (highest priority)
+        for trigger in self.explicit_agent_triggers:
+            if trigger in input_lower:
+                return {
+                    'mode': 'agent',
+                    'confidence': 0.95,
+                    'reasoning': f'Explicit agent mode trigger detected: "{trigger}"',
+                    'requires_action': True
+                }
         
         # Remove articles for better phrase matching (e.g., "take a screenshot" -> "take screenshot")
         import re
