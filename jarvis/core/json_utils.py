@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 logger = logging.getLogger(__name__)
 
 
-def extract_json_from_text(text: str) -> Optional[str]:
+def extract_json_from_text(text: str, max_length: int = 10000) -> Optional[str]:
     """
     Extract JSON string from text that may contain markdown code blocks or explanations.
     
@@ -32,6 +32,7 @@ def extract_json_from_text(text: str) -> Optional[str]:
     
     Args:
         text: Raw text that may contain JSON
+        max_length: Maximum length of JSON to extract (prevents parsing huge truncated content)
         
     Returns:
         Extracted JSON string or None if not found
@@ -45,8 +46,12 @@ def extract_json_from_text(text: str) -> Optional[str]:
     json_pattern = r'```json\s*(.*?)\s*```'
     matches = re.findall(json_pattern, text, re.DOTALL | re.IGNORECASE)
     if matches:
+        json_content = matches[0].strip()
+        if len(json_content) > max_length:
+            logger.warning(f"JSON content too long ({len(json_content)} chars), truncating to {max_length}")
+            json_content = json_content[:max_length]
         logger.debug("Extracted JSON from ```json block")
-        return matches[0].strip()
+        return json_content
     
     # Strategy 2: Look for generic ``` code blocks
     code_pattern = r'```\s*(.*?)\s*```'
@@ -91,13 +96,14 @@ def extract_json_from_text(text: str) -> Optional[str]:
     return None
 
 
-def parse_json_safely(text: str, default: Any = None) -> Any:
+def parse_json_safely(text: str, default: Any = None, max_json_length: int = 10000) -> Any:
     """
     Safely parse JSON from text with multiple fallback strategies.
     
     Args:
         text: Text containing JSON
         default: Default value if parsing fails
+        max_json_length: Maximum length of JSON to extract (prevents parsing huge truncated content)
         
     Returns:
         Parsed JSON object or default value
@@ -106,7 +112,7 @@ def parse_json_safely(text: str, default: Any = None) -> Any:
         return default
     
     # First extract JSON from potential markdown wrapping
-    json_str = extract_json_from_text(text)
+    json_str = extract_json_from_text(text, max_length=max_json_length)
     if not json_str:
         logger.warning("No JSON could be extracted from text")
         return default

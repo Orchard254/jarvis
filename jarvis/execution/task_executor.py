@@ -309,6 +309,26 @@ class TaskExecutor:
         attempt = 0
         
         while attempt <= step.max_retries:
+            # Validate parameters based on tool type
+            from jarvis.core.predictive_planner import NO_PARAMETER_TOOLS, REQUIRED_PARAMETERS
+            
+            if step.tool_name not in NO_PARAMETER_TOOLS:
+                # This tool requires parameters
+                if step.parameters is None or not isinstance(step.parameters, dict):
+                    step.error_message = f"Invalid parameters for {step.tool_name}: parameters must be a dict"
+                    step.status = TaskStatus.FAILED
+                    logger.error(f"Step validation failed: {step.error_message}")
+                    return False
+                
+                # Check for obviously missing required parameters
+                required = REQUIRED_PARAMETERS.get(step.tool_name, [])
+                missing = [p for p in required if p not in step.parameters or not step.parameters[p]]
+                if missing:
+                    step.error_message = f"Missing required parameters for {step.tool_name}: {', '.join(missing)}"
+                    step.status = TaskStatus.FAILED
+                    logger.error(f"Step validation failed: {step.error_message}")
+                    return False
+            
             # Check for duplicate action (loop prevention)
             if self._check_duplicate_action(step.tool_name, step.parameters):
                 step.error_message = "Duplicate action detected (possible loop)"

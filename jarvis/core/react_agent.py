@@ -285,18 +285,11 @@ Do not output any text outside the JSON block when acting.
             elif 'content' in response:
                 content = response.get('content', '')
                 if content:
-                    # Try to parse content as JSON action
-                    try:
-                        clean_resp = content.strip()
-                        if clean_resp.startswith("```json"):
-                            clean_resp = clean_resp[7:]
-                        if clean_resp.endswith("```"):
-                            clean_resp = clean_resp[:-3]
-                        data = json.loads(clean_resp.strip())
-                        if 'action' in data or 'tool' in data:
-                            return data
-                    except (json.JSONDecodeError, AttributeError):
-                        pass
+                    # Try to parse content as JSON action using robust parsing
+                    from jarvis.core.json_utils import parse_json_safely
+                    data = parse_json_safely(content, default=None, max_json_length=5000)
+                    if data and ('action' in data or 'tool' in data):
+                        return data
                 # If no action found, task is complete
                 return None
             else:
@@ -304,17 +297,12 @@ Do not output any text outside the JSON block when acting.
         
         # Handle string response
         try:
-            # Handle markdown code blocks if present
-            clean_resp = response.strip()
-            if clean_resp.startswith("```json"):
-                clean_resp = clean_resp[7:]
-            if clean_resp.endswith("```"):
-                clean_resp = clean_resp[:-3]
-
-            data = json.loads(clean_resp.strip())
-            if 'action' in data or 'tool' in data:
+            # Use robust JSON parsing for string responses
+            from jarvis.core.json_utils import parse_json_safely
+            data = parse_json_safely(response, default=None, max_json_length=5000)
+            if data and ('action' in data or 'tool' in data):
                 return data
-        except (json.JSONDecodeError, AttributeError):
+        except Exception:
             pass
 
         return None

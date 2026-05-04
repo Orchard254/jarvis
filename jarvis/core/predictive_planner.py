@@ -4,7 +4,7 @@ high-confidence execution plans before acting.
 """
 import json
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from jarvis.core.brain import Brain
 from jarvis.core.json_utils import (
     parse_json_safely,
@@ -13,6 +13,32 @@ from jarvis.core.json_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Define required parameters for each tool
+# Tools not listed here don't require parameters
+REQUIRED_PARAMETERS = {
+    'create_file': ['path'],
+    'write_file': ['path', 'content'],
+    'read_file': ['path'],
+    'delete_file': ['path'],
+    'navigate_to_url': ['url'],
+    'fill_input': ['selector', 'value'],
+    'click_element': ['selector'],
+    'search_web': ['query'],
+    'open_app': ['app_name'],
+    'press_key': ['key'],
+    'type_text': ['text'],
+    'focus_window': ['title'],
+}
+
+# Tools that don't require parameters (they work with empty dict)
+NO_PARAMETER_TOOLS = {
+    'paste_from_clipboard',
+    'copy_to_clipboard',
+    'get_time',
+    'take_screenshot',
+    'get_window_list',
+}
 
 PLAN_PROMPT = """
 You are an expert automation planner. Your goal is to predict the EXACT steps needed to fulfill the user's request.
@@ -26,7 +52,8 @@ RULES:
 5. MINIMIZE STEPS: Combine actions where possible.
 6. CHECK RECENT RESULTS: Before planning, review recent successful results below. If the answer is already available, respond directly without executing tools.
 7. AVOID FAILED ACTIONS: Review failed actions below. DO NOT retry tools that failed with the same parameters unless the error is clearly resolved.
-8. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
+8. TEXT CLEARING: To clear text in a text editor, use press_key with "Ctrl+A" then press_key with "Delete". NEVER use hundreds of backspace characters.
+9. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
 
 {context_section}
 AVAILABLE TOOLS:
@@ -132,7 +159,7 @@ class PredictivePlanner:
                         response = response_content
                     
                     # Use robust JSON parsing with multiple fallback strategies
-                    plan = parse_json_safely(response, default=None)
+                    plan = parse_json_safely(response, default=None, max_json_length=5000)
                     
                     if plan is None:
                         logger.error(f"Failed to parse JSON from LLM response (attempt {attempt + 1}/{max_retries})")
@@ -158,6 +185,16 @@ class PredictivePlanner:
                     if plan.get('corrections'):
                         logger.info(f"Corrections made: {plan['corrections']}")
                     
+                    # Validate and filter steps to remove invalid ones
+                    plan = self._validate_and_filter_steps(plan)
+                    
+                    # Check if we have any valid steps left
+                    if not plan.get('steps'):
+                        logger.warning("All plan steps were filtered out as invalid")
+                        if plan.get('invalid_step_details'):
+                            invalid_reasons = [s['reason'] for s in plan['invalid_step_details']]
+                            logger.warning(f"Invalid steps reasons: {invalid_reasons}")
+                    
                     return plan
                     
                 except Exception as e:
@@ -174,6 +211,72 @@ class PredictivePlanner:
         except Exception as e:
             logger.error(f"Failed to generate plan: {e}")
             return None
+
+    def _validate_and_filter_steps(self, plan: Dict) -> Dict:
+        """
+        Validate plan steps and filter out invalid ones.
+        
+        Returns plan with only valid steps, plus warnings for filtered steps.
+        """
+        if 'steps' not in plan or not isinstance(plan['steps'], list):
+            return plan
+        
+        valid_steps = []
+        invalid_steps = []
+        
+        for i, step in enumerate(plan.get('steps', [])):
+            # Get tool name
+            tool_name = step.get('tool') or step.get('tool_name')
+            if not tool_name:
+                invalid_steps.append({
+                    'step': i,
+                    'reason': 'Missing tool name',
+                    'step_data': step
+                })
+                continue
+            
+            # Get parameters
+            params = step.get('params') or step.get('parameters') or step.get('arguments') or {}
+            
+            # Normalize parameters
+            normalized_params = normalize_plan_parameters(step, tool_name)
+            
+            # Check if this tool requires parameters
+            if tool_name in NO_PARAMETER_TOOLS:
+                # These tools don't need parameters - ensure empty dict
+                normalized_params = {}
+            else:
+                # Check for required parameters for other tools
+                required = REQUIRED_PARAMETERS.get(tool_name, [])
+                missing_params = [p for p in required if p not in normalized_params or not normalized_params[p]]
+                
+                if missing_params:
+                    invalid_steps.append({
+                        'step': i,
+                        'tool': tool_name,
+                        'reason': f'Missing required parameters: {", ".join(missing_params)}',
+                        'params': normalized_params
+                    })
+                    logger.warning(f"Step {i}: {tool_name} is missing required parameters: {missing_params}")
+                    continue
+            
+            # Valid step - update with normalized parameters
+            valid_step = dict(step)
+            valid_step['params'] = normalized_params
+            valid_steps.append(valid_step)
+        
+        # Log filtering results
+        if invalid_steps:
+            logger.warning(f"Filtered out {len(invalid_steps)} invalid steps from plan")
+            for invalid in invalid_steps:
+                logger.debug(f"  - Step {invalid['step']}: {invalid['reason']}")
+        
+        # Update plan with valid steps only
+        plan['steps'] = valid_steps
+        plan['filtered_steps'] = len(invalid_steps)
+        plan['invalid_step_details'] = invalid_steps
+        
+        return plan
 
     def execute_plan(self, plan: Dict, tool_executor) -> Dict[str, Any]:
         """Execute a validated plan step-by-step, passing results between dependent steps."""

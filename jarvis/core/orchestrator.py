@@ -684,23 +684,43 @@ class Orchestrator:
                 
                 # Extract actual outputs from executed steps for display
                 output_parts = []
+                error_messages = []
                 for step in executed_plan.steps:
                     if step.result and hasattr(step.result, 'output') and step.result.output:
                         output_parts.append(step.result.output)
                     elif step.result and isinstance(step.result, dict) and step.result.get('output'):
                         output_parts.append(step.result['output'])
+                    
+                    # Collect error messages from failed steps
+                    if step.status.value in ['failed', 'error'] and step.error_message:
+                        error_messages.append(f"{step.tool_name}: {step.error_message}")
                 
-                # Generate response with actual tool outputs
+                # Generate response with actual tool outputs or error details
                 if output_parts:
                     response_text = ". ".join(output_parts)
+                    if error_messages:
+                        response_text += f" (Note: Some steps had issues - {'; '.join(error_messages[:2])})"
                 else:
                     successful = task_summary['successful_steps']
                     total = task_summary['total_steps']
-                    response_text = f"Task completed: {successful}/{total} steps successful."
+                    if successful == 0 and error_messages:
+                        response_text = f"Task could not be completed. Issues encountered: {'; '.join(error_messages[:2])}"
+                    else:
+                        response_text = f"Task completed: {successful}/{total} steps successful."
+                        if error_messages:
+                            response_text += f" Failed steps: {'; '.join(error_messages[:2])}"
+                
+                # Determine error field for response
+                error_field = None
+                if error_messages:
+                    # If there are errors and we don't have a proper response, summarize them
+                    if not output_parts and task_summary['successful_steps'] == 0:
+                        error_field = "; ".join(error_messages[:2])
                 
                 return {
                     'success': executed_plan.status.value == 'completed',
                     'response': response_text,
+                    'error': error_field,
                     'mode': 'predictive',
                     'strategy': 'predictive',
                     'actions': [
@@ -1196,15 +1216,26 @@ class Orchestrator:
                 result = self.process_command(command, voice=False)
                 
                 # Show result with thinking duration if available
+                response = result.get('response', '')
+                thinking_duration = result.get('total_thinking_time') or result.get('thinking_duration')
+                
                 if result.get('success'):
-                    response = result.get('response', '')
-                    thinking_duration = result.get('total_thinking_time') or result.get('thinking_duration')
+                    # Successful completion - show response
+                    if thinking_duration:
+                        print(f"\nJARVIS: {response}  [Thought for {thinking_duration:.2f}s]")
+                    else:
+                        print(f"\nJARVIS: {response}")
+                elif response:
+                    # Partial success or informative response even with failure
+                    # (response text already includes error details)
                     if thinking_duration:
                         print(f"\nJARVIS: {response}  [Thought for {thinking_duration:.2f}s]")
                     else:
                         print(f"\nJARVIS: {response}")
                 else:
-                    print(f"\nJARVIS: [Error] {result.get('error', 'Unknown error')}")
+                    # Complete failure with no response - show error
+                    error_msg = result.get('error', 'Unknown error occurred')
+                    print(f"\nJARVIS: [Error] {error_msg}")
                 
             except KeyboardInterrupt:
                 logger.info("Received interrupt signal")
