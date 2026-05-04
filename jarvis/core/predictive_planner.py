@@ -24,10 +24,14 @@ RULES:
 3. BE SPECIFIC: Do not say "open site". Say "navigate_to_url: https://www.kilimall.co.ke".
 4. HANDLE TYPOS: "refubished" -> "refurbished", "kilimal" -> "kilimall".
 5. MINIMIZE STEPS: Combine actions where possible.
-6. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
+6. CHECK RECENT RESULTS FIRST: If information was already obtained recently, DO NOT re-execute the tool. Use the existing result.
+7. AVOID FAILED ACTIONS: If a tool recently failed, do NOT retry it with the same parameters.
+8. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
 
 AVAILABLE TOOLS:
 {tools_description}
+
+{context_section}
 
 USER REQUEST: "{user_request}"
 
@@ -50,7 +54,9 @@ class PredictivePlanner:
     def __init__(self, brain: Brain):
         self.brain = brain
 
-    def generate_plan(self, user_request: str, available_tools: Dict[str, Any]) -> Optional[Dict]:
+    def generate_plan(self, user_request: str, available_tools: Dict[str, Any], 
+                     recent_results: Optional[List[Dict]] = None, 
+                     failed_actions: Optional[List[Dict]] = None) -> Optional[Dict]:
         """Generate a high-confidence plan using LLM's internal knowledge."""
         
         # Build tools description for context
@@ -59,8 +65,32 @@ class PredictivePlanner:
             for name, desc in available_tools.items()
         ])
         
+        # Build context section with recent results and failures
+        context_section = ""
+        if recent_results:
+            result_lines = []
+            for r in recent_results[-5:]:
+                tool_name = r.get('tool', 'tool')
+                output = r.get('output', '')[:150] if r.get('output') else ''
+                if output:
+                    result_lines.append(f"- {tool_name}: {output}")
+            if result_lines:
+                context_section += "RECENT SUCCESSFUL RESULTS (use these instead of re-executing):\n" + "\n".join(result_lines) + "\n\n"
+        
+        if failed_actions:
+            fail_lines = []
+            for f in failed_actions[-5:]:
+                tool_name = f.get('tool', 'tool')
+                error = f.get('error', 'failed')[:100]
+                params = f.get('parameters', {})
+                param_str = f" with {params}" if params else ""
+                fail_lines.append(f"- {tool_name}{param_str} failed: {error}")
+            if fail_lines:
+                context_section += "RECENT FAILURES (DO NOT retry these):\n" + "\n".join(fail_lines) + "\n\n"
+        
         prompt = PLAN_PROMPT.format(
             tools_description=tools_desc,
+            context_section=context_section.strip() if context_section.strip() else "No recent context available.",
             user_request=user_request
         )
         

@@ -571,7 +571,12 @@ class Orchestrator:
             tools_dict = {name: {'description': getattr(tool, 'description', '')} 
                          for name, tool in self.tool_registry.get_all_tools().items()}
             
-            plan = self.predictive_planner.generate_plan(command, tools_dict)
+            plan = self.predictive_planner.generate_plan(
+                command, 
+                tools_dict,
+                recent_results=self._recent_results,
+                failed_actions=self._failed_actions
+            )
             
             if plan and plan.get('steps'):
                 logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
