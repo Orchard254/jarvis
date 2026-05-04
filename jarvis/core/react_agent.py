@@ -95,13 +95,51 @@ Do not output any text outside the JSON block when acting.
             logger.debug(f"[ReAct] Iteration {i+1}/{self.max_iterations}")
             
             try:
-                # 1. REASON: Ask LLM for next step
-                response = self.brain.chat(
-                    messages=history, 
-                    system_prompt=self.system_prompt,
-                    temperature=0.0,  # Low temp for deterministic tool calls
-                    include_tools=True  # Enable tool calling for ReAct agent
-                )
+                # 1. REASON: Ask LLM for next step with retry logic for empty/malformed responses
+                max_retries = 3
+                response = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        response = self.brain.chat(
+                            messages=history, 
+                            system_prompt=self.system_prompt,
+                            temperature=0.0,  # Low temp for deterministic tool calls
+                            include_tools=True  # Enable tool calling for ReAct agent
+                        )
+                        
+                        # Check for successful response
+                        if isinstance(response, dict) and not response.get('success', False):
+                            logger.warning(f"[ReAct] Brain chat failed (attempt {attempt + 1}/{max_retries}): {response.get('error', 'Unknown error')}")
+                            if attempt < max_retries - 1:
+                                logger.info(f"[ReAct] Retrying brain chat...")
+                                continue
+                            return f"Error: LLM service unavailable after {max_retries} attempts"
+                        
+                        # Check for empty content in natural language responses
+                        if isinstance(response, dict):
+                            content = response.get('content', '')
+                            tool_calls = response.get('tool_calls', [])
+                            
+                            # If no tool calls and empty/no content, retry
+                            if not tool_calls and not content:
+                                logger.warning(f"[ReAct] Empty LLM response (attempt {attempt + 1}/{max_retries})")
+                                if attempt < max_retries - 1:
+                                    logger.info(f"[ReAct] Retrying due to empty response...")
+                                    continue
+                        
+                        # Valid response received
+                        break
+                        
+                    except Exception as e:
+                        logger.warning(f"[ReAct] Exception during brain chat (attempt {attempt + 1}/{max_retries}): {e}")
+                        if attempt < max_retries - 1:
+                            logger.info(f"[ReAct] Retrying after exception...")
+                            continue
+                        return f"Error: Failed to communicate with LLM after {max_retries} attempts"
+                
+                if response is None:
+                    return "Error: No response from LLM"
                 
                 # 2. ACT: Parse the tool call
                 action = self._parse_action(response)
@@ -111,7 +149,13 @@ Do not output any text outside the JSON block when acting.
                     logger.info(f"[ReAct] LLM responded with natural language: {str(response)[:100]}...")
                     # Extract content from dict response or return string
                     if isinstance(response, dict):
-                        return response.get('content', 'Task completed.')
+                        content = response.get('content', '')
+                        if content:
+                            return content
+                        # Check if there was an error
+                        if not response.get('success', True):
+                            return f"Error: {response.get('error', 'Task failed')}"
+                        return 'Task completed.'
                     return str(response) if response else "Task completed."
                 
                 # Handle dynamic tool generation

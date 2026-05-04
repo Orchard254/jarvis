@@ -99,42 +99,77 @@ class PredictivePlanner:
         try:
             # Force JSON output via prompt engineering (json_mode not supported by all models)
             # Disable tool calling to get raw text response for JSON parsing
-            response = self.brain.chat(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,  # Low temp for deterministic planning
-                include_tools=False  # Don't include tool schemas - we want raw JSON text
-            )
+            max_retries = 3
+            last_error = None
             
-            # Extract content from brain response dict
-            if isinstance(response, dict):
-                if not response.get('success', False):
-                    logger.error(f"Brain chat failed: {response.get('error', 'Unknown error')}")
+            for attempt in range(max_retries):
+                try:
+                    response = self.brain.chat(
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1,  # Low temp for deterministic planning
+                        include_tools=False  # Don't include tool schemas - we want raw JSON text
+                    )
+                    
+                    # Extract content from brain response dict
+                    if isinstance(response, dict):
+                        if not response.get('success', False):
+                            logger.error(f"Brain chat failed: {response.get('error', 'Unknown error')}")
+                            last_error = response.get('error', 'Unknown error')
+                            if attempt < max_retries - 1:
+                                logger.info(f"Retrying brain chat (attempt {attempt + 2}/{max_retries})...")
+                                continue
+                            return None
+                        # Get the actual content string from the response dict
+                        response_content = response.get('content', '')
+                        if not response_content:
+                            logger.warning(f"Empty content in brain response (attempt {attempt + 1}/{max_retries})")
+                            last_error = "Empty LLM response content"
+                            if attempt < max_retries - 1:
+                                logger.info(f"Retrying brain chat due to empty content (attempt {attempt + 2}/{max_retries})...")
+                                continue
+                            logger.error("Empty content in brain response after all retries")
+                            return None
+                        response = response_content
+                    
+                    # Use robust JSON parsing with multiple fallback strategies
+                    plan = parse_json_safely(response, default=None)
+                    
+                    if plan is None:
+                        logger.error(f"Failed to parse JSON from LLM response (attempt {attempt + 1}/{max_retries})")
+                        last_error = "Failed to parse JSON from LLM response"
+                        if attempt < max_retries - 1:
+                            logger.info(f"Retrying due to JSON parse failure (attempt {attempt + 2}/{max_retries})...")
+                            continue
+                        logger.error("Failed to parse JSON from LLM response after all retries")
+                        return None
+                    
+                    # Validate plan structure
+                    is_valid, error_msg = validate_plan_structure(plan)
+                    if not is_valid:
+                        logger.error(f"Invalid plan structure: {error_msg}")
+                        last_error = f"Invalid plan structure: {error_msg}"
+                        if attempt < max_retries - 1:
+                            logger.info(f"Retrying due to invalid plan structure (attempt {attempt + 2}/{max_retries})...")
+                            continue
+                        logger.error(f"Invalid plan structure after all retries: {error_msg}")
+                        return None
+                    
+                    logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")
+                    if plan.get('corrections'):
+                        logger.info(f"Corrections made: {plan['corrections']}")
+                    
+                    return plan
+                    
+                except Exception as e:
+                    logger.warning(f"Plan generation error (attempt {attempt + 1}/{max_retries}): {e}")
+                    last_error = str(e)
+                    if attempt < max_retries - 1:
+                        logger.info(f"Retrying after exception (attempt {attempt + 2}/{max_retries})...")
+                        continue
+                    logger.error(f"Plan generation failed after all retries: {e}")
                     return None
-                # Get the actual content string from the response dict
-                response_content = response.get('content', '')
-                if not response_content:
-                    logger.error("Empty content in brain response")
-                    return None
-                response = response_content
             
-            # Use robust JSON parsing with multiple fallback strategies
-            plan = parse_json_safely(response, default=None)
-            
-            if plan is None:
-                logger.error(f"Failed to parse JSON from LLM response")
-                return None
-            
-            # Validate plan structure
-            is_valid, error_msg = validate_plan_structure(plan)
-            if not is_valid:
-                logger.error(f"Invalid plan structure: {error_msg}")
-                return None
-                
-            logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")
-            if plan.get('corrections'):
-                logger.info(f"Corrections made: {plan['corrections']}")
-            
-            return plan
+            return None  # Should not reach here, but safety fallback
             
         except Exception as e:
             logger.error(f"Failed to generate plan: {e}")
