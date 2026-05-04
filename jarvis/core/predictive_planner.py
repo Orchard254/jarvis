@@ -98,9 +98,11 @@ class PredictivePlanner:
         
         try:
             # Force JSON output via prompt engineering (json_mode not supported by all models)
+            # Disable tool calling to get raw text response for JSON parsing
             response = self.brain.chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,  # Low temp for deterministic planning
+                include_tools=False  # Don't include tool schemas - we want raw JSON text
             )
             
             # Extract content from brain response dict
