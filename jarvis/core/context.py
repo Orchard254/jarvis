@@ -47,7 +47,9 @@ class ContextAssembler:
                         include_memories: bool = True,
                         include_tools: bool = True,
                         include_skills: bool = True,
-                        include_system_state: bool = True) -> Dict[str, Any]:
+                        include_system_state: bool = True,
+                        recent_results: Optional[List[Dict]] = None,
+                        failed_actions: Optional[List[Dict]] = None) -> Dict[str, Any]:
         """
         Assemble complete context for LLM inference.
         
@@ -58,10 +60,15 @@ class ContextAssembler:
             include_tools: Whether to include tool definitions
             include_skills: Whether to include skill definitions
             include_system_state: Whether to include current system state
+            recent_results: List of recent successful tool results (last 5 min)
+            failed_actions: List of recent failed actions (last 2 min)
             
         Returns:
             Complete context dict for LLM
         """
+        import time
+        current_time = time.time()
+        
         context = {
             'timestamp': datetime.now().isoformat(),
             'mode': mode,
@@ -71,11 +78,42 @@ class ContextAssembler:
             'tools': [],
             'skills': [],
             'system_state': {},
-            'user_profile': {}
+            'user_profile': {},
+            'recent_facts': [],
+            'recent_results': [],
+            'failed_actions': []
         }
         
         # Get conversation history
         context['conversation'] = self.memory.get_conversation_history()
+        
+        # Extract recent facts from conversation (last 5 minutes of successful tool results)
+        conv_history = context['conversation']
+        recent_facts = []
+        for msg in reversed(conv_history[-20:]):  # Check last 20 messages
+            if msg.get('role') == 'tool' and msg.get('success', True):
+                content = msg.get('content', '')
+                if content and len(content) < 300:  # Only concise factual results
+                    recent_facts.append({
+                        'fact': content,
+                        'tool': msg.get('name', 'tool'),
+                        'timestamp': msg.get('timestamp', current_time)
+                    })
+                if len(recent_facts) >= 5:
+                    break
+        context['recent_facts'] = recent_facts
+        
+        # Include provided recent results (from orchestrator tracking)
+        if recent_results:
+            context['recent_results'] = recent_results[-5:]  # Last 5
+        
+        # Include provided failed actions
+        if failed_actions:
+            # Filter to only failures within last 2 minutes
+            context['failed_actions'] = [
+                f for f in failed_actions 
+                if current_time - f.get('timestamp', 0) < 120
+            ][-5:]  # Last 5 failures
         
         # Retrieve relevant memories if enabled
         if include_memories:
@@ -100,7 +138,9 @@ class ContextAssembler:
         context['user_profile'] = self._get_user_profile()
         
         logger.debug(f"Assembled context with {len(context['conversation'])} messages, "
-                    f"{len(context['tools'])} tools, {len(context['skills'])} skills")
+                    f"{len(context['tools'])} tools, {len(context['skills'])} skills, "
+                    f"{len(context['recent_facts'])} recent facts, "
+                    f"{len(context['recent_results'])} recent results")
         
         return context
     
@@ -230,6 +270,9 @@ class ContextAssembler:
         """
         parts = []
         
+        # CRITICAL INSTRUCTION: Check existing knowledge before acting
+        parts.append("[IMPORTANT: Before executing any tool, check if you already have this information from recent conversation or tool results. Do not repeat actions that already succeeded.]")
+        
         # System state header
         if context.get('system_state'):
             state = context['system_state']
@@ -244,6 +287,15 @@ class ContextAssembler:
             if state_parts:
                 parts.append(f"[System State: {', '.join(state_parts)}]")
         
+        # Recently obtained facts (HIGHEST PRIORITY - from last 5 minutes)
+        if context.get('recent_facts'):
+            facts = context['recent_facts']
+            fact_strings = []
+            for fact in facts[:5]:  # Top 5 most recent
+                fact_strings.append(fact.get('fact', str(fact)))
+            if fact_strings:
+                parts.append(f"[RECENTLY OBTAINED FACTS - Use these before running tools: {'; '.join(fact_strings)}]")
+        
         # Relevant memories
         if context.get('memories'):
             memories = context['memories']
@@ -251,12 +303,24 @@ class ContextAssembler:
             if memories.get('semantic'):
                 facts = [m.get('fact', m.get('text', '')) for m in memories['semantic'][:3]]
                 if facts:
-                    parts.append(f"[Relevant Facts: {'; '.join(facts)}]")
+                    parts.append(f"[Long-term Facts: {'; '.join(facts)}]")
             
             if memories.get('procedural'):
                 patterns = [m.get('description', '') for m in memories['procedural'][:2]]
                 if patterns:
                     parts.append(f"[Learned Patterns: {'; '.join(patterns)}]")
+        
+        # Recent tool execution results (last 3 successful executions)
+        if context.get('recent_results'):
+            results = context['recent_results']
+            result_strings = []
+            for result in results[:3]:
+                tool_name = result.get('tool', 'tool')
+                output = result.get('output', result.get('result', ''))
+                if output and len(str(output)) < 200:  # Only include concise results
+                    result_strings.append(f"{tool_name} returned: {output}")
+            if result_strings:
+                parts.append(f"[RECENT TOOL RESULTS - Reference these instead of re-executing: {'; '.join(result_strings)}]")
         
         # Conversation history
         if context.get('conversation'):
@@ -276,6 +340,17 @@ class ContextAssembler:
             if conv_parts:
                 parts.append("[Conversation History:]")
                 parts.extend(conv_parts)
+        
+        # Failed actions to avoid (from last 2 minutes)
+        if context.get('failed_actions'):
+            failed = context['failed_actions']
+            fail_strings = []
+            for fail in failed[:3]:
+                tool_name = fail.get('tool', 'tool')
+                error = fail.get('error', 'unknown error')
+                fail_strings.append(f"{tool_name} failed: {error}")
+            if fail_strings:
+                parts.append(f"[RECENT FAILURES - Do NOT retry these: {'; '.join(fail_strings)}]")
         
         # Available tools summary
         if context.get('tools'):

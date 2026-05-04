@@ -133,7 +133,9 @@ class Brain:
     def chat_with_tools(self, user_message: str,
                        system_prompt: Optional[str] = None,
                        max_iterations: int = 5,
-                       temperature: float = 0.7) -> Dict[str, Any]:
+                       temperature: float = 0.7,
+                       recent_results: Optional[list] = None,
+                       failed_actions: Optional[list] = None) -> Dict[str, Any]:
         """
         Chat with automatic tool execution loop.
         
@@ -145,6 +147,8 @@ class Brain:
             system_prompt: Optional system prompt
             max_iterations: Maximum tool call iterations
             temperature: Sampling temperature
+            recent_results: List of recent successful tool results for context
+            failed_actions: List of recent failed actions to avoid
             
         Returns:
             Final response after tool execution
@@ -155,6 +159,32 @@ class Brain:
             'content': user_message
         })
         
+        # Inject context about recent results and failures into system prompt
+        enhanced_system_prompt = system_prompt or ""
+        context_injections = []
+        
+        if recent_results:
+            result_summary = []
+            for r in recent_results[-5:]:
+                tool_name = r.get('tool', 'tool')
+                output = r.get('output', '')[:100] if r.get('output') else ''
+                if output:
+                    result_summary.append(f"{tool_name}: {output}")
+            if result_summary:
+                context_injections.append(f"[RECENT SUCCESSFUL RESULTS - Use these instead of re-executing: {'; '.join(result_summary)}]")
+        
+        if failed_actions:
+            fail_summary = []
+            for f in failed_actions[-5:]:
+                tool_name = f.get('tool', 'tool')
+                error = f.get('error', 'failed')[:80]
+                fail_summary.append(f"{tool_name} failed: {error}")
+            if fail_summary:
+                context_injections.append(f"[RECENT FAILURES - Do NOT retry these: {'; '.join(fail_summary)}]")
+        
+        if context_injections:
+            enhanced_system_prompt = system_prompt + "\n\n" + "\n".join(context_injections) if system_prompt else "\n".join(context_injections)
+        
         iteration = 0
         final_response = None
         
@@ -164,10 +194,10 @@ class Brain:
             if self.on_thinking:
                 self.on_thinking(f"Thinking (iteration {iteration})...")
             
-            # Get LLM response
+            # Get LLM response with enhanced context
             response = self.chat(
                 messages=self.conversation_history,
-                system_prompt=system_prompt,
+                system_prompt=enhanced_system_prompt,
                 temperature=temperature
             )
             

@@ -206,6 +206,10 @@ class Orchestrator:
         self._consecutive_failures = 0
         self._failure_cache: Dict[str, int] = {}  # task_hash -> failure_count
         
+        # Recent execution tracking for context awareness
+        self._recent_results: List[Dict[str, Any]] = []  # Last successful tool results
+        self._failed_actions: List[Dict[str, Any]] = []  # Recent failed actions
+        
         # Abort mechanism
         self._abort_flag = threading.Event()
         self._abort_queue = queue.Queue()
@@ -615,6 +619,32 @@ class Orchestrator:
                 # Execute the plan using TaskExecutor with verification and loop prevention
                 executed_plan = self.task_executor.execute_plan(task_plan, stop_on_failure=False)
                 
+                # Update recent results and failed actions tracking
+                import time as time_module
+                current_time = time_module.time()
+                for step in executed_plan.steps:
+                    if step.status.value == 'completed' and step.result:
+                        # Add to recent results
+                        result_data = {
+                            'tool': step.tool_name,
+                            'output': step.result.output if hasattr(step.result, 'output') else str(step.result),
+                            'timestamp': current_time
+                        }
+                        self._recent_results.append(result_data)
+                    elif step.status.value == 'failed':
+                        # Add to failed actions
+                        fail_data = {
+                            'tool': step.tool_name,
+                            'error': step.error_message or 'Unknown failure',
+                            'timestamp': current_time,
+                            'parameters': step.parameters
+                        }
+                        self._failed_actions.append(fail_data)
+                
+                # Keep only last 20 results and last 10 failures
+                self._recent_results = self._recent_results[-20:]
+                self._failed_actions = self._failed_actions[-10:]
+                
                 # Get task summary for response
                 task_summary = self.task_executor.get_task_summary(executed_plan)
                 
@@ -712,7 +742,9 @@ class Orchestrator:
         response = self.brain.chat_with_tools(
             user_message=command,
             system_prompt=system_prompt,
-            max_iterations=MAX_AGENT_ROUNDS  # Cap at MAX_AGENT_ROUNDS
+            max_iterations=MAX_AGENT_ROUNDS,  # Cap at MAX_AGENT_ROUNDS
+            recent_results=self._recent_results,
+            failed_actions=self._failed_actions
         )
         
         if response['success']:
