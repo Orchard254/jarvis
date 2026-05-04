@@ -6,6 +6,7 @@ Uses subprocess and psutil for app management.
 """
 
 import logging
+import os
 import subprocess
 from typing import Any
 
@@ -69,39 +70,42 @@ class OpenAppTool(BaseTool):
             for proc in psutil.process_iter(["name"]):
                 if executable.lower() in proc.info["name"].lower():
                     log.info(f"{app_name} is already running")
-                    # For Chrome, launch with debug port if not already enabled
+                    # For Chrome, check if debug port is enabled
                     if app_name in ["chrome", "google chrome"]:
-                        cmdline = ' '.join(proc.cmdline())
-                        if '--remote-debugging-port=' not in cmdline:
-                            log.info("Chrome running without debug port. Restarting with debug enabled...")
-                            # Close existing Chrome and restart with debug port
-                            try:
-                                proc.terminate()
-                                proc.wait(timeout=5)
-                            except Exception:
-                                proc.kill()
-                            
-                            # Launch Chrome with debug port
-                            chrome_paths = [
-                                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-                            ]
-                            chrome_path = None
-                            for path in chrome_paths:
-                                if os.path.exists(path):
-                                    chrome_path = path
-                                    break
-                            
-                            if chrome_path:
-                                args = [
-                                    chrome_path,
-                                    "--remote-debugging-port=9222",
-                                    "--no-first-run",
-                                    "--no-default-browser-check",
+                        try:
+                            cmdline = ' '.join(proc.cmdline())
+                            if '--remote-debugging-port=' not in cmdline:
+                                log.info("Chrome running without debug port. Restarting with debug enabled...")
+                                # Close existing Chrome and restart with debug port
+                                try:
+                                    proc.terminate()
+                                    proc.wait(timeout=5)
+                                except Exception:
+                                    proc.kill()
+                                
+                                # Launch Chrome with debug port
+                                chrome_paths = [
+                                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                                    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
                                 ]
-                                subprocess.Popen(args)
-                                return ToolResult.ok(f"Restarted {app_name} with automation support (debug port 9222)")
+                                chrome_path = None
+                                for path in chrome_paths:
+                                    if os.path.exists(path):
+                                        chrome_path = path
+                                        break
+                                
+                                if chrome_path:
+                                    args = [
+                                        chrome_path,
+                                        "--remote-debugging-port=9222",
+                                        "--no-first-run",
+                                        "--no-default-browser-check",
+                                    ]
+                                    subprocess.Popen(args)
+                                    return ToolResult.ok(f"Restarted {app_name} with automation support (debug port 9222)")
+                        except Exception as e:
+                            log.warning(f"Error checking Chrome cmdline: {e}")
                     
                     return ToolResult.ok(f"{app_name} is already running")
             
