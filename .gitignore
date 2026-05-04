@@ -1,80 +1,32 @@
-# Compiled and build artifacts
-*.pyc
+```
+# Python
 __pycache__/
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 *.so
-*.dylib
-*.dll
-*.exe
-*.o
-*.obj
-*.out
-*.class
-*.jar
-*.war
-*.zip
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.gz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Dependencies
-.venv/
-venv/
+# Logs
+logs/
+*.log
+
+# Environment
 .env
 .env.local
 .env.*
-node_modules/
-target/
-build/
-dist/
-out/
-coverage/
-htmlcov/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-.cargo/
-.packages/
-
-# Editors and IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# Logs and temporary files
-*.log
-*.tmp
-*.temp
-*.bak
-*.backup
-
-# Images (if accidentally included)
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.bmp
-*.tiff
-*.svg
-*.webp
-*.ico
+```
