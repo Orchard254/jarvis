@@ -124,7 +124,13 @@ class PredictivePlanner:
                 logger.warning(f"Step {i+1} missing tool name, skipping.")
                 continue
             
-            logger.info(f"Step {i+1}/{len(plan['steps'])}: {tool_name}({params}) - {step.get('reason', '')}")
+            # Ensure reason text is ASCII-safe for Windows console logging
+            reason = step.get('reason', '')
+            if reason:
+                # Replace non-breaking hyphens and other special chars with standard ASCII
+                reason = reason.replace('\u2011', '-').replace('\u2013', '-').replace('\u2014', '-')
+            
+            logger.info(f"Step {i+1}/{len(plan['steps'])}: {tool_name}({params}) - {reason}")
             
             try:
                 # Execute tool
