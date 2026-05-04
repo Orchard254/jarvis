@@ -19,13 +19,14 @@ RULES:
 3. BE SPECIFIC: Do not say "open site". Say "navigate_to_url: https://www.kilimall.co.ke".
 4. HANDLE TYPOS: "refubished" -> "refurbished", "kilimal" -> "kilimall".
 5. MINIMIZE STEPS: Combine actions where possible.
+6. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
 
 AVAILABLE TOOLS:
 {tools_description}
 
 USER REQUEST: "{user_request}"
 
-Output ONLY valid JSON in this format:
+Output ONLY valid JSON in this exact format (no markdown wrapping):
 {{
     "goal": "Clear restatement of the goal",
     "corrections": ["List of typos or ambiguities you fixed"],
@@ -59,11 +60,10 @@ class PredictivePlanner:
         )
         
         try:
-            # Force JSON output
+            # Force JSON output via prompt engineering (json_mode not supported by all models)
             response = self.brain.chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,  # Low temp for deterministic planning
-                json_mode=True
             )
             
             # Parse JSON
