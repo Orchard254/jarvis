@@ -4,5 +4,17 @@
     "title": "System Info",
     "content": "{{step_1.output}}",
     "created_at": "2026-05-03T08:46:43.022493"
+  },
+  {
+    "id": 2,
+    "title": "Note 2",
+    "content": "test",
+    "created_at": "2026-05-04T11:28:43.171289"
+  },
+  {
+    "id": 3,
+    "title": "Note 3",
+    "content": "test",
+    "created_at": "2026-05-04T11:28:53.126247"
   }
 ]
