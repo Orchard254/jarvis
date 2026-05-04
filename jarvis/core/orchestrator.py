@@ -612,8 +612,11 @@ class Orchestrator:
     def _handle_chat_request(self, command: str) -> Dict[str, Any]:
         """Handle simple chat requests that don't require tool execution."""
         try:
+            # Use a chat-specific prompt to get natural language response
+            chat_prompt = f"Respond naturally to this greeting or chat message. Be friendly and concise:\n\nUser: {command}"
+            
             response = self.brain.chat(
-                messages=[{"role": "user", "content": command}],
+                messages=[{"role": "user", "content": chat_prompt}],
                 temperature=0.7,
                 include_tools=False
             )
@@ -625,6 +628,19 @@ class Orchestrator:
             else:
                 response_text = str(response) if response else 'Hello! How can I help you?'
                 success = True
+            
+            # If response is JSON (fallback), try to extract goal or respond with it
+            if response_text.strip().startswith('{'):
+                try:
+                    import json as json_module
+                    parsed = json_module.loads(response_text)
+                    # If it's a plan-like JSON with no steps, just respond naturally
+                    if not parsed.get('steps'):
+                        response_text = "Hello! How can I assist you today?"
+                    elif parsed.get('goal'):
+                        response_text = parsed.get('goal', response_text)
+                except:
+                    pass  # Keep the original response if parsing fails
             
             # Speak response
             self._speak(response_text)
