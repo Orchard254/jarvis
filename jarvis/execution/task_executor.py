@@ -179,6 +179,7 @@ class TaskExecutor:
                     "type_text",          # Text input may need retries
                     "click_element",      # UI clicks may need retries
                     "focus_window",       # Window focusing may need retries
+                    "clear_text",         # Clearing text may be needed multiple times
                 ]
                 if tool_name in allowed_repeated_tools:
                     logger.debug(f"Allowing repeated {tool_name} call")

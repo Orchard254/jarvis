@@ -1,35 +1,3 @@
-```
-# Compiled Python files
-*.pyc
-__pycache__/
+Nothing should be ignored based on the provided file changes. The modification of 'jarvis/execution/task_executor.py' represents a source code change that should be tracked in version control. No build artifacts, dependencies, temporary files, or other ignorable items were detected in the changes. Therefore, no additions to .gitignore are necessary.
 
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.swp
-
-# Coverage reports
-.coverage
-coverage/
-htmlcov/
-
-# IDE specific
-.vscode/
-.idea/
-
-# Build directories
-build/
-dist/
-target/
-
-# Virtual environments
-venv/
-.venv/
-```
+Output: (nothing)
