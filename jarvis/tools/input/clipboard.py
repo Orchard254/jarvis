@@ -9,9 +9,98 @@ import logging
 import time
 from typing import Any, Optional
 
+import psutil
+
 from ..base import BaseTool, ToolResult
 
 log = logging.getLogger("clipboard_tools")
+
+
+def get_active_window_title() -> Optional[str]:
+    """Get the title of the currently active window."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        hwnd = ctypes.windll.user32.GetForegroundWindow()
+        if hwnd:
+            title_buf = ctypes.create_unicode_buffer(256)
+            ctypes.windll.user32.GetWindowTextW(hwnd, title_buf, 256)
+            return title_buf.value
+    except Exception as e:
+        log.debug(f"Failed to get active window: {e}")
+    return None
+
+
+def get_active_process_name() -> Optional[str]:
+    """Get the process name of the currently active window."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        hwnd = ctypes.windll.user32.GetForegroundWindow()
+        if hwnd:
+            pid = ctypes.c_ulong()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            try:
+                process = psutil.Process(pid.value)
+                return process.name().lower()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception as e:
+        log.debug(f"Failed to get active process: {e}")
+    return None
+
+
+def is_window_active(title_pattern: str) -> bool:
+    """Check if a window matching the pattern is currently active."""
+    active_title = get_active_window_title()
+    if not active_title:
+        return False
+    
+    return title_pattern.lower() in active_title.lower()
+
+
+def ensure_window_active(title_pattern: str, app_name: Optional[str] = None) -> tuple[bool, str]:
+    """
+    Ensure a window is active, bringing it to foreground if needed.
+    
+    Args:
+        title_pattern: Pattern to match in window title
+        app_name: Optional application name to search for if title not found
+        
+    Returns:
+        Tuple of (success, message)
+    """
+    # First check if already active
+    if is_window_active(title_pattern):
+        return True, f"{title_pattern} is already active"
+    
+    # Try to find and bring to foreground
+    try:
+        from ..apps.window import find_window_by_title, bring_to_foreground
+        
+        hwnd = find_window_by_title(title_pattern)
+        
+        if hwnd is None and app_name:
+            # Try finding by app name
+            hwnd = find_window_by_title(app_name)
+        
+        if hwnd:
+            bring_to_foreground(hwnd)
+            time.sleep(0.3)  # Allow time for window to come to foreground
+            
+            # Verify it's now active
+            if is_window_active(title_pattern) or (app_name and get_active_process_name() == app_name.lower()):
+                return True, f"Brought {title_pattern or app_name} to foreground"
+            else:
+                return True, f"Attemped to bring window to foreground (verification pending)"
+        else:
+            return False, f"No window found matching '{title_pattern}'"
+            
+    except Exception as e:
+        log.error(f"Failed to ensure window active: {e}")
+        return False, f"Error: {str(e)}"
 
 
 def get_clipboard_text() -> Optional[str]:
@@ -172,6 +261,10 @@ class TypeTextTool(BaseTool):
             "type": "number",
             "description": "Delay between keystrokes in seconds (default: 0.05)",
         },
+        "target_app": {
+            "type": "string",
+            "description": "Optional: Name of the application that should be active (e.g., 'notepad', 'chrome'). If provided, ensures this app is active before typing.",
+        },
     }
     required_parameters = ["text"]
     
@@ -184,6 +277,15 @@ class TypeTextTool(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         text = kwargs["text"]
         delay = kwargs.get("delay", 0.05)
+        target_app = kwargs.get("target_app")
+        
+        # Ensure the target application is active if specified
+        if target_app:
+            success, message = ensure_window_active(target_app, target_app)
+            if not success:
+                log.warning(f"Target app {target_app} not active: {message}")
+                return ToolResult.fail(error=f"Cannot type: {target_app} is not active. {message}")
+            log.info(f"Verified {target_app} is active before typing")
         
         try:
             # Try to use pyautogui for reliable keyboard input
@@ -268,6 +370,10 @@ class PressKeyTool(BaseTool):
             "type": "string",
             "description": "Key or key combination (e.g., 'F5', 'Win+D', 'Ctrl+C', 'Alt+Tab')",
         },
+        "target_app": {
+            "type": "string",
+            "description": "Optional: Name of the application that should be active (e.g., 'notepad', 'chrome'). If provided, ensures this app is active before pressing keys.",
+        },
     }
     required_parameters = ["keys"]
     
@@ -279,6 +385,15 @@ class PressKeyTool(BaseTool):
     
     def execute(self, **kwargs) -> ToolResult:
         keys = kwargs["keys"]
+        target_app = kwargs.get("target_app")
+        
+        # Ensure the target application is active if specified
+        if target_app:
+            success, message = ensure_window_active(target_app, target_app)
+            if not success:
+                log.warning(f"Target app {target_app} not active: {message}")
+                return ToolResult.fail(error=f"Cannot press keys: {target_app} is not active. {message}")
+            log.info(f"Verified {target_app} is active before pressing keys")
         
         try:
             import subprocess
