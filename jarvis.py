@@ -46,7 +46,7 @@ def setup_logging(config: dict) -> None:
         format=log_format,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(os.path.join(log_dir, 'jarvis.log'))
+            logging.FileHandler(os.path.join(log_dir, 'jarvis.log'), encoding='utf-8')
         ]
     )
     
