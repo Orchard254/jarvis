@@ -2228,3 +2228,61 @@ TypeError: ToolRegistry.execute() takes 2 positional arguments but 3 were given
 2026-05-04 12:31:57,795 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
 2026-05-04 12:31:57,806 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
 2026-05-04 12:31:57,807 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 21:13:59,877 - __main__ - INFO - ============================================================
+2026-05-04 21:13:59,877 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-04 21:13:59,877 - __main__ - INFO - ============================================================
+2026-05-04 21:13:59,877 - __main__ - INFO - Starting in agent mode
+2026-05-04 21:13:59,877 - __main__ - INFO - Voice enabled: False
+2026-05-04 21:13:59,877 - __main__ - INFO - Config: jarvis_data
+2026-05-04 21:13:59,877 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-04 21:13:59,891 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-04 21:13:59,893 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-04 21:13:59,895 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-04 21:13:59,912 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-04 21:13:59,916 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-04 21:13:59,920 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-04 21:13:59,934 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-04 21:13:59,936 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-04 21:13:59,939 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-04 21:13:59,956 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.input.clipboard
+2026-05-04 21:14:00,092 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-04 21:14:00,093 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-04 21:14:00,093 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-04 21:14:00,095 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-04 21:14:00,097 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-04 21:14:00,113 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-04 21:14:00,117 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-04 21:14:00,132 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-04 21:14:00,135 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-04 21:14:00,136 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-04 21:14:00,136 - tool_registry - INFO - Total tools loaded: 73
+2026-05-04 21:14:00,152 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-04 21:14:00,152 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-04 21:14:00,152 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-04 21:14:00,152 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-04 21:14:00,152 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-04 21:14:00,153 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-04 21:14:00,153 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-04 21:14:00,154 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-04 21:14:00,155 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 21:14:00,156 - jarvis.core.orchestrator - INFO - Intent score: 20/100 - Chat indicators (80) -> Mode: chat
+2026-05-04 21:14:00,156 - jarvis.core.orchestrator - INFO - Handling in agent mode: hello...
+2026-05-04 21:14:00,160 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 21:14:00,172 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 21:14:00,172 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 21:14:03,282 - jarvis.core.predictive_planner - INFO - Plan generated with 2 steps (Confidence: low)
+2026-05-04 21:14:03,282 - jarvis.core.orchestrator - INFO - Generated predictive plan with 2 steps (confidence: low)
+2026-05-04 21:14:03,283 - task_executor - INFO - Created task plan: task_b2b1565f - hello
+2026-05-04 21:14:03,283 - task_executor - INFO - Starting task execution: task_b2b1565f
+2026-05-04 21:14:03,283 - task_executor - INFO - Executing step 1/2: Execute open_app
+2026-05-04 21:14:03,283 - task_executor - INFO - Executing step open_app (attempt 1)
+2026-05-04 21:14:04,156 - task_executor - INFO - Verification: Tool reported success: Opening notepad
+2026-05-04 21:14:04,156 - task_executor - INFO - Executing step 2/2: Execute type_text
+2026-05-04 21:14:04,156 - task_executor - INFO - Executing step type_text (attempt 1)
+2026-05-04 21:14:04,632 - task_executor - INFO - Verification: Tool reported failure: Type text failed: module 'ctypes' has no attribute 'windll'
+2026-05-04 21:14:04,633 - task_executor - WARNING - Verification failed: Tool reported failure: Type text failed: module 'ctypes' has no attribute 'windll'
+2026-05-04 21:14:04,633 - task_executor - INFO - Retrying in 2s...
+2026-05-04 21:14:06,633 - task_executor - INFO - Executing step type_text (attempt 2)
+2026-05-04 21:14:07,057 - task_executor - INFO - Verification: Tool reported failure: Type text failed: module 'ctypes' has no attribute 'windll'
+2026-05-04 21:14:07,057 - task_executor - WARNING - Verification failed: Tool reported failure: Type text failed: module 'ctypes' has no attribute 'windll'
+2026-05-04 21:14:07,057 - task_executor - INFO - Retrying in 4s...

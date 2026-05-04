@@ -434,22 +434,18 @@ class Orchestrator:
                 self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
             
             # Route based on adaptive score with conflict resolution
-            # Priority: 1) High confidence auto-execute (85+), 2) Medium with confirm (60-84), 3) Chat (<60)
-            if intent_score >= 85:
-                # Auto-execute in agent mode
+            # Let the LLM decide the mode based on intent analysis
+            if recommended_mode == 'chat' or intent_score < 60:
+                # Handle in chat mode - simple conversation
+                result = self._handle_chat_mode(command)
+            elif recommended_mode == 'agent_confirm' or intent_score >= 60:
+                # Handle with confirmation for medium-confidence intents
+                result = self._handle_agent_mode_with_confirm(command, intent_analysis)
+            else:
+                # Default to agent mode for clear action commands
                 result = self._handle_agent_mode(command)
                 # Learn from successful execution
                 self.intent_scorer.learn_from_interaction(command, executed=True)
-            elif intent_score >= 60:
-                # Show plan and ask for quick confirmation
-                result = self._handle_agent_mode_with_confirm(command, intent_analysis)
-                if result.get('confirmed', False):
-                    self.intent_scorer.learn_from_interaction(command, executed=True)
-                else:
-                    self.intent_scorer.learn_from_interaction(command, executed=False)
-            else:
-                # Chat mode
-                result = self._handle_chat_mode(command)
             
             # Update state
             self.state['total_interactions'] += 1
