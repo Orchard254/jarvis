@@ -495,10 +495,14 @@ class Orchestrator:
     
     def _handle_unified_mode(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
         """
-        Unified mode - LLM decides everything via predictive planner.
+        Single-loop LLM system with strict JSON output (FINAL or TOOL).
         
-        The predictive planner's needs_clarification flag determines if confirmation is shown.
-        No separate chat/agent modes - single pipeline for all requests.
+        Every LLM response must be valid JSON with either:
+        - {"type": "TOOL", "tool": "...", "params": {...}, "thought": "..."}
+        - {"type": "FINAL", "response": "...", "thought": "..."}
+        
+        Tools are executed in-loop immediately after validation.
+        Text responses only occur when type=FINAL.
         
         Args:
             command: User command
@@ -507,107 +511,224 @@ class Orchestrator:
         Returns:
             Response dict
         """
-        logger.info(f"Handling in unified mode: {command[:50]}...")
+        logger.info(f"Handling in unified loop mode: {command[:50]}...")
         
         # Clear abort flag for new task
         self.clear_abort()
         
-        # Retrieve relevant memories
-        context = self.memory.retrieve_context(query=command)
-        memories = context.get('episodic', []) + context.get('semantic', []) + context.get('procedural', [])
-        logger.debug(f"Retrieved {len(memories)} relevant memories")
+        # Build system prompt for strict JSON output
+        tools_json = self._build_tools_json()
+        system_prompt = self._build_single_loop_prompt(tools_json)
         
-        # Select reasoning strategy
-        classification = self.strategy_selector.classify(command)
-        strategy = self._map_complexity_to_strategy(classification.complexity)
-        logger.info(f"Selected strategy: {strategy} (complexity: {classification.complexity.value})")
+        # Initialize conversation state
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": command}
+        ]
         
-        system_prompt = get_system_prompt(mode='agent')
+        max_iterations = 15
+        iteration = 0
+        tool_calls = []
+        final_response = None
         
-        # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution with TaskExecutor verification
-        if strategy in ['direct', 'plan']:
-            logger.info(f"[Predictive] Using LLM's internal knowledge for direct execution...")
+        while iteration < max_iterations:
+            iteration += 1
             
-            # Generate predictive plan using LLM's world knowledge
-            tools_dict = {name: {'description': getattr(tool, 'description', '')} 
-                         for name, tool in self.tool_registry.get_all_tools().items()}
+            # Check for abort
+            if self.check_abort():
+                return {
+                    'success': False,
+                    'response': "Task aborted by user.",
+                    'mode': 'unified',
+                    'actions': tool_calls
+                }
             
-            plan = self.predictive_planner.generate_plan(
-                command, 
-                tools_dict,
-                recent_results=self._recent_results,
-                failed_actions=self._failed_actions
-            )
-            
-            if plan and plan.get('steps'):
-                # Check if LLM requested clarification
-                needs_clarification = plan.get('needs_clarification', False)
+            # Get LLM response
+            try:
+                llm_response = self.brain.client.chat(
+                    model=self.brain.model,
+                    messages=messages,
+                    temperature=0.1,  # Low temp for consistent JSON
+                    stream=False
+                )
                 
-                # Only show confirmation if LLM explicitly requested it
-                if needs_clarification:
-                    # Show plan to user and ask for clarification
-                    print(f"\n{'='*60}")
-                    print(f"📋 Proposed Plan (Confidence: {plan.get('confidence', 'unknown')})")
-                    print(f"{'='*60}")
-                    print(f"Goal: {plan.get('goal', command)}")
-                    if plan.get('corrections'):
-                        print(f"Corrections: {', '.join(plan['corrections'])}")
-                    print(f"\nSteps:")
-                    for i, step in enumerate(plan['steps'], 1):
-                        tool_name = step.get('tool', 'unknown')
-                        params = step.get('params', {})
-                        reason = step.get('reason', '')
-                        print(f"  {i}. {tool_name}({', '.join(f'{k}={v}' for k,v in params.items())})")
-                        if reason:
-                            print(f"     → {reason}")
-                    print(f"{'='*60}")
+                assistant_message = llm_response.get('message', {}).get('content', '')
+                
+                # Validate and parse JSON
+                parsed = self._validate_and_parse_json(assistant_message)
+                if not parsed:
+                    # Invalid JSON - ask LLM to retry
+                    messages.append({"role": "user", "content": "Invalid JSON format. Please respond with valid JSON using either {\"type\": \"TOOL\", ...} or {\"type\": \"FINAL\", ...}."})
+                    continue
+                
+                action_type = parsed.get('type', '').upper()
+                
+                if action_type == 'TOOL':
+                    # Execute tool immediately
+                    tool_name = parsed.get('tool')
+                    params = parsed.get('params', {})
+                    thought = parsed.get('thought', '')
                     
-                    # Ask for confirmation
-                    response_text = f"Ready to execute {len(plan['steps'])} step(s). Type 'yes' to proceed, or describe changes."
-                    print(f"\nJARVIS: {response_text}")
+                    if not tool_name:
+                        messages.append({"role": "user", "content": "Missing 'tool' field in TOOL response. Please specify which tool to call."})
+                        continue
                     
-                    # Get user confirmation
-                    try:
-                        confirm = input("\nYou: ").strip().lower()
-                        
-                        if confirm in ['yes', 'y', 'ok', 'go', 'proceed', 'do it']:
-                            # User confirmed - execute the plan
-                            logger.info("User confirmed plan - executing...")
-                            return self._execute_plan(command, plan)
-                        elif confirm in ['no', 'n', 'cancel', 'stop']:
-                            # User declined
-                            logger.info("User declined plan")
-                            return {
-                                'success': False,
-                                'response': "Cancelled as requested.",
-                                'mode': 'unified',
-                                'actions': []
-                            }
-                        else:
-                            # User wants modifications - treat as new command
-                            logger.info(f"User suggested modification: {confirm}")
-                            modified_command = f"{command} but {confirm}"
-                            return self._handle_unified_mode(modified_command, intent_analysis)
-                            
-                    except (EOFError, KeyboardInterrupt):
-                        return {
-                            'success': False,
-                            'response': "Cancelled.",
-                            'mode': 'unified',
-                            'actions': []
-                        }
+                    # Validate tool exists
+                    if tool_name not in self.tool_registry.get_all_tools():
+                        messages.append({"role": "user", "content": f"Unknown tool: {tool_name}. Available tools: {', '.join(list(self.tool_registry.get_all_tools().keys())[:10])}..."})
+                        continue
+                    
+                    # Execute tool
+                    logger.info(f"Executing tool: {tool_name}({params})")
+                    tool_result = self._execute_tool_in_loop(tool_name, params)
+                    
+                    # Record tool call
+                    tool_calls.append({
+                        'tool': tool_name,
+                        'params': params,
+                        'result': tool_result,
+                        'thought': thought
+                    })
+                    
+                    # Add assistant message and tool result to conversation
+                    messages.append({"role": "assistant", "content": assistant_message})
+                    messages.append({
+                        "role": "user", 
+                        "content": f"Tool '{tool_name}' returned: {tool_result}. Continue with next step or provide FINAL response."
+                    })
+                    
+                elif action_type == 'FINAL':
+                    # Final response - exit loop
+                    final_response = parsed.get('response', '')
+                    thought = parsed.get('thought', '')
+                    
+                    logger.info(f"Final response generated after {iteration} iterations")
+                    
+                    # Learn from successful execution if tools were used
+                    if tool_calls:
+                        self.intent_scorer.learn_from_interaction(command, executed=True)
+                    
+                    # Speak response
+                    self._speak(final_response)
+                    
+                    return {
+                        'success': True,
+                        'response': final_response,
+                        'mode': 'unified',
+                        'actions': tool_calls,
+                        'iterations': iteration
+                    }
                 else:
-                    # No clarification needed - execute directly without confirmation
-                    logger.info(f"No clarification needed (confidence: {plan.get('confidence', 'unknown')}) - executing directly...")
-                    return self._execute_plan(command, plan)
-            else:
-                # Plan generation failed - likely a chat-only request, handle directly with LLM
-                logger.info("No valid plan generated - handling as chat request...")
-                return self._handle_chat_request(command)
+                    # Unknown action type
+                    messages.append({"role": "user", "content": f"Unknown action type: '{action_type}'. Must be 'TOOL' or 'FINAL'."})
+                    
+            except Exception as e:
+                logger.error(f"LLM iteration error: {e}", exc_info=True)
+                messages.append({"role": "user", "content": f"Error occurred: {str(e)}. Please try again."})
         
-        # Fallback: Use ReAct agent for complex tasks that need iterative reasoning
-        logger.info(f"Falling back to ReAct agent for complex reasoning...")
-        return self._handle_react_fallback(command)
+        # Max iterations reached
+        logger.warning(f"Max iterations ({max_iterations}) reached")
+        return {
+            'success': False,
+            'response': final_response or "I couldn't complete this task within the maximum number of steps.",
+            'mode': 'unified',
+            'actions': tool_calls
+        }
+    
+    def _build_tools_json(self) -> str:
+        """Build JSON schema of available tools for the LLM."""
+        tools_list = []
+        for name, tool in self.tool_registry.get_all_tools().items():
+            tools_list.append({
+                'name': name,
+                'description': getattr(tool, 'description', ''),
+                'parameters': getattr(tool, 'parameters', {})
+            })
+        import json
+        return json.dumps(tools_list[:50])  # Limit to first 50 tools
+    
+    def _build_single_loop_prompt(self, tools_json: str) -> str:
+        """Build system prompt for strict JSON output."""
+        return f"""You are JARVIS, an AI assistant. You MUST respond with valid JSON ONLY.
+
+Every response must be ONE of these two formats:
+
+1. To use a tool:
+{{"type": "TOOL", "tool": "tool_name", "params": {{"param1": "value1"}}, "thought": "why you're calling this tool"}}
+
+2. To give final answer:
+{{"type": "FINAL", "response": "your text response", "thought": "summary of what was accomplished"}}
+
+RULES:
+- ALWAYS output valid JSON - no markdown, no explanations outside JSON
+- Execute tools one at a time - wait for result before next tool
+- Use FINAL when task is complete or for simple chat
+- Keep thoughts concise
+- If user asks something simple (greeting, question), respond with FINAL immediately
+
+Available tools:
+{tools_json}
+
+Examples:
+User: "hello"
+Assistant: {{"type": "FINAL", "response": "Hello! How can I help you?", "thought": "Simple greeting"}}
+
+User: "open notepad"
+Assistant: {{"type": "TOOL", "tool": "open_app", "params": {{"app_name": "notepad"}}, "thought": "Opening Notepad as requested"}}
+User: Tool 'open_app' returned: Opening notepad
+Assistant: {{"type": "FINAL", "response": "Notepad is now open.", "thought": "Task completed"}}
+
+Start now. Respond with valid JSON only."""
+    
+    def _validate_and_parse_json(self, text: str) -> Optional[Dict]:
+        """Validate and parse JSON from LLM response."""
+        import json
+        import re
+        
+        if not text:
+            return None
+        
+        # Try to extract JSON from text (handle markdown code blocks)
+        json_match = re.search(r'\{[\s\S]*\}', text)
+        if json_match:
+            text = json_match.group()
+        
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict) and 'type' in parsed:
+                return parsed
+        except json.JSONDecodeError:
+            pass
+        
+        return None
+    
+    def _execute_tool_in_loop(self, tool_name: str, params: Dict) -> str:
+        """Execute a single tool and return result as string."""
+        try:
+            tool = self.tool_registry.get_all_tools()[tool_name]
+            
+            # Execute tool
+            if hasattr(tool, 'execute'):
+                result = tool.execute(**params)
+            elif callable(tool):
+                result = tool(**params)
+            else:
+                return f"Error: Tool {tool_name} is not callable"
+            
+            # Convert result to string
+            if isinstance(result, dict):
+                if result.get('success'):
+                    return result.get('output', str(result))
+                else:
+                    return f"Error: {result.get('error', 'Unknown error')}"
+            elif isinstance(result, str):
+                return result
+            else:
+                return str(result)
+                
+        except Exception as e:
+            logger.error(f"Tool execution error: {e}", exc_info=True)
+            return f"Error executing {tool_name}: {str(e)}"
     
     def _handle_chat_request(self, command: str) -> Dict[str, Any]:
         """Handle simple chat requests that don't require tool execution."""
