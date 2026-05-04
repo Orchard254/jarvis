@@ -546,7 +546,6 @@ class Orchestrator:
             # Get LLM response
             try:
                 llm_response = self.brain.client.chat(
-                    model=self.brain.client.model,
                     messages=messages,
                     temperature=0.1,  # Low temp for consistent JSON
                     stream=False
