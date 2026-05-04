@@ -91,27 +91,28 @@ class ToolRegistry:
             **kwargs: Tool parameters
             
         Returns:
-            ToolResult from execution
+            ToolResult from execution (string for predictive planner compatibility)
         """
         tool = self.get(name)
         
         if tool is None:
-            return ToolResult.fail(
-                error=f"Unknown tool: '{name}'. Available tools: {', '.join(sorted(self._tools.keys()))}",
-                exit_code=-2,
-            )
+            raise Exception(f"Unknown tool: '{name}'. Available tools: {', '.join(sorted(self._tools.keys()))}")
         
         # Validate parameters first
         is_valid, error_msg = tool.validate(**kwargs)
         if not is_valid:
-            return ToolResult.fail(error=error_msg, exit_code=-1)
+            raise Exception(error_msg)
         
         # Execute the tool
         result = tool.execute(**kwargs)
         result.tool_name = name
         result.parameters = kwargs
         
-        return result
+        # Return string result for predictive planner (raises on failure)
+        if result.success:
+            return str(result.output) if result.output else "Success"
+        else:
+            raise Exception(result.error or "Tool execution failed")
     
     def get_all_tools(self) -> Dict[str, BaseTool]:
         """Get all registered tools."""
