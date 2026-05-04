@@ -127,6 +127,7 @@ class OpenAppTool(BaseTool):
                 # App already running - find the most relevant window and bring it to foreground
                 # Try to find a window with the app name in its title first
                 best_hwnd = None
+                best_title_match_score = -1
                 target_title_keywords = app_name.replace("_", " ").replace("-", " ").split()
                 
                 for proc in running_procs:
@@ -135,12 +136,28 @@ class OpenAppTool(BaseTool):
                         # Get window title to prioritize
                         title = get_window_title(hwnd)
                         if title:
-                            # Prefer windows that have the app name in the title
-                            if any(keyword.lower() in title.lower() for keyword in target_title_keywords):
+                            # Calculate match score based on keywords found in title
+                            match_score = sum(1 for keyword in target_title_keywords if keyword.lower() in title.lower())
+                            
+                            # Special handling for common apps with generic window titles
+                            # Notepad windows typically show "Untitled - Notepad" or "<filename> - Notepad"
+                            if app_name == "notepad" and ("notepad" in title.lower() or "untitled" in title.lower()):
+                                match_score = max(match_score, 1)
+                            # Calculator windows typically show "Calculator"
+                            elif app_name in ["calculator", "calc"] and "calculator" in title.lower():
+                                match_score = max(match_score, 1)
+                            # VS Code windows show "[filename] - Visual Studio Code"
+                            elif app_name in ["vscode", "visual studio code"] and ("visual studio code" in title.lower() or "vscode" in title.lower()):
+                                match_score = max(match_score, 1)
+                            
+                            # Update best if this is a better match
+                            if match_score > best_title_match_score:
+                                best_title_match_score = match_score
                                 best_hwnd = hwnd
-                                break
-                        # Fallback to first window found
-                        if best_hwnd is None:
+                                if match_score >= len(target_title_keywords):
+                                    break  # Perfect match, no need to continue
+                        # Fallback to first window found if no title matched yet
+                        elif best_hwnd is None:
                             best_hwnd = hwnd
                 
                 if best_hwnd:
