@@ -62,6 +62,7 @@ class Brain:
         # Timing tracking
         self.thinking_start_time: Optional[float] = None
         self.last_thinking_duration: Optional[float] = None
+        self._thinking_callback_active: bool = False
         
         logger.info("Brain initialized with model: %s", 
                    config.get('model', 'nemotron-3-nano:30b-cloud'))
@@ -105,6 +106,7 @@ class Brain:
     def _start_thinking_timer(self) -> None:
         """Start timing the LLM thinking phase."""
         self.thinking_start_time = time.time()
+        self._thinking_callback_active = True
     
     def _stop_thinking_timer(self) -> Optional[float]:
         """
@@ -119,6 +121,7 @@ class Brain:
         duration = time.time() - self.thinking_start_time
         self.last_thinking_duration = duration
         self.thinking_start_time = None
+        self._thinking_callback_active = False
         return duration
     
     def chat(self, messages: List[Dict], 
