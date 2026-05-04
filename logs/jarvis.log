@@ -1849,3 +1849,271 @@ TypeError: ToolRegistry.execute() takes 2 positional arguments but 3 were given
 2026-05-04 10:00:36,914 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
 2026-05-04 10:00:36,915 - jarvis.core.memory - INFO - Ended memory session: 20260504_100036
 2026-05-04 10:00:36,915 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-04T10:00:34.338070', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-04 10:10:12,055 - __main__ - INFO - ============================================================
+2026-05-04 10:10:12,056 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-04 10:10:12,056 - __main__ - INFO - ============================================================
+2026-05-04 10:10:12,056 - __main__ - INFO - Starting in agent mode
+2026-05-04 10:10:12,056 - __main__ - INFO - Voice enabled: False
+2026-05-04 10:10:12,056 - __main__ - INFO - Config: jarvis_data
+2026-05-04 10:10:12,056 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-04 10:10:12,057 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-04 10:10:12,057 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-04 10:10:12,069 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-04 10:10:12,073 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-04 10:10:12,074 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-04 10:10:12,075 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-04 10:10:12,076 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-04 10:10:12,076 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-04 10:10:12,089 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-04 10:10:12,090 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-04 10:10:12,195 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-04 10:10:12,196 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-04 10:10:12,196 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-04 10:10:12,197 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-04 10:10:12,198 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-04 10:10:12,209 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-04 10:10:12,211 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-04 10:10:12,212 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-04 10:10:12,213 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-04 10:10:12,213 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-04 10:10:12,213 - tool_registry - INFO - Total tools loaded: 72
+2026-05-04 10:10:12,231 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-04 10:10:12,231 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-04 10:10:12,231 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-04 10:10:12,231 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-04 10:10:12,231 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-04 10:10:12,232 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-04 10:10:12,232 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-04 10:10:12,234 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-04 10:10:12,235 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 10:10:12,250 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current time...
+2026-05-04 10:10:12,255 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:10:12,269 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:10:12,270 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:10:15,903 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:10:15,903 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:10:15,904 - task_executor - INFO - Created task plan: task_b27fe3b7 - check current time
+2026-05-04 10:10:15,904 - task_executor - INFO - Starting task execution: task_b27fe3b7
+2026-05-04 10:10:15,904 - task_executor - INFO - Executing step 1/1: Execute get_time
+2026-05-04 10:10:15,904 - task_executor - INFO - Executing step get_time (attempt 1)
+2026-05-04 10:10:15,904 - task_executor - ERROR - Step execution error: 'str' object has no attribute 'success'
+2026-05-04 10:10:15,904 - task_executor - INFO - Retrying in 2s...
+2026-05-04 10:10:17,904 - task_executor - WARNING - Duplicate action detected: get_time with same parameters
+2026-05-04 10:10:17,904 - task_executor - WARNING - Skipping duplicate action: get_time
+2026-05-04 10:10:17,904 - task_executor - ERROR - Step 1 failed: Duplicate action detected (possible loop)
+2026-05-04 10:10:17,904 - task_executor - INFO - Continuing to next step despite failure
+2026-05-04 10:10:17,904 - task_executor - WARNING - Task completed with 1 failures: task_b27fe3b7
+2026-05-04 10:10:17,905 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current date...
+2026-05-04 10:10:17,908 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:10:17,908 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:10:17,908 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:10:20,866 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:10:20,867 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:10:20,867 - task_executor - INFO - Created task plan: task_a5ccfc8e - check current date
+2026-05-04 10:10:20,867 - task_executor - INFO - Starting task execution: task_a5ccfc8e
+2026-05-04 10:10:20,867 - task_executor - INFO - Executing step 1/1: Execute get_date
+2026-05-04 10:10:20,867 - task_executor - INFO - Executing step get_date (attempt 1)
+2026-05-04 10:10:20,867 - task_executor - ERROR - Step execution error: 'str' object has no attribute 'success'
+2026-05-04 10:10:20,867 - task_executor - INFO - Retrying in 2s...
+2026-05-04 10:10:22,867 - task_executor - WARNING - Duplicate action detected: get_date with same parameters
+2026-05-04 10:10:22,867 - task_executor - WARNING - Skipping duplicate action: get_date
+2026-05-04 10:10:22,867 - task_executor - ERROR - Step 1 failed: Duplicate action detected (possible loop)
+2026-05-04 10:10:22,868 - task_executor - INFO - Continuing to next step despite failure
+2026-05-04 10:10:22,868 - task_executor - WARNING - Task completed with 1 failures: task_a5ccfc8e
+2026-05-04 10:10:22,868 - jarvis.core.orchestrator - INFO - User requested shutdown
+2026-05-04 10:10:22,868 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-04 10:10:22,869 - jarvis.core.memory - INFO - Ended memory session: 20260504_101022
+2026-05-04 10:10:22,869 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-04T10:10:12.232467', 'total_interactions': 2, 'successful_tasks': 0, 'failed_tasks': 2, 'current_activity': 'idle'}
+2026-05-04 10:10:43,149 - __main__ - INFO - ============================================================
+2026-05-04 10:10:43,149 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-04 10:10:43,149 - __main__ - INFO - ============================================================
+2026-05-04 10:10:43,149 - __main__ - INFO - Starting in agent mode
+2026-05-04 10:10:43,149 - __main__ - INFO - Voice enabled: False
+2026-05-04 10:10:43,149 - __main__ - INFO - Config: jarvis_data
+2026-05-04 10:10:43,149 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-04 10:10:43,150 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-04 10:10:43,151 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-04 10:10:43,152 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-04 10:10:43,155 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-04 10:10:43,156 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-04 10:10:43,157 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-04 10:10:43,157 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-04 10:10:43,169 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-04 10:10:43,170 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-04 10:10:43,171 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-04 10:10:43,253 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-04 10:10:43,254 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-04 10:10:43,254 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-04 10:10:43,255 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-04 10:10:43,255 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-04 10:10:43,256 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-04 10:10:43,257 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-04 10:10:43,258 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-04 10:10:43,258 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-04 10:10:43,258 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-04 10:10:43,259 - tool_registry - INFO - Total tools loaded: 72
+2026-05-04 10:10:43,275 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-04 10:10:43,276 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-04 10:10:43,276 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-04 10:10:43,276 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-04 10:10:43,276 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-04 10:10:43,276 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-04 10:10:43,277 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-04 10:10:43,278 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-04 10:10:43,279 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 10:10:43,292 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current time...
+2026-05-04 10:10:43,295 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:10:43,295 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:10:43,296 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:10:46,246 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:10:46,246 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:10:46,246 - task_executor - INFO - Created task plan: task_65682de0 - check current time
+2026-05-04 10:10:46,246 - task_executor - INFO - Starting task execution: task_65682de0
+2026-05-04 10:10:46,246 - task_executor - INFO - Executing step 1/1: Execute get_time
+2026-05-04 10:10:46,246 - task_executor - INFO - Executing step get_time (attempt 1)
+2026-05-04 10:10:46,246 - task_executor - ERROR - Step execution error: 'ToolResult' object has no attribute 'message'
+2026-05-04 10:10:46,246 - task_executor - INFO - Retrying in 2s...
+2026-05-04 10:10:48,247 - task_executor - WARNING - Duplicate action detected: get_time with same parameters
+2026-05-04 10:10:48,247 - task_executor - WARNING - Skipping duplicate action: get_time
+2026-05-04 10:10:48,247 - task_executor - ERROR - Step 1 failed: Duplicate action detected (possible loop)
+2026-05-04 10:10:48,247 - task_executor - INFO - Continuing to next step despite failure
+2026-05-04 10:10:48,247 - task_executor - WARNING - Task completed with 1 failures: task_65682de0
+2026-05-04 10:10:48,248 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current date...
+2026-05-04 10:10:48,251 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:10:48,251 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:10:48,251 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:10:51,171 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:10:51,171 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:10:51,171 - task_executor - INFO - Created task plan: task_a07964e2 - check current date
+2026-05-04 10:10:51,171 - task_executor - INFO - Starting task execution: task_a07964e2
+2026-05-04 10:10:51,171 - task_executor - INFO - Executing step 1/1: Execute get_date
+2026-05-04 10:10:51,172 - task_executor - INFO - Executing step get_date (attempt 1)
+2026-05-04 10:10:51,172 - task_executor - ERROR - Step execution error: 'ToolResult' object has no attribute 'message'
+2026-05-04 10:10:51,172 - task_executor - INFO - Retrying in 2s...
+2026-05-04 10:10:53,172 - task_executor - WARNING - Duplicate action detected: get_date with same parameters
+2026-05-04 10:10:53,172 - task_executor - WARNING - Skipping duplicate action: get_date
+2026-05-04 10:10:53,172 - task_executor - ERROR - Step 1 failed: Duplicate action detected (possible loop)
+2026-05-04 10:10:53,172 - task_executor - INFO - Continuing to next step despite failure
+2026-05-04 10:10:53,172 - task_executor - WARNING - Task completed with 1 failures: task_a07964e2
+2026-05-04 10:10:53,173 - jarvis.core.orchestrator - INFO - User requested shutdown
+2026-05-04 10:10:53,173 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-04 10:10:53,174 - jarvis.core.memory - INFO - Ended memory session: 20260504_101053
+2026-05-04 10:10:53,174 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-04T10:10:43.276877', 'total_interactions': 2, 'successful_tasks': 0, 'failed_tasks': 2, 'current_activity': 'idle'}
+2026-05-04 10:11:07,792 - __main__ - INFO - ============================================================
+2026-05-04 10:11:07,792 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-04 10:11:07,792 - __main__ - INFO - ============================================================
+2026-05-04 10:11:07,793 - __main__ - INFO - Starting in agent mode
+2026-05-04 10:11:07,793 - __main__ - INFO - Voice enabled: False
+2026-05-04 10:11:07,793 - __main__ - INFO - Config: jarvis_data
+2026-05-04 10:11:07,793 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-04 10:11:07,794 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-04 10:11:07,794 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-04 10:11:07,796 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-04 10:11:07,811 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-04 10:11:07,812 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-04 10:11:07,813 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-04 10:11:07,813 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-04 10:11:07,814 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-04 10:11:07,815 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-04 10:11:07,816 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-04 10:11:07,912 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-04 10:11:07,912 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-04 10:11:07,912 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-04 10:11:07,913 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-04 10:11:07,914 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-04 10:11:07,915 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-04 10:11:07,916 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-04 10:11:07,917 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-04 10:11:07,917 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-04 10:11:07,917 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-04 10:11:07,918 - tool_registry - INFO - Total tools loaded: 72
+2026-05-04 10:11:07,935 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-04 10:11:07,935 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-04 10:11:07,935 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-04 10:11:07,935 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-04 10:11:07,935 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-04 10:11:07,936 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-04 10:11:07,936 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-04 10:11:07,937 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-04 10:11:07,938 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 10:11:07,951 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current time...
+2026-05-04 10:11:07,954 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:11:07,955 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:11:07,956 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:11:10,954 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:11:10,954 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:11:10,954 - task_executor - INFO - Created task plan: task_bd013f74 - check current time
+2026-05-04 10:11:10,954 - task_executor - INFO - Starting task execution: task_bd013f74
+2026-05-04 10:11:10,954 - task_executor - INFO - Executing step 1/1: Execute get_time
+2026-05-04 10:11:10,954 - task_executor - INFO - Executing step get_time (attempt 1)
+2026-05-04 10:11:10,954 - task_executor - INFO - Verification: Tool reported success: Current time: 10:11 AM
+2026-05-04 10:11:10,954 - task_executor - INFO - Task completed successfully: task_bd013f74 (0.00s)
+2026-05-04 10:11:10,955 - jarvis.core.orchestrator - INFO - Handling in agent mode: check current date...
+2026-05-04 10:11:10,958 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:11:10,958 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:11:10,958 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:11:13,299 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:11:13,299 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:11:13,300 - task_executor - INFO - Created task plan: task_dcc7f4eb - check current date
+2026-05-04 10:11:13,300 - task_executor - INFO - Starting task execution: task_dcc7f4eb
+2026-05-04 10:11:13,300 - task_executor - INFO - Executing step 1/1: Execute get_date
+2026-05-04 10:11:13,300 - task_executor - INFO - Executing step get_date (attempt 1)
+2026-05-04 10:11:13,300 - task_executor - INFO - Verification: Tool reported success: Today is Monday, May 04, 2026
+2026-05-04 10:11:13,300 - task_executor - INFO - Task completed successfully: task_dcc7f4eb (0.00s)
+2026-05-04 10:11:13,300 - jarvis.core.orchestrator - INFO - User requested shutdown
+2026-05-04 10:11:13,300 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-04 10:11:13,301 - jarvis.core.memory - INFO - Ended memory session: 20260504_101113
+2026-05-04 10:11:13,301 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-04T10:11:07.936023', 'total_interactions': 2, 'successful_tasks': 2, 'failed_tasks': 0, 'current_activity': 'idle'}
+2026-05-04 10:11:16,773 - __main__ - INFO - ============================================================
+2026-05-04 10:11:16,773 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-04 10:11:16,773 - __main__ - INFO - ============================================================
+2026-05-04 10:11:16,773 - __main__ - INFO - Starting in agent mode
+2026-05-04 10:11:16,773 - __main__ - INFO - Voice enabled: False
+2026-05-04 10:11:16,773 - __main__ - INFO - Config: jarvis_data
+2026-05-04 10:11:16,773 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-04 10:11:16,774 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-04 10:11:16,775 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-04 10:11:16,776 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-04 10:11:16,790 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-04 10:11:16,790 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-04 10:11:16,791 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-04 10:11:16,791 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-04 10:11:16,792 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-04 10:11:16,793 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-04 10:11:16,794 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.input.clipboard
+2026-05-04 10:11:16,889 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-04 10:11:16,890 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-04 10:11:16,890 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-04 10:11:16,890 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-04 10:11:16,891 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-04 10:11:16,892 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-04 10:11:16,893 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-04 10:11:16,893 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-04 10:11:16,894 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-04 10:11:16,894 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-04 10:11:16,894 - tool_registry - INFO - Total tools loaded: 72
+2026-05-04 10:11:16,911 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-04 10:11:16,912 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-04 10:11:16,912 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-04 10:11:16,912 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-04 10:11:16,912 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-04 10:11:16,912 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-04 10:11:16,912 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-04 10:11:16,913 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-04 10:11:16,914 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-04 10:11:16,917 - jarvis.core.orchestrator - INFO - Handling in agent mode: open notepad...
+2026-05-04 10:11:16,931 - jarvis.core.orchestrator - INFO - Selected strategy: direct (complexity: trivial)
+2026-05-04 10:11:16,932 - jarvis.core.orchestrator - INFO - [Predictive] Using LLM's internal knowledge for direct execution...
+2026-05-04 10:11:16,932 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-04 10:11:20,690 - jarvis.core.predictive_planner - INFO - Plan generated with 1 steps (Confidence: high)
+2026-05-04 10:11:20,690 - jarvis.core.orchestrator - INFO - Generated predictive plan with 1 steps (confidence: high)
+2026-05-04 10:11:20,690 - task_executor - INFO - Created task plan: task_798c9131 - open notepad
+2026-05-04 10:11:20,690 - task_executor - INFO - Starting task execution: task_798c9131
+2026-05-04 10:11:20,690 - task_executor - INFO - Executing step 1/1: Execute open_app
+2026-05-04 10:11:20,690 - task_executor - INFO - Executing step open_app (attempt 1)
+2026-05-04 10:11:20,691 - task_executor - INFO - Verification: Tool reported success: Opening notepad
+2026-05-04 10:11:20,691 - task_executor - INFO - Task completed successfully: task_798c9131 (0.00s)
+2026-05-04 10:11:20,692 - jarvis.core.orchestrator - INFO - User requested shutdown
+2026-05-04 10:11:20,692 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-04 10:11:20,693 - jarvis.core.memory - INFO - Ended memory session: 20260504_101120
+2026-05-04 10:11:20,693 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-04T10:11:16.912636', 'total_interactions': 1, 'successful_tasks': 1, 'failed_tasks': 0, 'current_activity': 'idle'}

@@ -200,7 +200,7 @@ class TaskExecutor:
             if step.result is None:
                 return False, "No result available"
             if step.result.success:
-                return True, f"Tool reported success: {step.result.message}"
+                return True, f"Tool reported success: {step.result.output}"
             else:
                 return False, f"Tool reported failure: {step.result.error}"
         
@@ -256,8 +256,21 @@ class TaskExecutor:
             try:
                 logger.info(f"Executing step {step.tool_name} (attempt {attempt + 1})")
                 
-                # Execute the tool
-                result = execute_tool(step.tool_name, **step.parameters)
+                # Execute the tool - execute_tool returns string, need to wrap in ToolResult
+                from jarvis.tools.base import ToolResult
+                try:
+                    result_value = execute_tool(step.tool_name, **step.parameters)
+                    # If result is a string, wrap it in ToolResult
+                    if isinstance(result_value, str):
+                        result = ToolResult(success=True, output=result_value)
+                    elif isinstance(result_value, dict):
+                        result = ToolResult(**result_value)
+                    else:
+                        result = result_value
+                except Exception as exec_error:
+                    # If execution raises exception, create failed ToolResult
+                    result = ToolResult(success=False, error=str(exec_error))
+                
                 step.result = result
                 step.duration = time.time() - start_time
                 
