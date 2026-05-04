@@ -364,11 +364,11 @@ class ClearTextTool(BaseTool):
     """Clear all text in the active window (e.g., Notepad)."""
     
     name = "clear_text"
-    description = "Clear all text content in the currently active window. Works by selecting all text (Ctrl+A) and deleting it. Use for clearing text editors like Notepad, text fields, or documents."
+    description = "Clear all text content in the currently active window by selecting all (Ctrl+A) and deleting. Automatically brings the target application to foreground if needed. Use for clearing text editors like Notepad, WordPad, or any text field."
     parameters = {
         "target_app": {
             "type": "string",
-            "description": "Optional: Name of the application whose text should be cleared (e.g., 'notepad', 'wordpad'). If provided, ensures this app is active before clearing.",
+            "description": "Name of the application whose text should be cleared (e.g., 'notepad', 'wordpad'). Will bring this app to foreground before clearing. If not specified, clears text in whatever window is currently active.",
         },
     }
     required_parameters = []
@@ -379,25 +379,40 @@ class ClearTextTool(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         target_app = kwargs.get("target_app")
         
-        # Ensure the target application is active if specified
+        # Always try to ensure a window is active before clearing
         if target_app:
-            success, message = ensure_window_active(target_app, target_app)
+            success, message = ensure_window_active(target_app.lower(), target_app.lower())
             if not success:
-                log.warning(f"Target app {target_app} not active: {message}")
-                return ToolResult.fail(error=f"Cannot clear text: {target_app} is not active. {message}")
-            log.info(f"Verified {target_app} is active before clearing text")
+                log.warning(f"Target app {target_app} not found: {message}")
+                return ToolResult.fail(error=f"Cannot clear text: {target_app} is not open. {message}")
+            log.info(f"Brought {target_app} to foreground for clearing text")
+        else:
+            # No target specified - check what's currently active and warn if it might be wrong
+            active_process = get_active_process_name()
+            active_title = get_active_window_title()
+            log.info(f"Current active window: '{active_title}' (process: {active_process})")
+            
+            # Warn if trying to clear from terminal/command prompt
+            if active_process and any(term in active_process for term in ['python.exe', 'cmd.exe', 'powershell.exe', 'terminal']):
+                log.warning("Attempting to clear text while terminal is active - this may not be intended")
         
         try:
             import subprocess
             
+            # Small delay to ensure window is ready
+            time.sleep(0.2)
+            
             # Use PowerShell to send Ctrl+A then Delete in sequence
             script = """
             $shell = New-Object -ComObject WScript.Shell
+            # Brief pause to ensure focus
+            Start-Sleep -Milliseconds 100
             # Select all
             $shell.SendKeys("^a")
             Start-Sleep -Milliseconds 100
             # Delete selected text
             $shell.SendKeys("{DELETE}")
+            Start-Sleep -Milliseconds 50
             """
             
             result = subprocess.run(
@@ -418,7 +433,7 @@ class ClearTextTool(BaseTool):
             return ToolResult.fail(error=f"Clear text failed: {e}")
     
     def estimate_duration(self, **kwargs) -> float:
-        return 0.5
+        return 0.8
     
     def risk_level(self) -> str:
         return "medium"  # Can delete unintended content
