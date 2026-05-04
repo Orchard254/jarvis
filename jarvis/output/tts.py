@@ -40,14 +40,12 @@ def speak(text: str) -> None:
         root_speak(text)
         
     except ImportError as e:
-        logger.warning(f"Root TTS module not available: {e}")
-        # Fallback: just print
-        print(f"JARVIS: {text}")
+        logger.debug(f"Root TTS module not available: {e}")
+        # No fallback print - let the caller handle output
         
     except Exception as e:
         logger.error(f"TTS error: {e}")
-        # Fallback: just print
-        print(f"JARVIS: {text}")
+        # No fallback print to avoid duplicate output
 
 
 class TTSManager:

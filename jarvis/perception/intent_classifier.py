@@ -55,6 +55,7 @@ class IntentClassifier:
             'check', 'verify', 'confirm', 'validate', 'test', 'ensure',
             'current', 'time', 'date', 'what time', 'battery', 'volume', 'brightness',
             'network', 'internet', 'wifi', 'bluetooth',
+            'list', 'show', 'running', 'apps', 'processes',
             
             # Web control
             'open url', 'open website', 'close tab', 'close browser', 'new tab', 'refresh',
@@ -146,6 +147,11 @@ class IntentClassifier:
         """Quick heuristic-based classification."""
         input_lower = user_input.lower()
         
+        # Remove articles for better phrase matching (e.g., "take a screenshot" -> "take screenshot")
+        import re
+        input_normalized = re.sub(r'\b(a|an|the)\b', ' ', input_lower).strip()
+        input_normalized = re.sub(r'\s+', ' ', input_normalized)  # Normalize spaces
+        
         agent_score = 0
         chat_score = 0
         
@@ -155,7 +161,8 @@ class IntentClassifier:
         single_word_agents = [kw for kw in self.agent_keywords if ' ' not in kw]
         
         for keyword in multi_word_agents:
-            if keyword in input_lower:
+            # Check both original and normalized input for phrase matching
+            if keyword in input_lower or keyword in input_normalized:
                 agent_score += 2  # Higher weight for multi-word phrases
         
         for keyword in single_word_agents:

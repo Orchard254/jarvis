@@ -50,7 +50,8 @@ class TTSManager:
     def __init__(self, config: Dict[str, Any]):
         """Initialize TTS manager."""
         self.config = config
-        self.enabled = config.get('tts_enabled', True)
+        # Default to False to avoid warnings when voice is not explicitly enabled
+        self.enabled = config.get('tts_enabled', False) or config.get('voice_enabled', False)
         
     def speak(self, text: str) -> None:
         """
@@ -71,8 +72,7 @@ class TTSManager:
             from jarvis.output.tts import speak as tts_speak
             tts_speak(text)
         except (ImportError, Exception) as e:
-            logger.warning(f"TTS not available: {e}")
-            print(f"JARVIS: {text}")
+            logger.debug(f"TTS not available: {e}")
 
 
 def get_system_prompt(mode: str = 'agent', **kwargs) -> str:
@@ -944,7 +944,8 @@ class Orchestrator:
         if not text or not text.strip():
             return
             
-        if self.config.get('tts_enabled', True):
+        # Check both tts_enabled and voice_enabled config keys
+        if self.config.get('tts_enabled', False) or self.config.get('voice_enabled', False):
             self.tts.speak(text)
     
     def _interaction_loop(self) -> None:

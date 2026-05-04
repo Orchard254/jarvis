@@ -198,17 +198,9 @@ class OllamaClient:
                 # Handle both single JSON response and streaming responses
                 response_text = resp.text.strip()
                 
-                # Log raw response for debugging empty responses
-                if not response_text:
-                    log.warning(f"[OLLAMA] Empty response from {name} endpoint")
-                else:
-                    # Encode to ASCII with replace to avoid Windows console encoding errors
-                    safe_response = response_text[:1000].encode('ascii', errors='replace').decode('ascii')
-                    log.info(f"[OLLAMA] Raw response from {name}: {safe_response}")
-                
                 # Check for empty response
                 if not response_text:
-                    log.error(f"[OLLAMA] Empty response from {name} endpoint - API key may be invalid or model unavailable")
+                    log.warning(f"[OLLAMA] Empty response from {name} endpoint")
                     continue
                 
                 # Try to parse as single JSON first (standard response)
@@ -221,12 +213,15 @@ class OllamaClient:
                     data = None
                     last_valid_data = None
                     accumulated_content = ""
+                    chunk_count = 0
                     
                     for line in lines:
                         line = line.strip()
                         if line:
                             try:
                                 candidate = json.loads(line)
+                                chunk_count += 1
+                                
                                 # Keep track of last valid JSON as fallback
                                 last_valid_data = candidate
                                 
@@ -255,13 +250,26 @@ class OllamaClient:
                         else:
                             log.error(f"[OLLAMA] Could not parse any JSON from {name} endpoint. Response: {response_text[:500]}")
                             continue
+                    
+                    # Log only first few chunks to reduce verbosity
+                    if chunk_count <= 3:
+                        log.debug(f"[OLLAMA] Parsed {chunk_count} chunks from {name}")
                 
                 msg = data.get("message", {})
                 
+                # Filter out pure thinking chunks (empty content, not done)
+                content = (msg.get("content") or "").strip()
+                is_done = data.get("done", True)
+                
+                # Skip logging if this is a pure thinking chunk with no content
+                if not content and not is_done:
+                    log.debug(f"[OLLAMA] Skipping thinking chunk from {name}")
+                    continue
+                
                 return {
-                    "content": (msg.get("content") or "").strip(),
+                    "content": content,
                     "tool_calls": msg.get("tool_calls") or [],
-                    "done": data.get("done", True),
+                    "done": is_done,
                     "error": None,
                     "endpoint": name,
                 }
