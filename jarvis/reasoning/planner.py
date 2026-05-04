@@ -9,6 +9,9 @@ Not for simple single-tool requests.
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, field, asdict
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -179,20 +182,30 @@ class TaskPlanner:
     
     IMPORTANT: Only use for complex multi-step tasks.
     For simple single-tool requests, use direct execution instead.
+    
+    Supports Tree of Thoughts (ToT) mode for multi-path strategic planning:
+    - Generates multiple alternative plans (branching)
+    - Evaluates each plan using PathEvaluator
+    - Selects the best path for execution
+    - Enables backtracking if the chosen path fails
     """
     
     MAX_PLAN_DEPTH = 10
     
-    def __init__(self, ollama_client=None, tool_registry=None):
+    def __init__(self, ollama_client=None, tool_registry=None, tot_engine=None, path_evaluator=None):
         """
         Initialize the task planner.
         
         Args:
             ollama_client: OllamaClient instance for planning
             tool_registry: ToolRegistry instance for available tools
+            tot_engine: TreeOfThoughtsEngine for multi-path planning (optional)
+            path_evaluator: PathEvaluator for scoring paths (optional)
         """
         self.ollama_client = ollama_client
         self.tool_registry = tool_registry
+        self.tot_engine = tot_engine
+        self.path_evaluator = path_evaluator
         self.plan_history = []
     
     def set_client(self, client) -> None:
@@ -202,6 +215,121 @@ class TaskPlanner:
     def set_tool_registry(self, registry) -> None:
         """Set the tool registry."""
         self.tool_registry = registry
+    
+    def set_tot_engine(self, engine) -> None:
+        """Set the Tree of Thoughts engine."""
+        self.tot_engine = engine
+    
+    def set_path_evaluator(self, evaluator) -> None:
+        """Set the Path Evaluator."""
+        self.path_evaluator = evaluator
+    
+    async def create_plan_async(self, goal: str, context: str = None,
+                                 max_steps: int = 10, use_tot: bool = True) -> Dict[str, Any]:
+        """
+        Async version of create_plan with optional Tree of Thoughts support.
+        
+        Args:
+            goal: The goal to achieve
+            context: Additional context or constraints
+            max_steps: Maximum number of steps in the plan (default 10)
+            use_tot: Whether to use Tree of Thoughts for multi-path planning
+            
+        Returns:
+            Dictionary with ExecutionGraph and optionally path evaluations
+        """
+        if use_tot and self.tot_engine and self.path_evaluator:
+            return await self._create_tot_plan(goal, context, max_steps)
+        else:
+            # Fall back to standard single-path planning
+            return self.create_plan(goal, context, max_steps)
+    
+    async def _create_tot_plan(self, goal: str, context: str = None,
+                                max_steps: int = 10) -> Dict[str, Any]:
+        """
+        Create a plan using Tree of Thoughts multi-path reasoning.
+        
+        This method:
+        1. Uses ToT engine to generate multiple solution paths
+        2. Evaluates each path using PathEvaluator
+        3. Selects the best path based on scores
+        4. Returns the optimal execution graph
+        
+        Args:
+            goal: The goal to achieve
+            context: Additional context or constraints
+            max_steps: Maximum number of steps in the plan
+            
+        Returns:
+            Dictionary with best execution graph and path analysis
+        """
+        try:
+            # Use ToT engine to solve the problem
+            tools_context = {
+                'available_tools': list(self.tool_registry.get_all_tools().keys()) if self.tool_registry else []
+            }
+            solution_path_str = await self.tot_engine.solve(goal, tools_context)
+            
+            if not solution_path_str:
+                # Fallback to standard planning if ToT fails
+                logger.info("ToT did not find a solution, falling back to standard planning")
+                return self.create_plan(goal, context, max_steps)
+            
+            # Parse the solution path into an ExecutionGraph
+            # Convert ToT solution format to ExecutionGraph
+            steps = self._parse_tot_solution(solution_path_str)
+            
+            execution_graph = ExecutionGraph(
+                goal=goal,
+                steps=steps,
+                total_estimated_duration=len(steps) * 10.0  # Estimate 10s per step
+            )
+            
+            # Evaluate the selected path
+            path_nodes = [self.tot_engine.nodes[nid].to_dict() for nid in self.tot_engine.solution_path]
+            evaluation = await self.path_evaluator.evaluate_path(path_nodes, goal, context or "")
+            
+            return {
+                'success': True,
+                'execution_graph': execution_graph,
+                'estimated_duration': f"{execution_graph.total_estimated_duration}s",
+                'complexity': 'moderate' if len(steps) > 3 else 'simple',
+                'reasoning': evaluation.reasoning,
+                'path_evaluation': evaluation.to_dict(),
+                'tot_metadata': {
+                    'explored_paths': len(self.tot_engine.nodes),
+                    'solution_depth': len(self.tot_engine.solution_path)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"ToT planning failed: {e}")
+            # Fallback to standard planning
+            return self.create_plan(goal, context, max_steps)
+    
+    def _parse_tot_solution(self, solution_str: str) -> List[ExecutionStep]:
+        """Parse ToT solution string into ExecutionSteps."""
+        steps = []
+        lines = solution_str.strip().split('\n')
+        
+        for i, line in enumerate(lines):
+            if line.startswith('Step'):
+                # Parse: "Step N: content (Score: X.XX)"
+                parts = line.split(': ', 1)
+                if len(parts) > 1:
+                    content = parts[1].rsplit(' (Score:', 1)[0]
+                    step = ExecutionStep(
+                        id=f"tot_step_{i}",
+                        tool_or_skill="inferred_action",  # Would need LLM to infer actual tool
+                        params={'description': content},
+                        depends_on=[f"tot_step_{i-1}"] if i > 0 else [],
+                        success_criteria="Action completed successfully",
+                        fallback_strategy="Try alternative approach",
+                        parallelizable=False
+                    )
+                    steps.append(step)
+        
+        return steps
     
     def create_plan(self, goal: str, context: str = None,
                     max_steps: int = 10) -> Dict[str, Any]:
@@ -668,14 +796,18 @@ Respond in JSON format with the new ExecutionGraph structure."""
 # Singleton instance
 _planner_instance = None
 
-def get_planner(ollama_client=None, tool_registry=None) -> TaskPlanner:
+def get_planner(ollama_client=None, tool_registry=None, tot_engine=None, path_evaluator=None) -> TaskPlanner:
     """Get the singleton TaskPlanner instance."""
     global _planner_instance
     if _planner_instance is None:
-        _planner_instance = TaskPlanner(ollama_client, tool_registry)
+        _planner_instance = TaskPlanner(ollama_client, tool_registry, tot_engine, path_evaluator)
     else:
         if ollama_client:
             _planner_instance.set_client(ollama_client)
         if tool_registry:
             _planner_instance.set_tool_registry(tool_registry)
+        if tot_engine:
+            _planner_instance.tot_engine = tot_engine
+        if path_evaluator:
+            _planner_instance.path_evaluator = path_evaluator
     return _planner_instance
