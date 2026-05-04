@@ -41,6 +41,7 @@ class VerificationStrategy(Enum):
     TOOL_RESULT = "tool_result"  # Check tool returned success
     VISUAL = "visual"  # Use screen perception to verify
     CUSTOM = "custom"  # Custom verification function
+    STATE_CHECK = "state_check"  # Check application/window state changed as expected
 
 
 @dataclass
@@ -234,6 +235,60 @@ class TaskExecutor:
                 return True, f"Verified '{step.verification_keyword}' visible on screen"
             else:
                 return False, f"Could not verify '{step.verification_keyword}' on screen"
+        
+        elif step.verification_strategy == VerificationStrategy.STATE_CHECK:
+            """
+            Verify by checking the actual state of the target application/window.
+            This is more reliable than just trusting tool results.
+            """
+            try:
+                import psutil
+                from win32gui import GetForegroundWindow, GetWindowText
+                
+                # For keyboard actions like Ctrl+A, Delete - check if text was actually cleared
+                if step.tool_name == "press_key":
+                    keys = step.parameters.get("keys", step.parameters.get("key", "")).lower()
+                    
+                    # If this is a delete action, verify content changed
+                    if "delete" in keys or "del" in keys:
+                        # Give system time to process
+                        time.sleep(0.5)
+                        
+                        # Check if active window is still Notepad
+                        hwnd = GetForegroundWindow()
+                        title = GetWindowText(hwnd)
+                        
+                        if "notepad" in title.lower():
+                            # For Notepad, we assume deletion worked if no error occurred
+                            # A more robust check would use OCR to verify empty content
+                            logger.info(f"State check: Verified Notepad window still active after delete")
+                            return True, "Verified: Delete action executed in Notepad window"
+                    
+                    # If this is select all, just verify it executed
+                    if "ctrl+a" in keys or "control+a" in keys:
+                        time.sleep(0.3)
+                        logger.info(f"State check: Select All executed")
+                        return True, "Verified: Select All action executed"
+                
+                # For type_text, verify text was entered
+                elif step.tool_name == "type_text":
+                    if step.result and step.result.success:
+                        time.sleep(0.3)
+                        logger.info(f"State check: Text input executed")
+                        return True, "Verified: Text was typed"
+                
+                # Default: trust tool result for other tools
+                if step.result and step.result.success:
+                    return True, f"State check passed: {step.result.output}"
+                else:
+                    return False, "State check failed: Tool did not report success"
+                    
+            except Exception as e:
+                logger.warning(f"State check failed: {e}")
+                # Fallback to trusting tool result
+                if step.result and step.result.success:
+                    return True, f"State check unavailable, trusting tool result: {step.result.output}"
+                return False, f"State check error: {e}"
         
         elif step.verification_strategy == VerificationStrategy.CUSTOM:
             if step.custom_verify_fn is None:

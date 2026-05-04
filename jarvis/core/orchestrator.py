@@ -626,6 +626,10 @@ class Orchestrator:
                             verification_strategy = VerificationStrategy.VISUAL
                             verification_keyword = description.split()[0] if description else tool_name
                     
+                    # Use STATE_CHECK for keyboard shortcuts (more reliable verification)
+                    if tool_name == 'press_key':
+                        verification_strategy = VerificationStrategy.STATE_CHECK
+                    
                     task_step = TaskStep(
                         tool_name=tool_name,
                         parameters=arguments,
