@@ -35,6 +35,9 @@ class IntentClassifier:
             'create', 'delete', 'move', 'copy', 'rename', 'save', 'load',
             'download', 'upload', 'extract', 'compress',
             
+            # Text input
+            'write', 'input', 'enter text', 'paste text',
+            
             # Search & Navigation
             'search', 'find', 'locate', 'navigate', 'browse', 'visit', 'go to',
             'search in', 'search for', 'look for',
@@ -170,7 +173,11 @@ class IntentClassifier:
             import re
             pattern = r'\b' + re.escape(keyword) + r'\b'
             if re.search(pattern, input_lower):
-                agent_score += 1
+                # Give extra weight to action verbs at the start of the command
+                if input_lower.startswith(keyword + ' '):
+                    agent_score += 2  # Double weight for imperative commands
+                else:
+                    agent_score += 1
         
         # Check for chat keywords (same approach)
         multi_word_chats = [kw for kw in self.chat_keywords if ' ' in kw]
