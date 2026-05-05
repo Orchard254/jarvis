@@ -1,15 +1,16 @@
 ```
-# Python compiled files
-*.pyc
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Temp files
-*.tmp
+# Logs
+*.log
+logs/
 
-# Audio files (like temp_tts.mp3)
-*.mp3
-*.wav
-*.flac
-*.aac
-*.ogg
+# Dependencies
+.venv/
+venv/
+env/
 ```

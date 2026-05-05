@@ -86,3 +86,51 @@
 2026-05-05 11:35:43,755 - jarvis.output.tts - INFO - TTS Manager initialized (enabled=True, engine=edge-tts)
 2026-05-05 11:35:43,756 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
 2026-05-05 11:35:53,746 - jarvis.output.tts - ERROR - Edge TTS error: ALSA: Couldn't open audio device: No such file or directory
+2026-05-05 11:44:24,275 - __main__ - INFO - ============================================================
+2026-05-05 11:44:24,275 - __main__ - INFO - JARVIS - Autonomous Windows Desktop AI Agent
+2026-05-05 11:44:24,275 - __main__ - INFO - ============================================================
+2026-05-05 11:44:24,275 - __main__ - INFO - Starting in agent mode
+2026-05-05 11:44:24,275 - __main__ - INFO - Voice enabled: False
+2026-05-05 11:44:24,275 - __main__ - INFO - Config: jarvis_data
+2026-05-05 11:44:24,275 - jarvis.core.orchestrator - INFO - Initializing JARVIS orchestrator...
+2026-05-05 11:44:24,276 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.system.info
+2026-05-05 11:44:24,277 - tool_registry - INFO - Loaded 2 tools from jarvis.tools.system.display
+2026-05-05 11:44:24,277 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.system.power
+2026-05-05 11:44:24,278 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.launcher
+2026-05-05 11:44:24,291 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.apps.window
+2026-05-05 11:44:24,292 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.audio.volume
+2026-05-05 11:44:24,293 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.files.operations
+2026-05-05 11:44:24,293 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.network.connectivity
+2026-05-05 11:44:24,294 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.screen.capture
+2026-05-05 11:44:24,295 - tool_registry - INFO - Loaded 5 tools from jarvis.tools.input.clipboard
+2026-05-05 11:44:24,296 - root - WARNING - Playwright not installed. Advanced web automation disabled.
+2026-05-05 11:44:24,297 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.web.browser
+2026-05-05 11:44:24,297 - tool_registry - INFO - Loaded 7 tools from jarvis.tools.web.automation
+2026-05-05 11:44:24,298 - tool_registry - ERROR - Failed to load module jarvis.tools.web.visual_automation: No module named 'cv2'
+2026-05-05 11:44:24,298 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.time.clock
+2026-05-05 11:44:24,311 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.settings.windows
+2026-05-05 11:44:24,312 - tool_registry - INFO - Loaded 6 tools from jarvis.tools.tasks.background
+2026-05-05 11:44:24,313 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.scripts.runner
+2026-05-05 11:44:24,313 - tool_registry - INFO - Loaded 1 tools from jarvis.tools.data.calculate
+2026-05-05 11:44:24,315 - tool_registry - INFO - Loaded 3 tools from jarvis.tools.data.notes
+2026-05-05 11:44:24,315 - tool_registry - INFO - Loaded 4 tools from jarvis.tools.data.todo
+2026-05-05 11:44:24,315 - tool_registry - INFO - Total tools loaded: 73
+2026-05-05 11:44:24,333 - jarvis.core.memory - INFO - Core memory system initialized
+2026-05-05 11:44:24,333 - jarvis.memory.persistent - WARNING - ChromaDB not available - using file-based memory only
+2026-05-05 11:44:24,333 - jarvis.security.vault - WARNING - keyring library not available - using encrypted local vault
+2026-05-05 11:44:24,333 - jarvis.security.vault - WARNING - cryptography library not available - local vault will be unencrypted. Install cryptography package.
+2026-05-05 11:44:24,333 - jarvis.core.context - INFO - Context assembler initialized
+2026-05-05 11:44:24,333 - jarvis.core.brain - INFO - Brain initialized with model: nemotron-3-nano:30b-cloud
+2026-05-05 11:44:24,334 - jarvis.core.intent_scorer - INFO - Loaded intent memory: 1 learned phrases
+2026-05-05 11:44:24,334 - jarvis.core.orchestrator - INFO - JARVIS orchestrator initialized successfully
+2026-05-05 11:44:24,334 - jarvis.core.orchestrator - INFO - Starting JARVIS orchestrator...
+2026-05-05 11:44:24,335 - jarvis.core.orchestrator - INFO - Started 4 ambient monitor threads
+2026-05-05 11:44:24,792 - jarvis.output.tts - INFO - Edge TTS engine initialized successfully
+2026-05-05 11:44:24,793 - jarvis.output.tts - INFO - Using edge-tts as active TTS engine
+2026-05-05 11:44:24,793 - jarvis.output.tts - INFO - TTS Manager initialized (enabled=True, engine=edge-tts)
+2026-05-05 11:44:24,793 - jarvis.core.orchestrator - INFO - Interaction loop started - type commands or 'quit' to exit
+2026-05-05 11:44:25,387 - jarvis.output.tts - ERROR - Edge TTS error: ALSA: Couldn't open audio device: No such file or directory
+2026-05-05 11:45:52,358 - jarvis.core.orchestrator - INFO - Received interrupt signal
+2026-05-05 11:45:52,358 - jarvis.core.orchestrator - INFO - Stopping JARVIS orchestrator...
+2026-05-05 11:45:52,358 - jarvis.core.memory - INFO - Ended memory session: 20260505_114552
+2026-05-05 11:45:52,358 - jarvis.core.orchestrator - INFO - Final stats: {'initialized_at': '2026-05-05T11:44:24.334602', 'total_interactions': 0, 'successful_tasks': 0, 'failed_tasks': 0, 'current_activity': 'idle'}
