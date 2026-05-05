@@ -1652,6 +1652,33 @@ RULES:
             plan = self._generate_predictive_plan(command, tools_dict)
             
             if plan and plan.get('steps'):
+                # Bug #5 fix: Check for clarification request BEFORE checking for steps
+                needs_clarification = plan.get('needs_clarification', False)
+                clarification_question = plan.get('clarification_question', None)
+                
+                # If LLM requested clarification but provided no executable steps
+                if needs_clarification and clarification_question:
+                    logger.info(f"LLM requested clarification: {clarification_question}")
+                    
+                    # Surface the clarification question to the user
+                    print(f"\n{'='*60}")
+                    print(f"❓ Clarification Needed")
+                    print(f"{'='*60}")
+                    print(f"Goal: {plan.get('goal', command)}")
+                    print(f"\n{clarification_question}")
+                    print(f"{'='*60}")
+                    
+                    response_text = f"I need clarification: {clarification_question}"
+                    
+                    return {
+                        'success': True,
+                        'response': response_text,
+                        'mode': 'clarification_needed',
+                        'needs_clarification': True,
+                        'clarification_question': clarification_question,
+                        'plan': plan
+                    }
+                
                 logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
                 
                 # Convert predictive plan steps to TaskStep objects for TaskExecutor
@@ -1793,10 +1820,21 @@ RULES:
         # Traditional ReAct agent fallback
         if strategy == 'direct':
             logger.info(f"[ReAct] Using autonomous agent mode for: {command[:50]}...")
+            
+            # Bug #2 fix: Save history snapshot before ReAct to isolate its JSON exchanges
+            self.brain.save_history_snapshot()
+            
             react_result = self.react_agent.execute(command, context=memories)
+            
+            # Bug #2 fix: Restore history after ReAct completes to prevent JSON pollution
+            self.brain.restore_history_snapshot()
+            
+            # Bug #3 fix: Sanitize ReAct result - detect and summarize JSON responses
+            sanitized_response = self._sanitize_react_result(react_result)
+            
             result = {
                 'success': True,
-                'response': react_result,
+                'response': sanitized_response,
                 'mode': 'react'
             }
         # Planning required for complex tasks
@@ -1926,12 +1964,72 @@ RULES:
             recent_results=self._recent_results,
             failed_actions=self._failed_actions
         )
+        # Note: Dead code removed - the fallback below was unreachable after the return statement
+    
+    def _sanitize_react_result(self, react_result: str) -> str:
+        """
+        Bug #3 fix: Sanitize ReAct agent result to prevent raw JSON from being shown to user.
         
-        # Fallback: just execute without confirmation for simple cases
-        logger.info("Fallback - executing without confirmation")
-        result = self._handle_agent_mode(command)
-        result['confirmed'] = True
-        return result
+        If the result looks like a JSON object/dict (common when LLM returns structured plans),
+        extract meaningful information and present it as natural language.
+        
+        Args:
+            react_result: Raw string result from ReAct agent
+            
+        Returns:
+            Sanitized, user-friendly response string
+        """
+        import json
+        
+        if not react_result or not isinstance(react_result, str):
+            return str(react_result) if react_result else "Task completed."
+        
+        stripped = react_result.strip()
+        
+        # Check if result looks like a JSON object
+        if stripped.startswith('{') and stripped.endswith('}'):
+            try:
+                # Try to parse as JSON
+                data = json.loads(stripped)
+                
+                # If it's a plan with steps, summarize it
+                if isinstance(data, dict):
+                    if 'steps' in data and isinstance(data['steps'], list):
+                        step_count = len(data['steps'])
+                        summary = f"Completed {step_count} step(s)."
+                        
+                        # Extract any final response or status
+                        if 'status' in data:
+                            summary += f" Status: {data['status']}."
+                        if 'response' in data:
+                            summary += f" {data['response']}"
+                        
+                        return summary
+                    
+                    # If it has a 'response' or 'result' field, use that
+                    for key in ['response', 'result', 'output', 'message']:
+                        if key in data and data[key]:
+                            return str(data[key])
+                    
+                    # Otherwise, provide a generic summary
+                    keys_present = list(data.keys())[:3]
+                    return f"Action completed. Details: {', '.join(keys_present)}."
+                
+            except json.JSONDecodeError:
+                # Not valid JSON, return as-is
+                pass
+        
+        # Check if it's a JSON array
+        elif stripped.startswith('[') and stripped.endswith(']'):
+            try:
+                data = json.loads(stripped)
+                if isinstance(data, list) and len(data) > 0:
+                    return f"Completed {len(data)} action(s). Last result: {data[-1]}"
+            except json.JSONDecodeError:
+                pass
+        
+        # For normal text responses, return as-is
+        return react_result
     
     def _get_active_app_name(self) -> Optional[str]:
         """Get the name of the currently active application."""
@@ -1954,6 +2052,9 @@ RULES:
         """
         Detect if a command requires multiple sequential steps.
         
+        Bug #4 fix: Improved detection to avoid over-triggering on simple queries
+        containing 'and' (e.g., "search for cats and dogs" is NOT multi-step).
+        
         Args:
             command: User command string
             
@@ -1964,35 +2065,54 @@ RULES:
         
         command_lower = command.lower().strip()
         
-        # Check for conjunctions indicating multiple actions
-        conjunctions = [' and ', ' then ', ' after ', ' before ', ' followed by ']
-        for conj in conjunctions:
-            if conj in command_lower:
-                return True
-        
-        # Check for commas separating actions
-        if ',' in command and len(command.split(',')) > 1:
-            return True
-        
-        # Check for multiple imperative verbs (action words)
+        # Check for conjunctions indicating multiple DISTINCT actions
+        # Bug #4 fix: Be more specific - require action verbs on both sides of 'and'
         action_verbs = ['open', 'close', 'type', 'write', 'click', 'press', 'navigate', 
                        'search', 'find', 'create', 'delete', 'move', 'copy', 'paste',
                        'launch', 'start', 'stop', 'minimize', 'maximize', 'switch']
         
-        verb_count = 0
-        for verb in action_verbs:
-            if re.search(r'\b' + verb + r'\b', command_lower):
-                verb_count += 1
-                if verb_count >= 2:
+        # Pattern: verb ... and/or then/after/before ... verb
+        # This ensures we only flag commands with multiple distinct actions
+        multi_action_patterns = [
+            r'\b(open|close|type|write|click|press|navigate|search|find|create|delete|move|copy|paste|launch|start|stop|minimize|maximize|switch)\b.*\b(and|then|after|before|followed by)\b.*\b(open|close|type|write|click|press|navigate|search|find|create|delete|move|copy|paste|launch|start|stop|minimize|maximize|switch)\b'
+        ]
+        
+        for pattern in multi_action_patterns:
+            if re.search(pattern, command_lower):
+                return True
+        
+        # Check for explicit sequencing words that indicate multiple steps
+        sequencing_words = [' then ', ' after ', ' before ', ' followed by ']
+        for seq in sequencing_words:
+            if seq in command_lower:
+                # Additional check: ensure there are two distinct action phrases
+                parts = command_lower.split(seq)
+                if len(parts) >= 2:
+                    # Check if both parts contain action verbs
+                    has_verb_before = any(verb in parts[0] for verb in action_verbs)
+                    has_verb_after = any(verb in parts[1] for verb in action_verbs)
+                    if has_verb_before and has_verb_after:
+                        return True
+        
+        # Check for commas separating distinct actions (not just list items)
+        if ',' in command:
+            parts = command.split(',')
+            if len(parts) > 1:
+                # Count how many parts have action verbs
+                parts_with_verbs = sum(1 for part in parts if any(verb in part for verb in action_verbs))
+                if parts_with_verbs >= 2:
                     return True
         
-        # Check for compound commands with "and" between actions
-        # e.g., "open notepad and write hello"
-        if re.search(r'\b(and|then)\b', command_lower):
-            # Count action verbs after conjunction
-            parts = re.split(r'\b(and|then)\b', command_lower)
+        # Original 'and' check - but now only for clear compound commands
+        # Bug #4 fix: Only trigger if 'and' connects two action phrases
+        if ' and ' in command_lower:
+            parts = command_lower.split(' and ')
             if len(parts) >= 2:
-                return True
+                # Check if both parts contain action verbs
+                has_verb_before = any(verb in parts[0] for verb in action_verbs)
+                has_verb_after = any(verb in parts[1] for verb in action_verbs)
+                if has_verb_before and has_verb_after:
+                    return True
         
         return False
 

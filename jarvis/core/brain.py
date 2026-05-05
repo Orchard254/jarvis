@@ -55,6 +55,9 @@ class Brain:
         # Track conversation for context
         self.conversation_history: List[Dict] = []
         
+        # History snapshot for isolation (Bug #2 fix)
+        self._history_snapshot: Optional[List[Dict]] = None
+        
         # Callbacks
         self.on_tool_call: Optional[Callable] = None
         self.on_thinking: Optional[Callable] = None
@@ -380,13 +383,48 @@ class Brain:
             prepared.append({'role': 'system', 'content': system_prompt})
         
         # Add conversation history (limited to avoid token overflow)
+        # Bug #2 fix: Use snapshot if isolation is active, otherwise use normal history
         history_limit = self.config.get('conversation_history_limit', 20)
-        prepared.extend(self.conversation_history[-history_limit:])
+        if self._history_snapshot is not None:
+            # Use isolated snapshot (prevents ReAct JSON from leaking into normal chat)
+            prepared.extend(self._history_snapshot[-history_limit:])
+        else:
+            prepared.extend(self.conversation_history[-history_limit:])
         
         # Add new messages
         prepared.extend(messages)
         
         return prepared
+    
+    def save_history_snapshot(self) -> None:
+        """
+        Save current conversation history as a snapshot.
+        Used for isolating ReAct agent history from normal conversation.
+        Bug #2 fix.
+        """
+        self._history_snapshot = self.conversation_history.copy()
+        logger.debug("Saved conversation history snapshot for isolation")
+    
+    def restore_history_snapshot(self) -> None:
+        """
+        Restore conversation history from snapshot.
+        Used after ReAct agent completes to prevent JSON pollution.
+        Bug #2 fix.
+        """
+        if self._history_snapshot is not None:
+            self.conversation_history = self._history_snapshot.copy()
+            self._history_snapshot = None
+            logger.debug("Restored conversation history from snapshot")
+        else:
+            logger.debug("No snapshot to restore")
+    
+    def clear_history_snapshot(self) -> None:
+        """
+        Clear the history snapshot without restoring.
+        Bug #2 fix.
+        """
+        self._history_snapshot = None
+        logger.debug("Cleared conversation history snapshot")
     
     def _update_history(self, messages: List[Dict], response: Dict) -> None:
         """
