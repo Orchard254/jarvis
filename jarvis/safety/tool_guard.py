@@ -11,9 +11,13 @@ Improvements over original control_plane.py:
 
 import re
 import os
+import logging
 import threading
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+
+
+logger = logging.getLogger(__name__)
 
 
 class ToolGuard:
@@ -309,7 +313,8 @@ class ToolGuard:
     
     def _validate_open_app(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate app opening."""
-        app = params.get('app', '')
+        # Accept both 'app' and 'app_name' parameter names
+        app = params.get('app', '') or params.get('app_name', '')
         if not app:
             return False, "No app specified"
         
@@ -322,7 +327,8 @@ class ToolGuard:
     
     def _validate_close_app(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate app closing."""
-        app = params.get('app', '')
+        # Accept both 'app' and 'app_name' parameter names
+        app = params.get('app', '') or params.get('app_name', '')
         if not app:
             return False, "No app specified"
         

@@ -893,6 +893,36 @@ RULES:
             logger.error(f"Tool execution error: {e}", exc_info=True)
             return f"Error executing {tool_name}: {str(e)}"
     
+    def _normalize_tool_arguments(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize tool arguments to match expected parameter names.
+        
+        This fixes the mismatch between LLM-generated argument names and tool definitions.
+        For example, LLM may output 'app_name' but open_app expects 'app'.
+        
+        Args:
+            tool_name: Name of the tool being called
+            args: Original arguments from LLM
+            
+        Returns:
+            Normalized arguments dict
+        """
+        normalized = args.copy()
+        
+        # Mapping of tool-specific argument normalizations
+        # Format: tool_name -> {external_name: internal_name}
+        arg_mappings = {
+            'open_app': {'app_name': 'app'},
+            'close_app': {'app_name': 'app'},
+        }
+        
+        if tool_name in arg_mappings:
+            for external_name, internal_name in arg_mappings[tool_name].items():
+                if external_name in normalized and internal_name not in normalized:
+                    normalized[internal_name] = normalized.pop(external_name)
+        
+        return normalized
+    
     def _execute_action(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a parsed tool call and return structured result.
@@ -944,15 +974,21 @@ RULES:
         # Log parsed plan
         logger.info(f"[EXEC] Parsed plan: tool={tool_name}, args={args}, thought={thought}")
         
-        # Safety validation
-        is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, args)
+        # STEP 1: Normalize arguments before validation
+        # This fixes the mismatch between LLM output (app_name) and tool expectations (app)
+        normalized_args = self._normalize_tool_arguments(tool_name, args)
+        if normalized_args != args:
+            logger.info(f"[EXEC] Normalized args: {normalized_args}")
+        
+        # STEP 2: Safety validation with normalized args
+        is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, normalized_args)
         if not is_valid:
             logger.warning(f"[EXEC] Tool call blocked by safety: {error_msg}")
             self.audit_log.log_security_event(
                 event_type='tool_blocked',
                 details={
                     'tool_name': tool_name,
-                    'args': args,
+                    'args': normalized_args,
                     'reason': error_msg
                 }
             )
@@ -960,8 +996,9 @@ RULES:
                 'success': False,
                 'output': f"Safety blocked: {error_msg}",
                 'tool_name': tool_name,
-                'args': args,
-                'duration_ms': int((time_module.time() - start_time) * 1000)
+                'args': normalized_args,
+                'duration_ms': int((time_module.time() - start_time) * 1000),
+                'retry_allowed': False  # Do not retry on safety failures
             }
         
         # Get tool from registry
@@ -976,14 +1013,14 @@ RULES:
                 'duration_ms': int((time_module.time() - start_time) * 1000)
             }
         
-        # Execute tool
+        # Execute tool with normalized args
         try:
-            logger.info(f"[EXEC] Executing: {tool_name}({args})")
+            logger.info(f"[EXEC] Executing: {tool_name}({normalized_args})")
             
             if hasattr(tool, 'execute'):
-                result = tool.execute(**args)
+                result = tool.execute(**normalized_args)
             elif callable(tool):
-                result = tool(**args)
+                result = tool(**normalized_args)
             else:
                 raise TypeError(f"Tool {tool_name} is not callable")
             
@@ -1005,12 +1042,12 @@ RULES:
             # Log execution result
             logger.info(f"[EXEC] Result: success={success}, output={output[:100]}..., duration={duration_ms}ms")
             
-            # Audit log
+            # Audit log with normalized args
             self.audit_log.log_action(
                 action_type='tool_execution',
                 details={
                     'tool_name': tool_name,
-                    'args': args,
+                    'args': normalized_args,
                     'thought': thought,
                     'success': success,
                     'output_preview': output[:200],
@@ -1022,7 +1059,7 @@ RULES:
                 'success': success,
                 'output': output,
                 'tool_name': tool_name,
-                'args': args,
+                'args': normalized_args,
                 'thought': thought,
                 'duration_ms': duration_ms
             }
@@ -1035,7 +1072,7 @@ RULES:
                 action_type='tool_error',
                 details={
                     'tool_name': tool_name,
-                    'args': args,
+                    'args': normalized_args,
                     'error': str(e),
                     'duration_ms': duration_ms
                 }
