@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 
 # Intent threshold constant - minimum score to execute actions
-INTENT_THRESHOLD = 70  # Below this, only chat responses allowed (raised from 45 to prevent accidental tool execution)
+INTENT_THRESHOLD = 60  # Max-based scoring is more reliable than averaged scoring
 
 
 def _safe_log(message: str, max_length: int = 500) -> str:
