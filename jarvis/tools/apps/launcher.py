@@ -79,7 +79,15 @@ class OpenAppTool(BaseTool):
     def execute(self, **kwargs) -> ToolResult:
         global _last_opened_hwnd, _last_opened_app
         
-        app_name = kwargs["app_name"].strip().lower()
+        # Support both 'app' (normalized) and 'app_name' (original) parameter names
+        app_name = kwargs.get("app") or kwargs.get("app_name")
+        if app_name is None:
+            return ToolResult(
+                success=False,
+                output="No app specified",
+                error="Missing required parameter: app or app_name"
+            )
+        app_name = app_name.strip().lower()
         
         # Use the complete app_mappings dict
         executable = APP_MAPPINGS.get(app_name, app_name)
