@@ -44,7 +44,7 @@ class Brain:
         
         # Initialize Ollama client
         self.client = OllamaClient(
-            cloud_url=config.get('ollama_cloud_url', 'https://ollama.com/api/chat'),
+            cloud_url=config.get('ollama_cloud_url', 'https://api.ollama.com/api/chat'),
             local_url=config.get('ollama_local_url', 'http://localhost:11434/api/chat'),
             api_key=config.get('ollama_api_key', ''),
             model=config.get('model', 'nemotron-3-nano:30b-cloud'),

@@ -36,8 +36,8 @@ def _load_settings():
         from jarvis.config.config import get_config
         cfg = get_config()
         return {
-            'cloud_url': cfg.get('ollama_cloud_url', 'https://api.ollama.com'),
-            'local_url': cfg.get('ollama_local_url', 'http://localhost:11434'),
+            'cloud_url': cfg.get('ollama_cloud_url', 'https://api.ollama.com/api/chat'),
+            'local_url': cfg.get('ollama_local_url', 'http://localhost:11434/api/chat'),
             'api_key': cfg.get('ollama_api_key', ''),
             'model': cfg.get('ollama_model', 'nemotron-3-nano:30b-cloud'),
             'timeout': cfg.get('ollama_timeout', 60),
@@ -72,7 +72,7 @@ class OllamaClient:
         # Use settings defaults, allow overrides
         self.cloud_url = cloud_url or _settings['cloud_url']
         self.local_url = local_url or _settings['local_url']
-        self.api_key = api_key or _settings['api_key']
+        self.api_key = api_key if api_key is not None else _settings['api_key']
         self.model = model or _settings['model']
         self.timeout = timeout or _settings['timeout']
         self.max_retries = max_retries if max_retries is not None else _settings['max_retries']
@@ -123,7 +123,7 @@ class OllamaClient:
                     json=payload,
                     headers=headers,
                     stream=stream,
-                    timeout=self.timeout,
+                    timeout=(5, self.timeout),  # connect fast (5s), read is patient
                 )
                 resp.raise_for_status()
                 
@@ -138,13 +138,15 @@ class OllamaClient:
             except requests.exceptions.HTTPError as e:
                 last_error = e
                 log.warning(f"[OLLAMA] {endpoint_name} HTTP error (attempt {attempt + 1}): {e}")
-                if resp.status_code >= 500:  # Server error, retry
+                # Use e.response.status_code instead of resp.status_code for safety
+                status = e.response.status_code if e.response else 0
+                if status >= 500:  # Server error, retry
                     if attempt < self.max_retries - 1:
                         backoff = self.base_backoff * (2 ** attempt)
                         log.info(f"[OLLAMA] Retrying in {backoff:.1f}s...")
                         time.sleep(backoff)
                     continue
-                elif resp.status_code == 429:  # Rate limited - retry with backoff
+                elif status == 429:  # Rate limited - retry with backoff
                     if attempt < self.max_retries - 1:
                         backoff = self.base_backoff * (2 ** attempt) * 2  # Longer backoff for rate limits
                         log.info(f"[OLLAMA] Rate limited. Retrying in {backoff:.1f}s...")
@@ -625,7 +627,14 @@ class OllamaClient:
         """Check if any Ollama endpoint is available."""
         for url, headers, name in self._get_endpoints():
             try:
-                resp = requests.get(url.replace("/chat", "/tags"), headers=headers, timeout=5)
+                # For cloud URL, check the base URL; for local, use /tags endpoint
+                if 'api.ollama.com' in url:
+                    # Cloud API - just check if we can reach the base URL
+                    check_url = url.replace('/api/chat', '')
+                    resp = requests.get(check_url, headers=headers, timeout=5)
+                else:
+                    # Local Ollama server - use /tags endpoint
+                    resp = requests.get(url.replace("/chat", "/tags"), headers=headers, timeout=5)
                 if resp.status_code == 200:
                     log.info(f"[OLLAMA] {name} endpoint is available")
                     return True
