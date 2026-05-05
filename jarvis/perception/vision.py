@@ -17,6 +17,8 @@ try:
 except ImportError:
     Image = None
 
+from settings import OLLAMA_VISION_MODEL
+
 
 @dataclass
 class ScreenState:
@@ -167,11 +169,11 @@ If the screen is locked, blank, or shows a login screen, set:
 Return ONLY valid JSON, no markdown, no explanations."""
         
         try:
-            # Call multimodal LLM
+            # Call multimodal LLM with vision model
             response = self.ollama_client.chat_with_image(
                 image_base64=screenshot_base64,
                 prompt=prompt,
-                model='llava-llama3-cloud',  # Multimodal model
+                model=OLLAMA_VISION_MODEL,  # Use configured vision model (gemma3:27b)
                 response_format='json'
             )
             
@@ -288,7 +290,7 @@ Do not include markdown formatting or explanations. Only return JSON."""
             response = self.ollama_client.chat_with_image(
                 image_base64=screenshot_base64,
                 prompt=prompt,
-                model='llava-llama3-cloud',
+                model=OLLAMA_VISION_MODEL,  # Use configured vision model (gemma3:27b)
                 response_format='json'
             )
             
