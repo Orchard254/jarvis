@@ -18,6 +18,17 @@ from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
 import queue
 import textwrap
+import sys
+import re
+
+# Fix UTF-8 logging on Windows console
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Python < 3.7 workaround
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, errors='replace')
 
 from jarvis.core.memory import CoreMemory
 from jarvis.core.context import ContextAssembler
@@ -49,6 +60,59 @@ MAX_CONSECUTIVE_FAILURES = 3
 CACHE_TTL_SECONDS = 5
 
 logger = logging.getLogger(__name__)
+
+
+# Intent threshold constant - minimum score to execute actions
+INTENT_THRESHOLD = 45  # Below this, only chat responses allowed
+
+
+def _safe_log(message: str, max_length: int = 500) -> str:
+    """
+    Sanitize a string for safe logging on Windows console.
+    
+    Replaces non-ASCII characters that cause UnicodeEncodeError with
+    ASCII-safe equivalents or removes them entirely.
+    
+    Args:
+        message: The message to sanitize
+        max_length: Maximum length to truncate to
+        
+    Returns:
+        Safe string for logging
+    """
+    if not message:
+        return ''
+    
+    # Truncate if too long
+    if len(message) > max_length:
+        message = message[:max_length] + '...'
+    
+    # Replace common problematic Unicode characters with ASCII equivalents
+    replacements = {
+        '\u202f': ' ',      # Narrow no-break space
+        '\u2011': '-',      # Non-breaking hyphen
+        '\u2013': '-',      # En dash
+        '\u2014': '--',     # Em dash
+        '\u2018': "'",      # Left single quotation mark
+        '\u2019': "'",      # Right single quotation mark
+        '\u201c': '"',      # Left double quotation mark
+        '\u201d': '"',      # Right double quotation mark
+        '\u2026': '...',    # Horizontal ellipsis
+        '\u00a0': ' ',      # No-break space
+        '\u00ad': '',       # Soft hyphen (remove)
+    }
+    
+    for unicode_char, ascii_replacement in replacements.items():
+        message = message.replace(unicode_char, ascii_replacement)
+    
+    # Encode to ASCII, replace any remaining non-ASCII chars, then decode back
+    try:
+        message = message.encode('ascii', errors='replace').decode('ascii')
+    except Exception:
+        # Fallback: just remove all non-ASCII
+        message = ''.join(char if ord(char) < 128 else '?' for char in message)
+    
+    return message
 
 
 class TTSManager:
@@ -471,14 +535,20 @@ class Orchestrator:
             
             logger.info(f"Intent score: {intent_score}/100 - {intent_analysis['reasoning']}")
             
-            # Detect multi-step commands and route appropriately
-            is_multi_step = self._is_multi_step_command(command)
-            if is_multi_step:
-                logger.info(f"Multi-step command detected, routing to predictive planner: {command[:50]}...")
-                result = self._handle_agent_mode(command)
+            # Intent threshold gate - below this score, only allow chat responses
+            if intent_score < INTENT_THRESHOLD:
+                logger.info(f"Intent score ({intent_score}) below threshold ({INTENT_THRESHOLD}), treating as chat")
+                # Force chat mode - no tool execution allowed
+                result = self._handle_chat_only(command)
             else:
-                # Single-step command, use unified loop
-                result = self._handle_unified_mode(command, intent_analysis)
+                # Detect multi-step commands and route appropriately
+                is_multi_step = self._is_multi_step_command(command)
+                if is_multi_step:
+                    logger.info(f"Multi-step command detected, routing to predictive planner: {command[:50]}...")
+                    result = self._handle_agent_mode(command)
+                else:
+                    # Single-step command, use unified loop
+                    result = self._handle_unified_mode(command, intent_analysis)
             
             # Update state
             self.state['total_interactions'] += 1
@@ -536,6 +606,55 @@ class Orchestrator:
             }
         finally:
             self.state['current_activity'] = 'idle'
+    
+    def _handle_chat_only(self, command: str) -> Dict[str, Any]:
+        """
+        Handle low-intent commands as chat-only (no tool execution).
+        
+        This is called when intent score falls below INTENT_THRESHOLD.
+        Prevents accidental tool execution on ambiguous inputs.
+        
+        Args:
+            command: User command
+            
+        Returns:
+            Result dict with chat response only
+        """
+        from jarvis.core.brain import Brain
+        
+        # Simple LLM call for chat response - no tool execution allowed
+        try:
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant. Respond naturally to the user. Do NOT use any tools - this is a chat-only conversation."},
+                {"role": "user", "content": command}
+            ]
+            
+            response = self.brain.chat(messages, temperature=0.7)
+            
+            if isinstance(response, dict):
+                final_response = response.get('content', str(response))
+            else:
+                final_response = str(response)
+            
+            # Speak response
+            self._speak(final_response)
+            
+            return {
+                'success': True,
+                'response': final_response,
+                'mode': 'chat',
+                'actions': [],
+                'iterations': 1
+            }
+            
+        except Exception as e:
+            logger.error(f"Chat handling error: {e}", exc_info=True)
+            return {
+                'success': False,
+                'response': "I'm not sure I understand. Could you rephrase that?",
+                'mode': 'chat',
+                'actions': []
+            }
     
     def _handle_unified_mode(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
         """
@@ -620,8 +739,8 @@ class Orchestrator:
                         "thought": parsed.get('thought', '')
                     }
                     
-                    # Log raw LLM output
-                    logger.info(f"[LLM] Raw output: {assistant_message[:200]}...")
+                    # Log raw LLM output (sanitized for Windows console)
+                    logger.info(f"[LLM] Raw output: {_safe_log(assistant_message[:200])}...")
                     
                     # Use the structured execution pipeline
                     exec_result = self._execute_action(tool_call_dict)
@@ -952,13 +1071,13 @@ RULES:
         import time as time_module
         start_time = time_module.time()
         
-        # Log raw input
-        logger.info(f"[EXEC] Received tool call: {tool_call}")
+        # Log raw input (sanitized)
+        logger.info(f"[EXEC] Received tool call: {_safe_log(str(tool_call))}")
         
         # Validate schema
         valid, error_msg = validate_tool_call_schema(tool_call)
         if not valid:
-            logger.error(f"[EXEC] Invalid tool call schema: {error_msg}")
+            logger.error(f"[EXEC] Invalid tool call schema: {_safe_log(error_msg)}")
             return {
                 'success': False,
                 'output': f"Invalid tool call format: {error_msg}",
@@ -971,8 +1090,8 @@ RULES:
         args = tool_call.get('args', {})
         thought = tool_call.get('thought', '')
         
-        # Log parsed plan
-        logger.info(f"[EXEC] Parsed plan: tool={tool_name}, args={args}, thought={thought}")
+        # Log parsed plan (sanitized)
+        logger.info(f"[EXEC] Parsed plan: tool={tool_name}, args={args}, thought={_safe_log(thought)}")
         
         # STEP 1: Normalize arguments before validation
         # This fixes the mismatch between LLM output (app_name) and tool expectations (app)
@@ -983,7 +1102,7 @@ RULES:
         # STEP 2: Safety validation with normalized args
         is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, normalized_args)
         if not is_valid:
-            logger.warning(f"[EXEC] Tool call blocked by safety: {error_msg}")
+            logger.warning(f"[EXEC] Tool call blocked by safety: {_safe_log(error_msg)}")
             self.audit_log.log_security_event(
                 event_type='tool_blocked',
                 details={
@@ -1039,8 +1158,8 @@ RULES:
             
             duration_ms = int((time_module.time() - start_time) * 1000)
             
-            # Log execution result
-            logger.info(f"[EXEC] Result: success={success}, output={output[:100]}..., duration={duration_ms}ms")
+            # Log execution result (sanitized)
+            logger.info(f"[EXEC] Result: success={success}, output={_safe_log(output[:100])}..., duration={duration_ms}ms")
             
             # Audit log with normalized args
             self.audit_log.log_action(
