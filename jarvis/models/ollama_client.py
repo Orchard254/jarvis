@@ -443,12 +443,29 @@ class OllamaClient:
         payload = {
             "model": self.model,
             "messages": messages,
+            "images": [],  # Will be populated from messages
             "stream": False,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
             },
         }
+        
+        # Extract images from messages for Ollama cloud API compatibility
+        for msg in messages:
+            if isinstance(msg.get("content"), list):
+                # Multi-modal format
+                for item in msg["content"]:
+                    if isinstance(item, dict) and item.get("type") == "image_url":
+                        img_url = item.get("image_url", {})
+                        if isinstance(img_url, dict):
+                            url = img_url.get("url", "")
+                            if url.startswith("data:image"):
+                                base64_data = url.split(",", 1)[1] if "," in url else url
+                                payload["images"].append(base64_data)
+            elif msg.get("images"):
+                # Direct images array
+                payload["images"].extend(msg["images"])
         
         for url, headers, name in self._get_endpoints():
             log.info(f"[OLLAMA] Vision call to {name} endpoint")
@@ -549,15 +566,21 @@ class OllamaClient:
             }
         ]
         
-        # Use provided model or default
-        model_to_use = model or self.model
+        # Use provided model or default - temporarily set it on self
+        original_model = self.model
+        if model:
+            self.model = model
         
-        # Make the vision call
-        return self.chat_with_vision(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        try:
+            # Make the vision call
+            return self.chat_with_vision(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        finally:
+            # Restore original model
+            self.model = original_model
 
 
     async def generate_async(self, prompt: str, temperature: float = 0.7) -> str:
