@@ -8,12 +8,16 @@ Provides validation that tool names exist before execution.
 import importlib
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
 from .base import BaseTool, ToolResult
 
 log = logging.getLogger("tool_registry")
+
+# Thread-safe singleton lock
+_registry_lock = threading.Lock()
 
 
 class ToolRegistry:
@@ -35,9 +39,11 @@ class ToolRegistry:
     
     @classmethod
     def get_instance(cls) -> "ToolRegistry":
-        """Get singleton instance."""
+        """Get singleton instance (thread-safe with double-checked locking)."""
         if cls._instance is None:
-            cls._instance = ToolRegistry()
+            with _registry_lock:
+                if cls._instance is None:
+                    cls._instance = ToolRegistry()
         return cls._instance
     
     def register(self, tool: BaseTool) -> None:

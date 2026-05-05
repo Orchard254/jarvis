@@ -72,12 +72,10 @@ class ToolGuard:
         r'C:\\Windows',
         r'C:\\Program Files',
         r'C:\\Program Files \(x86\)',
+        r'C:\\Users\\.*\\AppData\\Roaming',
         r'C:\\Users\\.*\\AppData\\Local\\Microsoft',
-        r'C:\\Users\\.*\\AppData\\Roaming\\Microsoft',
-        r'C:\\Users\\.*\\AppData\\Local\\Temp\\.*\.sys$',
-        r'C:\\Windows\\.*\.dll$',
-        r'C:\\Windows\\.*\.sys$',
-        r'C:\\Windows\\System32\\.*\.exe$',
+        r'C:\\System Volume Information',
+        r'C:\\ProgramData\\Microsoft',
     ]
     
     def __init__(self, registry=None):
@@ -85,6 +83,7 @@ class ToolGuard:
         self.unsafe_patterns = [re.compile(p, re.IGNORECASE) for p in self.UNSAFE_PATTERNS]
         self.audit_log = []
         self._registry = registry
+        self._warned_no_registry = False
     
     def set_registry(self, registry) -> None:
         """Set the tool registry for validation."""
@@ -108,6 +107,11 @@ class ToolGuard:
             if not self._registry.has_tool(tool_name):
                 # Return helpful error with similar tool names
                 return self._get_unknown_tool_error(tool_name)
+        elif not self._warned_no_registry:
+            # Log warning once when registry is not set
+            logger = logging.getLogger(__name__)
+            logger.warning("ToolGuard has no registry reference - unknown tool names will not be caught")
+            self._warned_no_registry = True
         
         # STEP 2: Check for unsafe patterns in tool name or params
         if self._check_unsafe_patterns(tool_name, params):
@@ -214,7 +218,7 @@ class ToolGuard:
     
     def _validate_powershell(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate PowerShell script execution."""
-        script = params.get('script', '')
+        script = params.get('script', '') or params.get('command', '')
         if not script:
             return False, "Empty script"
         
@@ -389,7 +393,16 @@ class ToolGuard:
             return True, ""
         else:
             # Strict rules for user-submitted code — block additional dangerous patterns
-            for pattern in self.STRICT_PATTERNS:
+            # Include eval, exec, os.system, ctypes which were missing
+            dangerous_patterns = [
+                '__import__',
+                r'eval\s*\(',
+                r'exec\s*\(',
+                r'os\.system\s*\(',
+                r'ctypes\.windll',
+                r'ctypes\.cdll',
+            ]
+            for pattern in dangerous_patterns:
                 if re.search(pattern, code, re.IGNORECASE):
                     return False, f"Dangerous pattern detected: {pattern}"
             

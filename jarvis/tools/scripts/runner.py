@@ -264,20 +264,22 @@ class RunPythonTool(BaseTool):
         if not isinstance(timeout, int) or timeout < 1 or timeout > 120:
             return False, "timeout must be between 1 and 120 seconds"
         
-        # Safety check - block only truly destructive operations
-        # subprocess isolation already provides safety boundary
-        actually_dangerous = [
-            "shutil.rmtree('C:\\\\Windows')",
-            "shutil.rmtree('C:\\\\Program Files')", 
-            "os.remove('C:\\\\Windows')",
-            "format c:",
-            "rd /s /q c:\\\\",
-            "__import__('os').system('format",
+        # Safety check - block only truly destructive operations using regex patterns
+        import re
+        
+        DESTRUCTION_PATTERNS = [
+            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", re.IGNORECASE),
+            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", re.IGNORECASE),
+            re.compile(r"shutil\.rmtree\s*\(\s*Path\s*\(\s*['\"]C:/Windows", re.IGNORECASE),
+            re.compile(r"os\.remove\s*\(\s*['\"]C:\\\\Windows", re.IGNORECASE),
+            re.compile(r"format\s+[cCdD]:"),
+            re.compile(r"rd\s+/s\s+/q\s+[cCdD]:\\\\"),
+            re.compile(r"__import__\s*\(\s*['\"]os['\"]\s*\)\.system\s*\(\s*['\"]format"),
         ]
         
-        for pattern in actually_dangerous:
-            if pattern in code:
-                return False, f"Dangerous code pattern blocked: {pattern}"
+        for pattern in DESTRUCTION_PATTERNS:
+            if pattern.search(code):
+                return False, f"Dangerous code pattern blocked: {pattern.pattern}"
         
         return True, ""
     
