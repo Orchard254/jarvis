@@ -196,10 +196,18 @@ class PredictivePlanner:
                             logger.info(f"Retrying due to invalid plan structure (attempt {attempt + 2}/{max_retries})...")
                             continue
                         logger.error(f"Invalid plan structure after all retries: {error_msg}")
-                        # If plan has no steps but LLM requested clarification, return it anyway for user confirmation
-                        if error_msg == "Plan has no steps" and plan.get('needs_clarification', False):
-                            logger.warning("Returning plan with no steps for user clarification")
-                            return plan
+                        
+                        # FIX: If plan has no steps but LLM requested clarification, return it for user clarification
+                        # This prevents falling back to ReAct with broken state
+                        if error_msg == "Plan has no steps":
+                            if plan.get('needs_clarification', False):
+                                logger.warning("Returning plan with no steps for user clarification")
+                                return plan
+                            else:
+                                # LLM should have generated steps but didn't - this is a genuine failure
+                                # Don't return the broken plan, let it fall back to ReAct
+                                logger.warning("LLM generated empty plan without requesting clarification - will fallback to ReAct")
+                                return None
                         return None
                     
                     logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")
