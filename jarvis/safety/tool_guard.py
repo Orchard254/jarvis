@@ -402,7 +402,6 @@ class ToolGuard:
             # Include eval, exec, os.system, ctypes which were missing
             
             # Block shutil destruction on system dirs - all quote and slash variants
-            import re
             shutil_patterns = [
                 re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
                 re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Program\s+Files", re.IGNORECASE),
@@ -548,7 +547,6 @@ class ToolGuard:
                 return False, f"Destructive operation blocked: {pattern}"
         
         # Block shutil.rmtree targeting Windows/Program Files directories
-        import re
         if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
             return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
         if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", code, re.IGNORECASE):
