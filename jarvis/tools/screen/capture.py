@@ -154,8 +154,20 @@ class AnalyzeScreenTool(BaseTool):
             # Get vision analyzer instance
             vision = get_vision_analyzer()
             
-            # Analyze screen - returns dict with screen_state object
-            analysis = vision.analyze_screen(screenshot_base64=base64_data)
+            # Build prompt based on focus area
+            prompts = {
+                "windows": "List all open application windows and their titles.",
+                "text": "Read all visible text on the screen.",
+                "errors": "Identify any error messages, warnings, or notifications.",
+                "all": "Describe everything you see on this screen in detail."
+            }
+            prompt = prompts.get(focus, prompts["all"])
+            
+            # Analyze screen with specific prompt
+            analysis = vision.analyze_screen(
+                screenshot_base64=base64_data,
+                prompt=prompt
+            )
             
             if analysis['success'] and analysis.get('screen_state'):
                 screen_state = analysis['screen_state']
