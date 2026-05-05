@@ -77,7 +77,7 @@ class KokoroEngine(TTSEngine):
                 speed=self.speed
             )
             
-            for _, audio_data in generator:
+            for _, audio_data, _ in generator:
                 # Play audio
                 sd.play(audio_data.numpy(), samplerate=24000)
                 sd.wait()
@@ -182,9 +182,14 @@ class EdgeTTSEngine(TTSEngine):
             import asyncio
             import edge_tts
             import pygame
+            import os
+            
+            # Calculate rate parameter correctly
+            rate_percent = int((self.speed - 1) * 100)
+            rate_str = f"+{rate_percent}%" if rate_percent >= 0 else f"{rate_percent}%"
             
             async def _speak():
-                communicate = edge_tts.Communicate(text, self.voice, rate=f"{int((self.speed - 1) * 100)}%")
+                communicate = edge_tts.Communicate(text, self.voice, rate=rate_str)
                 output_file = "temp_tts.mp3"
                 await communicate.save(output_file)
                 
@@ -195,7 +200,6 @@ class EdgeTTSEngine(TTSEngine):
                     pygame.time.Clock().tick(10)
                 pygame.mixer.quit()
                 
-                import os
                 os.remove(output_file)
             
             asyncio.run(_speak())
