@@ -1,5 +1,5 @@
 """
-core/tool_call_parser.py — Strict JSON Tool Call Parser
+core/tool_call_parser.py — Strict JSON Tool Call Parser with Multi-Step Support
 
 Replaces the old "TOOL: ..." pattern with strict JSON parsing.
 Enforces structured LLM output format:
@@ -9,8 +9,9 @@ Enforces structured LLM output format:
     "args": {...}
 }
 
-Features:
-- Strict JSON parsing only (no regex patterns)
+NEW FEATURES:
+- Support for {"action": "respond", "message": "..."} (no-tool path)
+- Support for {"action": "plan", "steps": [...]} (multi-step tasks)
 - Retry mechanism for malformed JSON
 - Schema validation before returning parsed call
 """
@@ -23,27 +24,37 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger("tool_call_parser")
 
 
-# Expected structured output format
+# Expected structured output formats
 STRUCTURED_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string"},
         "tool": {"type": "string"},
-        "args": {"type": "object"}
+        "args": {"type": "object"},
+        "message": {"type": "string"},  # For respond action
+        "steps": {"type": "array"}      # For plan action
     },
-    "required": ["action", "tool", "args"]
+    "required": ["action"]
 }
+
+# Valid action types
+VALID_ACTIONS = ["tool_call", "tool", "respond", "plan", "chat"]
 
 
 def is_valid_tool_call_json(text: str) -> bool:
     """
     Check if text is a valid tool call JSON.
     
+    Now accepts multiple action types:
+    - tool_call: Execute a single tool
+    - respond: Direct response (no tool)
+    - plan: Multi-step execution plan
+    
     Args:
         text: Text to check
         
     Returns:
-        True if valid JSON tool call format, False otherwise
+        True if valid JSON format, False otherwise
     """
     if not text or not text.strip():
         return False
@@ -59,16 +70,23 @@ def is_valid_tool_call_json(text: str) -> bool:
         if not isinstance(parsed, dict):
             return False
         
-        # Check for required fields
+        # Check for required action field
         action = parsed.get('action', '').lower()
-        if action not in ['tool_call', 'tool']:
+        if action not in VALID_ACTIONS:
             return False
         
-        if 'tool' not in parsed or not isinstance(parsed['tool'], str):
-            return False
-        
-        if 'args' not in parsed or not isinstance(parsed['args'], dict):
-            return False
+        # Validate based on action type
+        if action in ['tool_call', 'tool']:
+            if 'tool' not in parsed or not isinstance(parsed['tool'], str):
+                return False
+            if 'args' not in parsed or not isinstance(parsed['args'], dict):
+                return False
+        elif action == 'respond':
+            if 'message' not in parsed or not isinstance(parsed['message'], str):
+                return False
+        elif action == 'plan':
+            if 'steps' not in parsed or not isinstance(parsed['steps'], list):
+                return False
         
         return True
         
@@ -184,9 +202,11 @@ def normalize_tool_call_fields(parsed: Dict[str, Any]) -> Dict[str, Any]:
     Normalize field names to standard format.
     
     Handles variations like:
-    - tool/tool_name/name
+    - tool/tool_name/name/function
     - args/params/parameters
     - thought/reasoning/think
+    - message/msg/response (for respond action)
+    - steps/plan/actions (for plan action)
     
     Args:
         parsed: Parsed JSON dict
@@ -194,36 +214,62 @@ def normalize_tool_call_fields(parsed: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Normalized dict with standard field names
     """
+    # Determine action type first
+    action = parsed.get('action', 'tool_call').lower()
+    if action in ['tool', 'tool_call']:
+        action = 'tool_call'
+    
     result = {
-        "action": "tool_call",  # Always set to tool_call
+        "action": action,
         "tool": None,
         "args": {},
+        "message": "",
+        "steps": [],
         "thought": ""
     }
     
-    # Find tool name
-    for key in ['tool', 'tool_name', 'name', 'function']:
-        if key in parsed and parsed[key]:
-            result['tool'] = parsed[key]
-            break
+    # Find tool name (only for tool_call action)
+    if action == 'tool_call':
+        for key in ['tool', 'tool_name', 'name', 'function']:
+            if key in parsed and parsed[key]:
+                result['tool'] = parsed[key]
+                break
+        
+        # Find arguments
+        for key in ['args', 'params', 'parameters', 'arguments']:
+            if key in parsed and isinstance(parsed[key], dict):
+                result['args'] = parsed[key]
+                break
     
-    # Find arguments
-    for key in ['args', 'params', 'parameters', 'arguments']:
-        if key in parsed and isinstance(parsed[key], dict):
-            result['args'] = parsed[key]
-            break
+    # Find message (for respond action)
+    if action == 'respond':
+        for key in ['message', 'msg', 'response', 'text', 'content']:
+            if key in parsed and parsed[key]:
+                result['message'] = str(parsed[key])
+                break
     
-    # Find thought/reasoning
+    # Find steps (for plan action)
+    if action == 'plan':
+        for key in ['steps', 'plan', 'actions', 'sequence']:
+            if key in parsed and isinstance(parsed[key], list):
+                result['steps'] = parsed[key]
+                break
+    
+    # Find thought/reasoning (common to all actions)
     for key in ['thought', 'reasoning', 'think', 'rationale']:
         if key in parsed and parsed[key]:
             result['thought'] = str(parsed[key])
             break
     
     # Copy any additional fields
+    skip_keys = ['action', 'tool', 'tool_name', 'name', 'function', 
+                 'args', 'params', 'parameters', 'arguments',
+                 'thought', 'reasoning', 'think', 'rationale', 'type',
+                 'message', 'msg', 'response', 'text', 'content',
+                 'steps', 'plan', 'actions', 'sequence']
+    
     for key, value in parsed.items():
-        if key not in ['action', 'tool', 'tool_name', 'name', 'function', 
-                       'args', 'params', 'parameters', 'arguments',
-                       'thought', 'reasoning', 'think', 'rationale', 'type']:
+        if key not in skip_keys:
             result[key] = value
     
     return result
@@ -233,9 +279,10 @@ def validate_tool_call_structure(parsed: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Validate that parsed tool call has required structure.
     
-    Required:
-    - tool: non-empty string
-    - args: dict (can be empty)
+    Validation depends on action type:
+    - tool_call: requires tool (non-empty string) and args (dict)
+    - respond: requires message (non-empty string)
+    - plan: requires steps (non-empty list)
     
     Args:
         parsed: Normalized tool call dict
@@ -243,17 +290,37 @@ def validate_tool_call_structure(parsed: Dict[str, Any]) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    if not parsed.get('tool'):
-        return False, "Missing required field: 'tool'"
+    action = parsed.get('action', 'tool_call')
     
-    if not isinstance(parsed['tool'], str):
-        return False, f"'tool' must be a string, got {type(parsed['tool']).__name__}"
+    if action == 'tool_call':
+        if not parsed.get('tool'):
+            return False, "Missing required field: 'tool'"
+        
+        if not isinstance(parsed['tool'], str):
+            return False, f"'tool' must be a string, got {type(parsed['tool']).__name__}"
+        
+        if not parsed.get('args'):
+            parsed['args'] = {}  # Default to empty dict
+        
+        if not isinstance(parsed['args'], dict):
+            return False, f"'args' must be an object, got {type(parsed['args']).__name__}"
     
-    if not parsed.get('args'):
-        parsed['args'] = {}  # Default to empty dict
+    elif action == 'respond':
+        if not parsed.get('message'):
+            return False, "Missing required field: 'message' for respond action"
+        
+        if not isinstance(parsed['message'], str):
+            return False, f"'message' must be a string, got {type(parsed['message']).__name__}"
     
-    if not isinstance(parsed['args'], dict):
-        return False, f"'args' must be an object, got {type(parsed['args']).__name__}"
+    elif action == 'plan':
+        if not parsed.get('steps'):
+            return False, "Missing required field: 'steps' for plan action"
+        
+        if not isinstance(parsed['steps'], list):
+            return False, f"'steps' must be an array, got {type(parsed['steps']).__name__}"
+        
+        if len(parsed['steps']) == 0:
+            return False, "'steps' array cannot be empty for plan action"
     
     return True, ""
 

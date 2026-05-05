@@ -29,6 +29,9 @@ _registry_lock = threading.Lock()
 # Maps tool names to relevant keywords for filtering.
 # Before calling LLM, filter tools by matching user input against these keywords.
 # Only pass 3-5 most relevant tools to the LLM.
+#
+# IMPORTANT: Keywords are now used WITH intent gating (see resilient_router.py)
+# to prevent false positives like file.read appearing for "open notepad"
 
 TOOL_HINTS: Dict[str, List[str]] = {
     # System tools
@@ -37,16 +40,16 @@ TOOL_HINTS: Dict[str, List[str]] = {
     "system.restart_pc": ["restart", "reboot", "refresh"],
     "system.shutdown_pc": ["shutdown", "power off", "turn off", "hibernate"],
     
-    # File tools
-    "file.read": ["read", "open", "view", "contents", "text", "file"],
+    # File tools - NOTE: "open" keyword removed from file.read to prevent false positive
+    "file.read": ["read", "view", "contents", "text", "file content"],  # Removed "open"
     "file.write": ["write", "create", "save", "store", "file", "content"],
-    "file.open": ["open", "launch", "start", "file", "document"],
+    "file.open": ["open file", "launch file", "start file", "document"],  # More specific
     "file.delete": ["delete", "remove", "erase", "destroy", "file"],
     "file.copy": ["copy", "duplicate", "clone", "file"],
     "file.move": ["move", "rename", "transfer", "file"],
     
-    # App tools
-    "app.open": ["open", "launch", "start", "run", "application", "program", "app"],
+    # App tools - "open" keyword stays here for app opening
+    "app.open": ["open", "launch", "start", "run", "application", "program", "app", "bring up"],
     "app.close": ["close", "quit", "exit", "terminate", "application", "app"],
     "app.list": ["list", "running", "active", "applications", "processes"],
     
