@@ -12,6 +12,10 @@ Automatically falls back through engines if preferred is unavailable.
 import logging
 from typing import Optional, Dict, Any
 import threading
+import os
+
+# Suppress pygame welcome message globally
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +206,6 @@ class EdgeTTSEngine(TTSEngine):
             import asyncio
             import edge_tts
             import pygame
-            import os
             
             # Calculate rate parameter correctly
             rate_percent = int((self.speed - 1) * 100)
