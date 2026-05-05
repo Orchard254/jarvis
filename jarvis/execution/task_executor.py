@@ -162,7 +162,11 @@ class TaskExecutor:
         return step
     
     def _check_duplicate_action(self, tool_name: str, parameters: Dict[str, Any], current_step_index: int = -1) -> bool:
-        """Check if this exact action was recently performed (loop detection)."""
+        """Check if this exact action was recently performed (loop detection).
+        
+        Only flags duplicates if the same tool with identical parameters runs within a 2-second window,
+        allowing legitimate repeated actions while preventing infinite loops.
+        """
         current_time = time.time()
         
         # For 'wait' tool, allow multiple calls (they're often at different steps)
@@ -175,31 +179,9 @@ class TaskExecutor:
         for action in recent_actions:
             if (action["tool_name"] == tool_name and 
                 action["parameters"] == parameters and
-                current_time - action["timestamp"] < 60):  # Within last minute
+                current_time - action["timestamp"] < 2):  # Within last 2 seconds
                 
-                # ALWAYS allow retries if the previous attempt FAILED
-                if not action.get("success", True):
-                    logger.info(f"Allowing retry of failed action: {tool_name}")
-                    return False
-                
-                # Allow these tools to be called repeatedly (they often need retries or are state-dependent)
-                allowed_repeated_tools = [
-                    "open_app",           # Bringing apps to foreground
-                    "press_key",          # Keyboard shortcuts may need retries
-                    "type_text",          # Text input may need retries
-                    "click_element",      # UI clicks may need retries
-                    "focus_window",       # Window focusing may need retries
-                    "clear_text",         # Clearing text may be needed multiple times
-                    "extract_content",    # Content extraction may fail and need retry
-                    "search_web",         # Search may need retry on failure
-                    "navigate_to_url",   # Navigation may need retry
-                    "system_info",        # System info may be needed at different stages
-                ]
-                if tool_name in allowed_repeated_tools:
-                    logger.debug(f"Allowing repeated {tool_name} call")
-                    return False
-                
-                logger.warning(f"Duplicate action detected: {tool_name} with same parameters")
+                logger.warning(f"Duplicate action detected: {tool_name} with same parameters within 2s window")
                 return True
         
         return False
