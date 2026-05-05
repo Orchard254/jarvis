@@ -850,14 +850,13 @@ class Orchestrator:
 
 CRITICAL: You must ONLY output ONE tool call at a time. Never plan multiple steps.
 
-When the user asks something you can handle directly, just respond naturally.
-
-When you need to use a tool, respond with: "TOOL: tool_name(parameters)" 
-For example: "TOOL: open_app(app_name='notepad')"
-
-After each tool execution, you'll receive the result and can decide the next single action.
-
-When you're done with tools and ready to respond, give your final answer.
+OUTPUT FORMAT RULES:
+- When you need to use a tool, respond with EXACTLY: "TOOL: tool_name(parameters)"
+- Example: "TOOL: open_app(app='notepad')"
+- NEVER output explanatory text before or after the tool call
+- NEVER output multiple tool calls in one response
+- After each tool execution, you'll receive the result and can decide the next single action
+- When the task is complete, give your final answer naturally
 
 Available tools:
 {tools_json}
@@ -867,7 +866,7 @@ User: hello
 Assistant: Hello! How can I help you today?
 
 User: open notepad
-Assistant: TOOL: open_app(app_name='notepad')
+Assistant: TOOL: open_app(app='notepad')
 [Tool result: Opening notepad]
 Assistant: Notepad is now open.
 
@@ -877,10 +876,11 @@ Assistant: TOOL: get_time()
 Assistant: The current time is 3:45 PM.
 
 RULES:
-- ONE tool call per response
+- ONE tool call per response - this is mandatory
 - Wait for tool result before deciding next action
 - Use FINAL when task is complete
 - Never output multiple TOOL calls in one response
+- Never mix tool calls with explanatory text
 - When user refers to "it", "that", or "the app", use the app context above"""
     
     def _validate_and_parse_json(self, text: str) -> Optional[Dict]:
