@@ -252,33 +252,35 @@ def _apply_tool_specific_normalization(tool_name: str, params: Dict[str, Any],
     """
     normalized = dict(params)  # Copy to avoid mutating input
     
-    # open_app tool: LLM often puts app name in various fields
+    # open_app tool: The tool expects 'app' parameter, preserve it
+    # Only map from truly alternative field names if 'app' is missing
     if tool_name == 'open_app':
-        if 'app_name' not in normalized or not normalized.get('app_name'):
+        if 'app' not in normalized or not normalized.get('app'):
             # Try alternative field names in both step_dict and normalized params
-            alt_fields = ['application', 'app', 'name', 'program', 'software']
+            alt_fields = ['app_name', 'application', 'name', 'program', 'software']
             for field in alt_fields:
                 # Check in normalized params first (already extracted from params container)
                 if field in normalized and normalized[field]:
-                    normalized['app_name'] = normalized[field]
+                    normalized['app'] = normalized[field]
                     # Remove the alternative field to avoid "multiple values" error
-                    del normalized[field]
-                    logger.debug(f"Mapped {field} -> app_name")
+                    if field != 'app':
+                        del normalized[field]
+                    logger.debug(f"Mapped {field} -> app")
                     break
                 # Then check in top-level step_dict
                 elif field in step_dict and step_dict[field]:
-                    normalized['app_name'] = step_dict[field]
-                    logger.debug(f"Found app_name in alternative field: {field}")
+                    normalized['app'] = step_dict[field]
+                    logger.debug(f"Found app in alternative field: {field}")
                     break
             
             # Last resort: check if app name is in description
-            if 'app_name' not in normalized and 'description' in step_dict:
+            if 'app' not in normalized and 'description' in step_dict:
                 desc = step_dict['description'].lower()
                 # Common pattern: "Open [app name]" or "Launch [app name]"
                 match = re.search(r'(?:open|launch|start)\s+(?:the\s+)?(\w+)', desc, re.IGNORECASE)
                 if match:
-                    normalized['app_name'] = match.group(1)
-                    logger.debug(f"Extracted app_name from description: {normalized['app_name']}")
+                    normalized['app'] = match.group(1)
+                    logger.debug(f"Extracted app from description: {normalized['app']}")
     
     # navigate_to_url: LLM might use 'url', 'website', 'link', 'address'
     if tool_name == 'navigate_to_url':
