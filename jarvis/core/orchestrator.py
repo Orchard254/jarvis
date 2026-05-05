@@ -1027,6 +1027,41 @@ RULES:
         
         text = text.strip()
         
+        # CRITICAL FIX: Detect and auto-execute leaked plan JSON BEFORE any other parsing
+        # This prevents mode confusion from causing JSON leaks to the user
+        if text.startswith('{'):
+            try:
+                parsed_json = json.loads(text)
+                if isinstance(parsed_json, dict):
+                    # Check for plan structure (goal + steps)
+                    if 'steps' in parsed_json and isinstance(parsed_json.get('steps'), list):
+                        steps = parsed_json['steps']
+                        if len(steps) > 0:
+                            # Auto-execute first step immediately
+                            first_step = steps[0]
+                            tool_name = first_step.get('tool')
+                            params = first_step.get('params', {})
+                            if tool_name:
+                                logger.warning(f"Plan JSON leaked - auto-executing: {tool_name}")
+                                return {
+                                    'type': 'TOOL',
+                                    'tool': tool_name,
+                                    'params': params,
+                                    'thought': f"Auto-extracted from plan: {first_step.get('reason', 'Step 1')}"
+                                }
+                        # No valid steps - return error message
+                        return {
+                            'type': 'FINAL',
+                            'response': "I encountered an issue. Let me try again.",
+                            'thought': 'Empty plan detected'
+                        }
+                    # Check for direct tool call in JSON format
+                    elif parsed_json.get('type') == 'TOOL':
+                        return parsed_json
+            except Exception as e:
+                logger.debug(f"Not a valid JSON plan: {e}")
+                pass  # Continue with normal parsing
+        
         # STRICT SEPARATION: If TOOL: pattern found, extract ONLY the tool call
         # Remove any trailing text after the tool call to prevent mixed output
         tool_pattern_match = re.search(
@@ -1094,40 +1129,7 @@ RULES:
                 return json_parsed
         
         # Default: treat as final response if it's not empty
-        # CRITICAL: If response contains a "steps" array, it's a plan that leaked - AUTO-EXECUTE instead of failing
         if text:
-            # Check if this is a leaked plan JSON (should not happen in unified mode)
-            if text.strip().startswith('{'):
-                try:
-                    import json as json_module
-                    parsed_json = json_module.loads(text.strip())
-                    if isinstance(parsed_json, dict) and parsed_json.get('steps'):
-                        # This is a plan that leaked - AUTO-EXECUTE the first step immediately
-                        logger.warning(f"Plan JSON leaked to unified mode - auto-executing first step: {text[:100]}...")
-                        steps = parsed_json.get('steps', [])
-                        if steps and len(steps) > 0:
-                            first_step = steps[0]
-                            tool_name = first_step.get('tool')
-                            params = first_step.get('params', {})
-                            if tool_name:
-                                # Return as TOOL call to execute immediately
-                                logger.info(f"Auto-converting leaked plan to tool call: {tool_name}")
-                                return {
-                                    'type': 'TOOL',
-                                    'tool': tool_name,
-                                    'params': params,
-                                    'thought': f"Auto-extracted from leaked plan: {first_step.get('reason', 'First step of plan')}"
-                                }
-                        # If no valid steps, return clarification message
-                        return {
-                            'type': 'FINAL',
-                            'response': "I encountered an issue processing that command. Let me try a different approach.",
-                            'thought': 'Leaked plan with no executable steps'
-                        }
-                except Exception as e:
-                    logger.warning(f"Failed to parse leaked plan JSON: {e}")
-                    pass  # Not valid JSON, continue normally
-            
             return {
                 'type': 'FINAL',
                 'response': text,
