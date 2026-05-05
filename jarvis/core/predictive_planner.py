@@ -70,6 +70,7 @@ RULES:
 11. CLARIFICATION FLAG: Set "needs_clarification": true ONLY if the request is ambiguous, dangerous, or missing critical information that prevents execution. For clear requests like "open notepad", set to false and include the steps. NEVER set needs_clarification to true just because you can generate a plan - only use it when you genuinely cannot proceed without more information.
 12. STEP INDEPENDENCE: Each step should be independent. Do NOT include steps that simply retrieve data that was already retrieved in a previous step. If a previous step already obtained the information, use it directly in subsequent steps.
 13. MANDATORY STEP GENERATION: If the request is clear and actionable (like opening an app, typing text, navigating to a known website), you MUST generate the steps. Do NOT return empty steps array for straightforward commands. Empty steps are only acceptable for genuinely impossible or dangerously ambiguous requests.
+14. USER CONTEXT: Check if user profile contains relevant information (name, preferences, etc.) that should be used in the plan. For example, if the user asks to "write my name" and their name is stored in the profile, use that name directly.
 
 {context_section}
 AVAILABLE TOOLS:
@@ -133,6 +134,25 @@ class PredictivePlanner:
             
             if context_parts:
                 context_section = "\n\n".join(context_parts) + "\n\n"
+        
+        # FIX: Add user profile context to the prompt
+        try:
+            from jarvis.profile.user_profile import get_profile_manager
+            profile_mgr = get_profile_manager()
+            user_ctx = profile_mgr.current_profile.context
+            user_info = {}
+            if user_ctx.name:
+                user_info['name'] = user_ctx.name
+            if user_ctx.location:
+                user_info['location'] = user_ctx.location
+            
+            if user_info:
+                user_context_str = f"\n\nUSER PROFILE CONTEXT:\n- User's name: {user_info.get('name', 'Not set')}\n"
+                if user_info.get('location'):
+                    user_context_str += f"- User's location: {user_info['location']}\n"
+                context_section += user_context_str
+        except Exception as e:
+            logger.debug(f"Could not load user profile context: {e}")
         
         prompt = PLAN_PROMPT.format(
             context_section=context_section,

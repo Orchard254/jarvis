@@ -1,60 +1,40 @@
 ```
-# Python compiled files
-*.pyc
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Virtual environment
-venv/
-
-# Dependencies cache
-*.egg-info/
-*.dist-info/
+# Environment
+.env
+.env.local
+*.env.*
 
 # Logs
 *.log
 
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
 # Temporary files
 *.tmp
 *.swp
+*.swo
 
 # OS generated files
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-.coverage
-coverage/
-htmlcov/
-
-# IDE specific
+# IDE
 .vscode/
 .idea/
 
-# Distribution / packaging
-dist/
-build/
-*.tar.gz
-*.whl
-
-# Environment variables
-.env
-.env.local
-*.env.*
-
-# MyPy cache
+# Dependencies
+venv/
+.venv/
+node_modules/
 .mypy_cache/
-
-# Pytest cache
 .pytest_cache/
-
-# Pip cache
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Local configuration
-local_settings.py
-
 ```

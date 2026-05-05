@@ -621,6 +621,10 @@ class Orchestrator:
             Result dict with chat response only
         """
         from jarvis.core.brain import Brain
+        from jarvis.profile.user_profile import get_profile_manager
+        
+        # FIX: Extract user information from chat (name, preferences, etc.)
+        self._extract_user_info_from_chat(command)
         
         # Simple LLM call for chat response - no tool execution allowed
         try:
@@ -680,6 +684,77 @@ class Orchestrator:
                 'mode': 'chat',
                 'actions': []
             }
+    
+    def _extract_user_info_from_chat(self, command: str) -> None:
+        """
+        Extract user information from chat messages and store in profile.
+        
+        Handles patterns like:
+        - "my name is X"
+        - "I am X"
+        - "call me X"
+        - "my email is X"
+        - etc.
+        
+        Args:
+            command: User chat message
+        """
+        import re
+        from jarvis.profile.user_profile import get_profile_manager
+        
+        command_lower = command.lower().strip()
+        
+        # Patterns to extract user information
+        patterns = {
+            'name': [
+                r'\bmy\s+name\s+is\s+(\w+)\b',
+                r'\bi\s+am\s+(\w+)\b',
+                r'\bcall\s+me\s+(\w+)\b',
+                r"\bi'?m\s+(\w+)\b",
+            ],
+            'email': [
+                r'\bmy\s+email\s+is\s+([^\s]+@[^\s]+)\b',
+                r'\bmy\s+e-mail\s+is\s+([^\s]+@[^\s]+)\b',
+            ],
+            'location': [
+                r'\bi\s+live\s+in\s+([^\.,]+)',
+                r'\bi\s+am\s+from\s+([^\.,]+)',
+                r'\bmy\s+location\s+is\s+([^\.,]+)',
+            ],
+        }
+        
+        profile_manager = get_profile_manager()
+        updates_made = {}
+        
+        # Check each pattern type
+        for info_type, regex_list in patterns.items():
+            for pattern in regex_list:
+                match = re.search(pattern, command_lower)
+                if match:
+                    value = match.group(1).strip()
+                    # Capitalize names properly
+                    if info_type == 'name':
+                        value = value.capitalize()
+                    
+                    # Store in profile
+                    if info_type == 'name':
+                        profile_manager.update_context(name=value)
+                        updates_made['name'] = value
+                        logger.info(f"Extracted user name from chat: {value}")
+                    elif info_type == 'email':
+                        # Store in notes for now (could add dedicated field)
+                        profile_manager.add_note(f"Email: {value}")
+                        updates_made['email'] = value
+                        logger.info(f"Extracted user email from chat: {value}")
+                    elif info_type == 'location':
+                        profile_manager.update_context(location=value.title())
+                        updates_made['location'] = value
+                        logger.info(f"Extracted user location from chat: {value}")
+                    break
+        
+        # If we extracted information, acknowledge it
+        if updates_made:
+            logger.info(f"Updated user profile with: {updates_made}")
     
     def _handle_unified_mode(self, command: str, intent_analysis: Dict) -> Dict[str, Any]:
         """

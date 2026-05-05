@@ -1,0 +1,36 @@
+{
+  "default": {
+    "user_id": "default",
+    "created_at": "2026-05-05T14:03:39.497786",
+    "updated_at": "2026-05-05T14:03:43.072330",
+    "preferences": {
+      "voice_enabled": true,
+      "voice_name": "default",
+      "speech_rate": 1.0,
+      "wake_word_enabled": true,
+      "dark_mode": true,
+      "notifications_enabled": true,
+      "auto_execute_safe_tools": true,
+      "require_confirmation_for": [],
+      "default_model": "llama3.1",
+      "log_commands": true,
+      "share_analytics": false
+    },
+    "context": {
+      "name": "Orchard",
+      "timezone": "UTC",
+      "location": null,
+      "occupation": null,
+      "work_hours_start": 9,
+      "work_hours_end": 17,
+      "quiet_hours_start": 22,
+      "quiet_hours_end": 7,
+      "preferred_browser": "chrome",
+      "preferred_terminal": "powershell",
+      "favorite_apps": []
+    },
+    "tool_configs": {},
+    "tags": [],
+    "notes": ""
+  }
+}
