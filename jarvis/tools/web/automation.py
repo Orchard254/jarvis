@@ -178,12 +178,24 @@ class WebAutomationEngine:
             self._chrome_process = self.launch_chrome_with_debug()
             # Wait briefly for Chrome to start
             import time
-            time.sleep(2)
+            time.sleep(3)  # Increased wait time for Chrome to fully initialize
 
-            # Connect to the launched Chrome via CDP
-            self.browser = self.playwright.chromium.connect_over_cdp(
-                f"http://127.0.0.1:{self._chrome_debug_port}"
-            )
+            # Connect to the launched Chrome via CDP with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    self.browser = self.playwright.chromium.connect_over_cdp(
+                        f"http://127.0.0.1:{self._chrome_debug_port}",
+                        timeout=10000  # 10 second timeout for connection
+                    )
+                    break
+                except Exception as conn_error:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Connection attempt {attempt + 1} failed: {conn_error}. Retrying...")
+                        time.sleep(2)
+                    else:
+                        raise
+            
             contexts = self.browser.contexts
             if contexts:
                 self.context = contexts[0]
@@ -196,6 +208,13 @@ class WebAutomationEngine:
             logger.info(f"Browser started (headless={headless}, debug_port={self._chrome_debug_port})")
         except Exception as e:
             logger.error(f"Failed to start browser: {e}")
+            # Cleanup on failure
+            if self.playwright:
+                try:
+                    self.playwright.stop()
+                except:
+                    pass
+                self.playwright = None
             raise
     
     def stop(self):

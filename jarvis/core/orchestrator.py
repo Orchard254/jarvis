@@ -1049,10 +1049,11 @@ RULES:
                                     'params': params,
                                     'thought': f"Auto-extracted from plan: {first_step.get('reason', 'Step 1')}"
                                 }
-                        # No valid steps - return error message
+                        # No valid steps - return error message with more context
+                        goal = parsed_json.get('goal', 'the task')
                         return {
                             'type': 'FINAL',
-                            'response': "I encountered an issue. Let me try again.",
+                            'response': f"I had trouble completing: {goal}. Could you provide more details or try a different approach?",
                             'thought': 'Empty plan detected'
                         }
                     # Check for direct tool call in JSON format
@@ -1748,7 +1749,8 @@ RULES:
                     successful = task_summary['successful_steps']
                     total = task_summary['total_steps']
                     if successful == 0 and error_messages:
-                        response_text = f"Task could not be completed. Issues encountered: {'; '.join(error_messages[:2])}"
+                        # Provide more helpful error message
+                        response_text = f"I couldn't complete this task. The main issue was: {error_messages[0]}. You can try again or ask me to do something simpler."
                     else:
                         response_text = f"Task completed: {successful}/{total} steps successful."
                         if error_messages:

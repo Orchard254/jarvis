@@ -72,23 +72,41 @@ def take_screenshot(filename: Optional[str] = None) -> tuple[bool, str, Optional
 
 
 class ScreenshotTool(BaseTool):
-    """Take a screenshot of the current screen."""
+    """Take a screenshot of the current screen and save it."""
     
     name = "screenshot"
-    description = "Take a screenshot of the current screen. The image is saved and can be analyzed."
-    parameters = {}
+    description = "Take a screenshot of the current screen. The image is saved to the screenshots folder."
+    parameters = {
+        "filename": {
+            "type": "string",
+            "description": "Optional filename (without extension). If not provided, auto-generated timestamp is used.",
+            "default": None
+        }
+    }
     required_parameters = []
     
     def validate(self, **kwargs) -> tuple[bool, str]:
+        filename = kwargs.get("filename")
+        if filename and not isinstance(filename, str):
+            return False, "filename must be a string"
+        if filename and any(c in filename for c in '<>:"/\\|?*'):
+            return False, "filename contains invalid characters"
         return True, ""
     
     def execute(self, **kwargs) -> ToolResult:
-        success, message, base64_data = take_screenshot()
+        filename = kwargs.get("filename")
+        
+        # Generate proper filename if provided
+        if filename:
+            # Ensure no extension is added twice
+            base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
+            full_filename = f"{base_name}.png"
+            success, message, base64_data = take_screenshot(filename=full_filename)
+        else:
+            success, message, base64_data = take_screenshot()
         
         if success:
-            # Create result with image_base64 key as required
             result = ToolResult.ok(message)
-            # Store base64 in output for potential vision analysis
             result.output = message
             return result
         else:
