@@ -792,6 +792,8 @@ RULES:
         
         CRITICAL: Only allows SINGLE tool calls. Multiple tools in one response are rejected.
         
+        Uses the tool_parser module for deterministic parsing with schema validation.
+        
         Looks for patterns like:
         - "TOOL: tool_name(params)"
         - JSON format (fallback)
@@ -805,42 +807,35 @@ RULES:
         
         text = text.strip()
         
-        # FIX #16: Handle nested parens by matching up to the closing paren of the outermost call
+        # Use the new tool_parser module for detection and parsing
+        # First check for multiple tool calls (which we reject)
         tool_matches = re.findall(r'TOOL:\s*\w+\s*\([^)]*(?:\([^)]*\))*[^)]*\)', text, re.IGNORECASE)
         if len(tool_matches) > 1:
             logger.warning(f"Multiple tool calls detected in response: {tool_matches}")
             return None  # Reject multiple tool calls
 
-        # Check for TOOL: pattern (case insensitive, flexible spacing) — FIX #16: support nested parens
-        tool_match = re.search(r'TOOL:\s*(\w+)\s*\((.+?)\)\s*$', text, re.IGNORECASE | re.DOTALL)
-        if tool_match:
-            tool_name = tool_match.group(1)
-            params_str = tool_match.group(2)
-            
-            # Parse parameters
-            params = {}
-            if params_str.strip():
-                # Simple parameter parsing: param1='value1', param2='value2'
-                param_matches = re.findall(r'(\w+)\s*=\s*[\'"]([^\'"]*)[\'"]', params_str)
-                params = {k: v for k, v in param_matches}
-            
+        # Delegate to the dedicated parser module
+        parsed = parse_tool_call(text)
+        if parsed and parsed.get('type') == 'tool':
+            # Convert to the internal format expected by _handle_unified_mode
             return {
                 'type': 'TOOL',
-                'tool': tool_name,
-                'params': params,
-                'thought': 'Single tool call from natural language'
+                'tool': parsed['name'],
+                'params': parsed['args'],
+                'thought': parsed.get('thought', 'Parsed by tool_parser module')
             }
         
-        # Check for simpler tool patterns like "use tool_name" or "call tool_name"
+        # Fallback: Check for simpler tool patterns like "use tool_name" or "call tool_name"
         simple_tool_matches = re.findall(r'(?:use|call|run)\s+(\w+)', text, re.IGNORECASE)
         if len(simple_tool_matches) == 1:  # Only allow exactly one
             tool_name = simple_tool_matches[0]
-            return {
-                'type': 'TOOL',
-                'tool': tool_name,
-                'params': {},
-                'thought': 'Simple single tool call detected'
-            }
+            if tool_name.lower() not in ['this', 'that', 'it', 'the', 'a', 'an']:
+                return {
+                    'type': 'TOOL',
+                    'tool': tool_name,
+                    'params': {},
+                    'thought': 'Simple single tool call detected'
+                }
         elif len(simple_tool_matches) > 1:
             logger.warning(f"Multiple simple tool calls detected: {simple_tool_matches}")
             return None  # Reject multiple tool calls
