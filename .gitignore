@@ -21,18 +21,10 @@ wheels/
 .installed.cfg
 *.egg
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-coverage/
-
 # Environment
-.env
-.env.local
-.env.*
 .venv/
 venv/
+env/
 ENV/
 
 # IDE
@@ -40,8 +32,11 @@ ENV/
 .idea/
 *.swp
 *.swo
-*.tmp
 
 # Logs
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
 ```
