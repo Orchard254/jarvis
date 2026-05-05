@@ -162,8 +162,11 @@ class AnalyzeScreenTool(BaseTool):
                 # Return formatted string suitable for LLM reading
                 formatted_output = screen_state.to_formatted_string()
                 return ToolResult.ok(f"Screen Analysis:\n{formatted_output}")
+            elif not analysis.get('success') and analysis.get('error') == 'No Ollama client configured':
+                return ToolResult.fail(error="Vision analyzer not initialized. Please restart JARVIS.")
             else:
-                return ToolResult.fail(error="Vision analysis returned no results")
+                error_msg = analysis.get('error', "Vision analysis returned no results")
+                return ToolResult.fail(error=error_msg)
                 
         except ImportError as e:
             return ToolResult.fail(error=f"Vision module not available: {e}")
@@ -299,6 +302,8 @@ class FindOnScreenTool(BaseTool):
                 y = coords.get('y')
                 confidence = result.get('confidence', 0.5)
                 return ToolResult.ok(f"Found '{description}' at coordinates ({x}, {y}) with {confidence:.0%} confidence")
+            elif not result.get('success') and result.get('error') == 'No Ollama client configured':
+                return ToolResult.fail(error="Vision analyzer not initialized. Please restart JARVIS.")
             else:
                 error_msg = result.get('error', f"Could not find '{description}' on screen")
                 return ToolResult.fail(error=error_msg)

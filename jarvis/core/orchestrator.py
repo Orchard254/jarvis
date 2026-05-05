@@ -232,6 +232,10 @@ class Orchestrator:
         self.intent_classifier = IntentClassifier(self.brain.client)
         self.vision_analyzer = VisionAnalyzer(self.brain.client)
         
+        # Initialize vision analyzer for screen analysis tools
+        from jarvis.perception.vision import get_vision_analyzer
+        get_vision_analyzer(self.brain.client)
+        
         # Reasoning - Tree of Thoughts Integration
         # Initialize ToT engine for multi-path strategic planning
         self.tot_engine = TreeOfThoughtsEngine(
