@@ -11,6 +11,7 @@ Improvements over original control_plane.py:
 
 import re
 import os
+import threading
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
@@ -20,6 +21,36 @@ class ToolGuard:
     Validates tool calls before execution.
     Checks for dangerous operations, path traversal, and policy violations.
     """
+    
+    # FIX #14: Single source of truth for all dangerous patterns
+    # Used by _validate_run_python, _contains_dangerous_content, and validate_generated_tool_code
+    
+    # Strict patterns: blocked for user-submitted code
+    STRICT_PATTERNS = [
+        r'__import__\s*\(',
+        r'ctypes\.windll',
+        r'ctypes\.cdll',
+        r'os\.system\s*\(',
+        r'subprocess\.(call|run|Popen)\s*\(',
+        r'eval\s*\(',
+        r'exec\s*\(',
+    ]
+    
+    # Destructive patterns: always blocked (both strict and permissive)
+    DESTRUCTIVE_PATTERNS = [
+        "format c:",
+        "format d:",
+        "rd /s /q c:\\",
+        "del /f /s /q c:\\windows",
+        "reg delete HKLM\\SYSTEM",
+        "net user administrator",
+    ]
+    
+    DESTRUCTIVE_REGEX = [
+        r"shutil\.rmtree\s*\(\s*['\"]C:\\Windows",
+        r"shutil\.rmtree\s*\(\s*['\"]C:\\Program Files",
+        r"os\.remove\s*\(\s*['\"]C:\\Windows",
+    ]
     
     # All original unsafe patterns from control_plane.py - must be preserved
     UNSAFE_PATTERNS = [
@@ -36,15 +67,17 @@ class ToolGuard:
         r'rm\s+-rf\s+/',       # Delete root filesystem (Unix)
     ]
     
-    # Dangerous system paths that should never be modified
+    # FIX #11: Dangerous system paths — scoped to actual system directories only
     PROTECTED_PATHS = [
         r'C:\\Windows',
         r'C:\\Program Files',
         r'C:\\Program Files \(x86\)',
-        r'C:\\Users\\.*\\AppData',
-        r'.*\.sys$',
-        r'.*\.dll$',
-        r'.*\.exe$',
+        r'C:\\Users\\.*\\AppData\\Local\\Microsoft',
+        r'C:\\Users\\.*\\AppData\\Roaming\\Microsoft',
+        r'C:\\Users\\.*\\AppData\\Local\\Temp\\.*\.sys$',
+        r'C:\\Windows\\.*\.dll$',
+        r'C:\\Windows\\.*\.sys$',
+        r'C:\\Windows\\System32\\.*\.exe$',
     ]
     
     def __init__(self, registry=None):
@@ -335,58 +368,32 @@ class ToolGuard:
     def _validate_run_python(self, params: Dict[str, Any], is_generated_tool: bool = False) -> Tuple[bool, str]:
         """Validate Python code execution.
         
-        Args:
-            params: Parameters containing 'code' to validate
-            is_generated_tool: If True, use permissive rules for generated tools.
-                              If False, use strict rules for user-submitted code.
+        FIX #14: Uses unified STRICT_PATTERNS / DESTRUCTIVE_PATTERNS / DESTRUCTIVE_REGEX.
         """
         code = params.get('code', '')
         if not code:
             return False, "No code provided"
         
+        # Always check destructive patterns (both strict and permissive)
+        code_lower = code.lower()
+        for pattern in self.DESTRUCTIVE_PATTERNS:
+            if pattern.lower() in code_lower:
+                return False, f"Destructive operation blocked: {pattern}"
+        
+        for pattern in self.DESTRUCTIVE_REGEX:
+            if re.search(pattern, code, re.IGNORECASE):
+                return False, f"Destructive operation blocked: {pattern}"
+        
         if is_generated_tool:
-            # Permissive rules for generated tools - only block absolute destruction
-            destructive_patterns = [
-                "format c:",
-                "format d:",
-                "rd /s /q c:\\\\",
-                "del /f /s /q c:\\\\windows",
-                "reg delete HKLM\\\\SYSTEM",
-                "net user administrator",
-            ]
-            code_lower = code.lower()
-            for pattern in destructive_patterns:
-                if pattern.lower() in code_lower:
-                    return False, f"Destructive operation blocked: {pattern}"
-            
-            # Block shutil.rmtree targeting Windows/Program Files directories
-            import re
-            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
-                return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
-            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", code, re.IGNORECASE):
-                return False, "Destructive operation blocked: shutil.rmtree on C:\\Program Files"
-            
+            # Permissive rules for generated tools — only destructive patterns above apply
             return True, ""
         else:
-            # Strict rules for user-submitted code - block dangerous patterns
-            # Only block truly dangerous operations with user-controlled input
-            dangerous_patterns = [
-                "__import__",  # Block bypass imports
-            ]
-            for pattern in dangerous_patterns:
-                if pattern in code:
+            # Strict rules for user-submitted code — block additional dangerous patterns
+            for pattern in self.STRICT_PATTERNS:
+                if re.search(pattern, code, re.IGNORECASE):
                     return False, f"Dangerous pattern detected: {pattern}"
             
-            # Block direct filesystem destruction using regex for flexibility
-            import re
-            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\['\"]", code):
-                return False, "Destructive operation blocked: shutil.rmtree on C:\\"
-            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
-                return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
-            if re.search(r"os\.remove\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
-                return False, "Destructive operation blocked: os.remove on C:\\Windows"
-            
-            # Block registry destruction (winreg + DeleteKey combined)
+            # Block registry destruction
             if 'winreg' in code and 'DeleteKey' in code:
                 return False, "Registry destruction detected"
             
@@ -539,12 +546,15 @@ class ToolGuard:
         self.audit_log = []
 
 
-# Singleton instance
+# Singleton instance — FIX #8: thread-safe
 _guard_instance = None
+_guard_lock = threading.Lock()
 
 def get_tool_guard() -> ToolGuard:
-    """Get the singleton ToolGuard instance."""
+    """Get the singleton ToolGuard instance (thread-safe)."""
     global _guard_instance
     if _guard_instance is None:
-        _guard_instance = ToolGuard()
+        with _guard_lock:
+            if _guard_instance is None:
+                _guard_instance = ToolGuard()
     return _guard_instance

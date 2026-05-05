@@ -12,6 +12,7 @@ The central coordinator for JARVIS that:
 
 import logging
 import threading
+import hashlib
 import time
 from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime
@@ -120,7 +121,7 @@ class Orchestrator:
         self.input_filter = InputFilter()
         self.plan_validator = PlanValidator()
         self.plan_validator.tool_registry = self.tool_registry
-        self.tool_guard = ToolGuard()
+        self.tool_guard = ToolGuard(registry=self.tool_registry)  # FIX #1: Pass registry reference
         self.audit_log = AuditLog()
         
         # Memory system
@@ -225,6 +226,7 @@ class Orchestrator:
         self._max_app_history = 10
         self._last_app_check_time: float = 0
         self._app_check_interval: float = 2.0  # Check active app every 2 seconds
+        self._last_activity_time: float = time.time()  # FIX #9: Track real idle time
         
         # Abort mechanism
         self._abort_flag = threading.Event()
@@ -276,10 +278,8 @@ class Orchestrator:
         idle_thread.start()
         self.ambient_monitors.append(idle_thread)
         
-        # Timer monitor thread
-        timer_thread = threading.Thread(target=self._timer_monitor_loop, daemon=True)
-        timer_thread.start()
-        self.ambient_monitors.append(timer_thread)
+        # FIX #10: Timer monitor removed — was a no-op burning a thread.
+        # Re-add when actual timer/scheduler logic is implemented.
         
         # App context monitor thread (NEW)
         app_monitor_thread = threading.Thread(target=self._app_context_monitor_loop, daemon=True)
@@ -323,12 +323,10 @@ class Orchestrator:
             time.sleep(10)  # Check every 10 seconds
     
     def _idle_monitor_loop(self) -> None:
-        """Monitor user idle time in background."""
-        last_activity = time.time()
+        """Monitor user idle time in background. FIX #9: track real activity from process_command."""
         while self.running:
             try:
-                # Check if user is idle (no input for extended period)
-                idle_time = time.time() - last_activity
+                idle_time = time.time() - self._last_activity_time
                 if idle_time > 300:  # 5 minutes
                     logger.debug(f"User idle for {idle_time:.0f} seconds")
             except Exception as e:
@@ -412,6 +410,7 @@ class Orchestrator:
         
         start_time = time.time()
         self.state['current_activity'] = 'processing_command'
+        self._last_activity_time = time.time()  # FIX #9: Record activity
         
         try:
             # Update app context tracking
@@ -694,7 +693,7 @@ class Orchestrator:
                 'parameters': getattr(tool, 'parameters', {})
             })
         import json
-        return json.dumps(tools_list[:50])  # Limit to first 50 tools
+        return json.dumps(tools_list)  # FIX #18: Send all tools, not just first 50
     
     def _build_single_loop_prompt(self, tools_json: str) -> str:
         """Build system prompt for single-loop execution with natural language parsing."""
@@ -789,14 +788,14 @@ RULES:
         
         text = text.strip()
         
-        # Check for multiple TOOL calls (reject if more than one)
-        tool_matches = re.findall(r'TOOL:\s*\w+\s*\([^)]*\)', text, re.IGNORECASE)
+        # FIX #16: Handle nested parens by matching up to the closing paren of the outermost call
+        tool_matches = re.findall(r'TOOL:\s*\w+\s*\([^)]*(?:\([^)]*\))*[^)]*\)', text, re.IGNORECASE)
         if len(tool_matches) > 1:
             logger.warning(f"Multiple tool calls detected in response: {tool_matches}")
             return None  # Reject multiple tool calls
-        
-        # Check for TOOL: pattern (case insensitive, flexible spacing)
-        tool_match = re.search(r'TOOL:\s*(\w+)\s*\(([^)]*)\)', text, re.IGNORECASE)
+
+        # Check for TOOL: pattern (case insensitive, flexible spacing) — FIX #16: support nested parens
+        tool_match = re.search(r'TOOL:\s*(\w+)\s*\((.+?)\)\s*$', text, re.IGNORECASE | re.DOTALL)
         if tool_match:
             tool_name = tool_match.group(1)
             params_str = tool_match.group(2)
@@ -848,9 +847,16 @@ RULES:
         return None
     
     def _execute_tool_in_loop(self, tool_name: str, params: Dict) -> str:
-        """Execute a single tool and return result as string."""
+        """Execute a single tool and return result as string. FIX #15: Add ToolGuard validation."""
         try:
-            tool = self.tool_registry.get_all_tools()[tool_name]
+            # FIX #15: Validate tool call through safety layer before execution
+            is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, params)
+            if not is_valid:
+                return f"Error: Tool call blocked by safety: {error_msg}"
+            
+            tool = self.tool_registry.get_all_tools().get(tool_name)
+            if tool is None:
+                return f"Error: Tool '{tool_name}' not found in registry"
             
             # Execute tool
             if hasattr(tool, 'execute'):
@@ -943,7 +949,7 @@ RULES:
         
         # Create plan object
         task_plan = self.task_executor.create_plan(
-            task_id=f"task_{hash(command) % 100000:08x}",
+            task_id=f"task_{hashlib.sha256(command.encode()).hexdigest()[:8]}",
             description=plan.get('goal', command),
             steps=task_steps
         )
@@ -1141,8 +1147,8 @@ RULES:
         
         system_prompt = get_system_prompt(mode='agent')
         
-        # Track consecutive failures
-        task_key = hash(command) % 10000
+        # Track consecutive failures — FIX #6: use SHA-256 instead of Python hash()
+        task_key = hashlib.sha256(command.encode()).hexdigest()[:8]
         
         # PREDICTIVE EXECUTION: Use LLM's internal knowledge for direct execution with TaskExecutor verification
         # This bypasses ReAct loops for tasks where the LLM already knows the answer
@@ -1751,8 +1757,8 @@ RULES:
             else:
                 logger.warning("Plan revision failed, proceeding with original plan")
         
-        # Check for duplicate action (loop prevention) using action memory
-        action_hash = hash(command) % 100000
+        # Check for duplicate action (loop prevention) using action memory — FIX #6: use SHA-256
+        action_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
         current_time = time.time()
         if action_hash in self._action_memory:
             last_executed = self._action_memory[action_hash]

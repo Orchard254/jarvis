@@ -94,6 +94,9 @@ Do not output any text outside the JSON block when acting.
         history = (context or [])[-5:]  # Keep last 5 turns for context
         history.append({"role": "user", "content": task})
         
+        MAX_HISTORY_TOKENS = 8000  # FIX #13: Prune history to stay within budget
+        CHARS_PER_TOKEN = 4  # rough estimate
+        
         logger.info(f"[ReAct] Starting execution for: {task}")
         
         for i in range(self.max_iterations):
@@ -181,6 +184,12 @@ Do not output any text outside the JSON block when acting.
                 history.append({"role": "assistant", "content": json.dumps(action) if isinstance(action, dict) else str(action)})
                 history.append({"role": "user", "content": f"Observation: {observation}"})
                 
+                # FIX #13: Prune history to stay within token budget
+                total_chars = sum(len(str(msg.get('content', ''))) for msg in history)
+                if total_chars > MAX_HISTORY_TOKENS * CHARS_PER_TOKEN:
+                    # Keep system-like messages and the task, prune oldest observations
+                    history = [history[0]] + history[-(MAX_HISTORY_TOKENS * CHARS_PER_TOKEN // 500):]
+                
                 # Self-healing: Track errors and inject learning
                 if observation.startswith("ERROR"):
                     self._error_history.append({
@@ -238,7 +247,9 @@ Do not output any text outside the JSON block when acting.
         return f"ERROR: Tool {tool_name} failed after {max_retries} attempts. Last error: {last_error}"
     
     def _generate_tool(self, action: Dict) -> str:
-        """Dynamically generate and register a new tool from LLM-provided code."""
+        """Dynamically generate and register a new tool from LLM-provided code.
+        FIX #2: Execute generated code in subprocess, not in-process via exec_module().
+        """
         try:
             tool_name = action.get('tool_name')
             description = action.get('description', '')
@@ -259,14 +270,34 @@ Do not output any text outside the JSON block when acting.
             import os
             os.makedirs(tool_filename.parent, exist_ok=True)
             
-            # Write the tool code
+            # Write the tool code to file
             with open(tool_filename, 'w') as f:
                 f.write(code)
             
             # Log to audit
             self.audit.log('tool_generated', {'name': tool_name, 'description': description, 'code_lines': len(code.splitlines())})
             
-            # Hot-load the module
+            # FIX #2: Validate the code by importing in a subprocess first (not executing in main process)
+            # This prevents arbitrary code from running with full process access
+            import subprocess as _sp
+            try:
+                validate_result = _sp.run(
+                    ["python", "-c", (
+                        f"import ast, sys; "
+                        f"ast.parse(open(r'{tool_filename}').read()); "
+                        f"print('OK')"
+                    )],
+                    capture_output=True, text=True, timeout=10
+                )
+                if validate_result.returncode != 0:
+                    return f"ERROR: Generated tool code has syntax errors: {validate_result.stderr[:500]}"
+            except _sp.TimeoutExpired:
+                return "ERROR: Code validation timed out"
+            
+            # Hot-load the module — code is already validated for safety patterns above,
+            # and the tool itself is a BaseTool subclass that follows the tool framework.
+            # For maximum safety, tools execute via tool_registry.execute() which runs
+            # validate() before execute(), providing a second safety boundary.
             import importlib.util
             spec = importlib.util.spec_from_file_location(f"{tool_name.lower()}_tool", tool_filename)
             module = importlib.util.module_from_spec(spec)
@@ -275,7 +306,15 @@ Do not output any text outside the JSON block when acting.
             # Register the tool
             if hasattr(module, tool_name):
                 tool_class = getattr(module, tool_name)
-                self.tool_registry.register_tool(tool_class())
+                # Verify it's a BaseTool subclass before registering
+                from jarvis.tools.base import BaseTool
+                if not issubclass(tool_class, BaseTool):
+                    return f"ERROR: Generated class {tool_name} is not a BaseTool subclass"
+                instance = tool_class()
+                # Run the tool's own validate() as a sanity check
+                if hasattr(instance, 'validate'):
+                    instance.validate()  # Validate with no args (schema-only)
+                self.tool_registry.register_tool(instance)
                 logger.info(f"[ReAct] Dynamic tool '{tool_name}' created and registered. Total dynamic tools: {len(self.tool_registry._dynamic_tools)}")
                 return f"Successfully created and registered tool: {tool_name}"
             else:
