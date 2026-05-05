@@ -219,6 +219,9 @@ class Orchestrator:
         self._failed_actions: List[Dict[str, Any]] = []  # Last 10 failed actions
         self._max_recent_results = 20
         self._max_failed_actions = 10
+        
+        # User activity tracking for idle monitor (FIX #S)
+        self._last_user_activity = time.time()
 
         # App context tracking - track which apps are active for context-aware operations
         self._last_active_app: Optional[str] = None
@@ -326,7 +329,7 @@ class Orchestrator:
         """Monitor user idle time in background. FIX #9: track real activity from process_command."""
         while self.running:
             try:
-                idle_time = time.time() - self._last_activity_time
+                idle_time = time.time() - self._last_user_activity
                 if idle_time > 300:  # 5 minutes
                     logger.debug(f"User idle for {idle_time:.0f} seconds")
             except Exception as e:
@@ -334,12 +337,23 @@ class Orchestrator:
             time.sleep(60)  # Check every minute
     
     def _timer_monitor_loop(self) -> None:
-        """Monitor timers and scheduled tasks in background."""
+        """Monitor timers and scheduled tasks in background. FIX #T: Check jarvis_data/timers/ for expired timers."""
+        import json
+        from pathlib import Path
+        timer_dir = Path('jarvis_data/timers')
+        timer_dir.mkdir(parents=True, exist_ok=True)
         while self.running:
             try:
-                # Check for any pending timers or scheduled tasks
-                # This would integrate with a scheduler if present
-                pass
+                now = time.time()
+                for timer_file in timer_dir.glob('*.json'):
+                    try:
+                        data = json.loads(timer_file.read_text())
+                        if now >= data.get('trigger_at', float('inf')):
+                            msg = data.get('message', 'Timer complete')
+                            self._speak(msg)
+                            timer_file.unlink()
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.debug(f"Timer monitor error: {e}")
             time.sleep(5)  # Check every 5 seconds
@@ -411,6 +425,7 @@ class Orchestrator:
         start_time = time.time()
         self.state['current_activity'] = 'processing_command'
         self._last_activity_time = time.time()  # FIX #9: Record activity
+        self._last_user_activity = time.time()  # FIX #S: Update user activity timestamp
         
         try:
             # Update app context tracking

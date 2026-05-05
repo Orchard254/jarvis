@@ -52,7 +52,7 @@ RULES:
 3. BE SPECIFIC: Do not say "open site". Say "navigate_to_url: https://www.kilimall.co.ke".
 4. HANDLE TYPOS: "refubished" -> "refurbished", "kilimal" -> "kilimall".
 5. MINIMIZE STEPS: Combine actions where possible.
-6. CHECK RECENT RESULTS: Before planning, review recent successful results below. If the answer is already available, respond directly without executing tools.
+6. CHECK RECENT RESULTS: Before planning, review recent successful results below. If the answer is already available in recent results, respond directly without executing tools. DO NOT re-execute tools that have already provided the needed information.
 7. AVOID FAILED ACTIONS: Review failed actions below. DO NOT retry tools that failed with the same parameters unless the error is clearly resolved.
 8. TEXT CLEARING: To clear text in a text editor, use press_key with "Ctrl+A" then press_key with "Delete". NEVER use hundreds of backspace characters.
 9. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
@@ -68,6 +68,7 @@ RULES:
     - focus_window requires "title"
     - create_file/write_file/read_file/delete_file require "path"
 11. CLARIFICATION FLAG: Set "needs_clarification": true ONLY if the request is ambiguous, dangerous, or missing critical information. Set to false for clear, straightforward requests.
+12. STEP INDEPENDENCE: Each step should be independent. Do NOT include steps that simply retrieve data that was already retrieved in a previous step. If a previous step already obtained the information, use it directly in subsequent steps.
 
 {context_section}
 AVAILABLE TOOLS:
