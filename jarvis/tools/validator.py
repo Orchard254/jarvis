@@ -86,14 +86,84 @@ class ToolCallValidator:
             logger.warning(f"Validation failed - type error: {type_error}")
             return False, type_error
         
-        # Step 4: Run tool-specific validation
+        # Step 4: Run tool-specific validation (includes semantic checks)
         is_valid, error_msg = tool.validate(**args)
         if not is_valid:
             logger.warning(f"Validation failed - tool validation: {error_msg}")
             return False, error_msg
         
+        # Step 5: Semantic safety check (NEW)
+        # Check for dangerous patterns that schema validation won't catch
+        semantic_error = self._semantic_safety_check(tool_name, args)
+        if semantic_error:
+            logger.warning(f"Validation failed - semantic safety: {semantic_error}")
+            return False, semantic_error
+        
         logger.debug(f"Validation passed for {tool_name}")
         return True, ""
+    
+    def _semantic_safety_check(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Perform semantic safety validation that schema can't catch.
+        
+        Examples:
+        - file.delete with path="C:\\" → dangerous (root of system drive)
+        - file.write with path="/etc/passwd" → dangerous (system file)
+        - system.run_command with "rm -rf /" → dangerous (destructive command)
+        
+        Args:
+            tool_name: Tool being validated
+            args: Tool arguments
+            
+        Returns:
+            Error message if unsafe, None if safe
+        """
+        # Dangerous path patterns - exact matches or root directories only
+        dangerous_root_paths = [
+            "c:\\", "c:/",  # Root of system drive (lowercase for comparison)
+            "/etc/", "/bin/", "/usr/", "/root/", "/",  # Linux system dirs
+            "/System/", "/Applications/",  # macOS system dirs
+        ]
+        
+        # Dangerous substrings that should never appear in paths
+        dangerous_path_substrings = [
+            "windows\\system32", "windows/system32",  # Windows system dir
+            "/etc/passwd", "/etc/shadow",  # Critical Linux files
+            "/bin/bash", "/bin/sh",  # Shell binaries (when used as file targets)
+        ]
+        
+        # Dangerous commands
+        dangerous_commands = [
+            "rm -rf /", "deltree", "format c:", "fdisk",
+            "shutdown -s -t 0", "shutdown /s /t 0",  # Immediate shutdown
+        ]
+        
+        # Check file operations - only block truly dangerous paths
+        if tool_name.startswith("file.") or "path" in args:
+            path = args.get("path", "").lower().strip()
+            
+            # Check for exact root matches (too broad)
+            for dangerous in dangerous_root_paths:
+                if path == dangerous or path.rstrip('\\/') == dangerous.rstrip('\\/'):
+                    return f"Dangerous path detected: '{args.get('path')}'. Operation not allowed for safety."
+            
+            # Check for dangerous substrings
+            for dangerous in dangerous_path_substrings:
+                if dangerous in path:
+                    return f"Dangerous path detected: '{args.get('path')}'. System directory access not allowed."
+        
+        # Check command execution
+        if "run_command" in tool_name or "execute" in tool_name:
+            cmd = args.get("command", "").lower()
+            for dangerous in dangerous_commands:
+                if dangerous in cmd:
+                    return f"Dangerous command detected: '{args.get('command')}'. Operation not allowed for safety."
+        
+        return None
     
     def _validate_parameter_types(
         self,
