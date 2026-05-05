@@ -298,6 +298,23 @@ class TypeTextTool(BaseTool):
         delay = kwargs.get("delay", 0.05)
         target_app = kwargs.get("target_app")
         
+        # If no target_app specified, try to detect if a common text editor is active
+        # This prevents typing into the terminal when Notepad/WordPad is open
+        if not target_app:
+            active_process = get_active_process_name()
+            active_title = get_active_window_title()
+            
+            # Common text editors that should receive typed text
+            text_editors = ['notepad', 'wordpad', 'winword', 'excel', 'powerpnt']
+            
+            # Check if a text editor is currently active
+            if active_process and any(editor in active_process.lower() for editor in text_editors):
+                target_app = active_process.replace('.exe', '')
+                log.info(f"Auto-detected text editor: {target_app}")
+            # If terminal is active and no target specified, warn the user
+            elif active_process and any(term in active_process.lower() for term in ['python.exe', 'cmd.exe', 'powershell.exe', 'terminal', 'wt.exe']):
+                log.warning(f"type_text called with terminal active ('{active_title}'). Text will be typed into terminal. Consider specifying target_app parameter.")
+        
         # Ensure the target application is active if specified
         if target_app:
             success, message = ensure_window_active(target_app, target_app)

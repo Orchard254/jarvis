@@ -61,7 +61,7 @@ RULES:
     - close_app requires "app" (e.g., {{"app": "notepad"}})
     - navigate_to_url requires "url" (e.g., {{"url": "https://example.com"}})
     - press_key requires "key" (e.g., {{"key": "Ctrl+A"}})
-    - type_text requires "text" (e.g., {{"text": "hello"}})
+    - type_text requires "text" (e.g., {{"text": "hello"}}). CRITICAL: When typing after opening an app, ALWAYS include "target_app" parameter to ensure the correct window receives the text (e.g., {{"text": "hello", "target_app": "notepad"}})
     - fill_input requires "selector" and "value"
     - click_element requires "selector"
     - search_web requires "query"
