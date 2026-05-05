@@ -193,6 +193,7 @@ class TaskExecutor:
                     "extract_content",    # Content extraction may fail and need retry
                     "search_web",         # Search may need retry on failure
                     "navigate_to_url",   # Navigation may need retry
+                    "system_info",        # System info may be needed at different stages
                 ]
                 if tool_name in allowed_repeated_tools:
                     logger.debug(f"Allowing repeated {tool_name} call")
