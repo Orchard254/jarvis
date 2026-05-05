@@ -279,22 +279,39 @@ class OllamaClient:
                 
                 msg = data.get("message", {})
                 
-                # Filter out pure thinking chunks (empty content, not done)
-                content = (msg.get("content") or "").strip()
+                # Get raw content including thinking tags
+                raw_content = msg.get("content") or ""
                 is_done = data.get("done", True)
                 
-                # Skip logging if this is a pure thinking chunk with no content
-                if not content and not is_done:
+                # Check if this is a pure thinking chunk (empty content, not done)
+                # But DON'T skip if the response is done - we need to process it
+                if not raw_content.strip() and not is_done:
                     log.debug(f"[OLLAMA] Skipping thinking chunk from {name}")
                     continue
                 
-                # Warn if response is completely empty even when done
-                if not content and is_done:
-                    log.warning(f"[OLLAMA] Empty response from {name} endpoint (done=True). Model may not be responding correctly.")
-                    continue  # Try next endpoint
+                # For reasoning models, the content might contain <think>...</think> tags
+                # We should NOT treat this as empty - let the brain parse it
+                # Only consider it truly empty if there's NO content at all when done
+                if not raw_content.strip() and is_done:
+                    # Check if there are tool_calls which would make this valid
+                    tool_calls = msg.get("tool_calls") or []
+                    if tool_calls:
+                        # Valid response with tool calls but no text content
+                        return {
+                            "content": "",
+                            "tool_calls": tool_calls,
+                            "done": is_done,
+                            "error": None,
+                            "endpoint": name,
+                        }
+                    else:
+                        # Truly empty response
+                        log.warning(f"[OLLAMA] Empty response from {name} endpoint (done=True). Model may not be responding correctly.")
+                        continue  # Try next endpoint
                 
+                # Return the full content (including any thinking tags for brain to parse)
                 return {
-                    "content": content,
+                    "content": raw_content,
                     "tool_calls": msg.get("tool_calls") or [],
                     "done": is_done,
                     "error": None,
