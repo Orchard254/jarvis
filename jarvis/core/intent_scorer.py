@@ -39,9 +39,24 @@ class AdaptiveIntentScorer:
         'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
         'how are you', 'what can you do', 'who are you', 'tell me', 'explain',
         'what is', 'what are', 'how does', 'why', 'when', 'where', 'which',
-        'define', 'describe', 'summarize', 'list', 'show me how', 'can you',
+        'summarize', 'list', 'show me how', 'can you',
         'could you', 'would you', 'please tell', 'i want to know', 'what about'
     }
+    
+    # Vision-related keywords that should trigger agent mode (not chat)
+    VISION_KEYWORDS = {
+        'screenshot', 'screen', 'display', 'monitor', 'desktop',
+        'see', 'look', 'view', 'image', 'picture', 'photo',
+        'capture', 'snapshot', 'minimize', 'maximize', 'close', 'button',
+        'describe'  # "describe what you see" should be vision, not chat
+    }
+    
+    # Vision-related regex patterns for phrases
+    VISION_PATTERNS = [
+        r'what.*screen', r'whats.*screen', r"what's.*screen",
+        r'find.*button', r'find.*icon',
+        r'click.*on', r'press.*on'
+    ]
     
     # Explicit trigger phrases for agent mode
     EXPLICIT_TRIGGERS = [
@@ -96,6 +111,11 @@ class AdaptiveIntentScorer:
         for trigger in self.EXPLICIT_TRIGGERS:
             if trigger in user_input_lower:
                 return 95, f"Explicit trigger: '{trigger}'"
+
+        # 1b. Vision-related commands — high priority agent mode
+        vision_score = self._check_vision_keywords(user_input_lower)
+        if vision_score > 0:
+            return vision_score, f"Vision command detected ({vision_score})"
 
         # 2. Determine if any agentic verb is present
         words = set(re.findall(r'\b\w+\b', user_input_lower))
@@ -173,6 +193,30 @@ class AdaptiveIntentScorer:
         verb_count = len(found_verbs)
         base_score = 60 + (verb_count * 10)  # 60-90 range
         return min(90, base_score)
+    
+    def _check_vision_keywords(self, user_input: str) -> int:
+        """
+        Check for vision-related keywords that should trigger agent mode.
+        Returns high score (70-85) for vision commands.
+        """
+        import re
+        
+        # First check regex patterns for phrases like "what's on screen"
+        for pattern in self.VISION_PATTERNS:
+            if re.search(pattern, user_input):
+                return 80  # High priority for screen-related questions
+        
+        # Direct keyword matches
+        words = set(re.findall(r'\b\w+\b', user_input))
+        matched_keywords = words & self.VISION_KEYWORDS
+        
+        if matched_keywords:
+            # Score based on number of matched keywords
+            keyword_count = len(matched_keywords)
+            base_score = 70 + (keyword_count * 5)  # 70-85 range
+            return min(85, base_score)
+        
+        return 0
     
     def _check_chat_indicators_strict(self, user_input: str, has_agentic_verb: bool) -> float:
         """
