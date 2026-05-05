@@ -25,8 +25,8 @@ REQUIRED_PARAMETERS = {
     'fill_input': ['selector', 'value'],
     'click_element': ['selector'],
     'search_web': ['query'],
-    'open_app': ['app_name'],
-    'close_app': ['app_name'],
+    'open_app': ['app'],
+    'close_app': ['app'],
     'press_key': ['key'],
     'type_text': ['text'],
     'focus_window': ['title'],
@@ -57,8 +57,8 @@ RULES:
 8. TEXT CLEARING: To clear text in a text editor, use press_key with "Ctrl+A" then press_key with "Delete". NEVER use hundreds of backspace characters.
 9. OUTPUT ONLY JSON: No markdown, no explanations, just raw JSON.
 10. ALWAYS INCLUDE REQUIRED PARAMETERS: 
-    - open_app requires "app_name" (e.g., {{"app_name": "notepad"}})
-    - close_app requires "app_name" (e.g., {{"app_name": "notepad"}})
+    - open_app requires "app" (e.g., {{"app": "notepad"}})
+    - close_app requires "app" (e.g., {{"app": "notepad"}})
     - navigate_to_url requires "url" (e.g., {{"url": "https://example.com"}})
     - press_key requires "key" (e.g., {{"key": "Ctrl+A"}})
     - type_text requires "text" (e.g., {{"text": "hello"}})
