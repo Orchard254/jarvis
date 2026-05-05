@@ -1,44 +1,15 @@
 ```
-# Python
-__pycache__/
+# Python compiled files
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
 
-# Compiled and build artifacts
-*.o
-*.obj
-*.so
-*.dll
-*.exe
-
-# Dependencies
-.venv/
-venv/
-env/
-node_modules/
-
-# Logs and temp files
-*.log
+# Temp files
 *.tmp
-*.swp
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
+# Audio files (like temp_tts.mp3)
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
 ```

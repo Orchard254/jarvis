@@ -257,18 +257,17 @@ class TTSManager:
         """
         self.config = config or {}
         self.enabled = self.config.get('tts_enabled', True)
-        self.preferred_engine = self.config.get('tts_engine', 'kokoro')
-        self.voice = self.config.get('tts_voice', 'af_bella')
+        self.preferred_engine = 'edge-tts'  # Force edge-tts only
+        self.voice = self.config.get('tts_voice', 'en-US-JennyNeural')
         self.speed = self.config.get('tts_speed', 1.0)
+        
+        # Set default voice for Edge TTS
+        if not self.voice or self.voice in ['af_bella', 'af_heart', 'af_nicole', 'af_sarah', 'af_sky', 'am_adam', 'am_michael']:
+            self.voice = "en-US-JennyNeural"
         
         # Initialize engines
         self._engines: Dict[str, TTSEngine] = {}
         self._active_engine: Optional[TTSEngine] = None
-        
-        # Set default voice based on preferred engine
-        if self.preferred_engine == 'edge-tts' and (not self.voice or self.voice in ['af_bella', 'af_heart', 'af_nicole', 'af_sarah', 'af_sky', 'am_adam', 'am_michael']):
-            # Kokoro voices are not compatible with Edge TTS, use Edge TTS default
-            self.voice = "en-US-JennyNeural"
         
         self._initialize_engines()
         
@@ -276,22 +275,13 @@ class TTSManager:
     
     def _initialize_engines(self) -> None:
         """Initialize all available TTS engines."""
-        # Try to initialize preferred engine first
-        engine_order = ['kokoro', 'edge-tts', 'pyttsx3']
-        
-        # Reorder to put preferred engine first
-        if self.preferred_engine in engine_order:
-            engine_order.remove(self.preferred_engine)
-            engine_order.insert(0, self.preferred_engine)
+        # Only initialize edge-tts engine
+        engine_order = ['edge-tts']
         
         for engine_name in engine_order:
             try:
-                if engine_name == 'kokoro':
-                    engine = KokoroEngine(voice=self.voice, speed=self.speed)
-                elif engine_name == 'edge-tts':
+                if engine_name == 'edge-tts':
                     engine = EdgeTTSEngine(voice=self.voice, speed=self.speed)
-                elif engine_name == 'pyttsx3':
-                    engine = Pyttsx3Engine(voice=self.voice, speed=self.speed)
                 else:
                     continue
                 
@@ -336,22 +326,7 @@ class TTSManager:
         
         # Run in background thread to avoid blocking
         def _speak_thread():
-            success = self._active_engine.speak(text)
-            if not success:
-                # Try fallback engines
-                current_engine_name = self._get_active_engine_name()
-                for name, engine in self._engines.items():
-                    if engine is not self._active_engine:
-                        logger.info(f"Switching to fallback engine: {name}")
-                        self._active_engine = engine
-                        # Set appropriate voice for the new engine
-                        if name == 'edge-tts' and self.voice in ['af_bella', 'af_heart', 'af_nicole', 'af_sarah', 'af_sky', 'am_adam', 'am_michael']:
-                            engine.set_voice("en-US-JennyNeural")
-                        else:
-                            engine.set_voice(self.voice)
-                        if engine.speak(text):
-                            break
-                        # If this engine also fails, continue to next fallback
+            self._active_engine.speak(text)
         
         thread = threading.Thread(target=_speak_thread, daemon=True)
         thread.start()
