@@ -89,62 +89,60 @@ class AdaptiveIntentScorer:
             logger.error(f"Failed to save intent memory: {e}")
     
     def score_intent(self, user_input: str, context: Optional[Dict] = None) -> Tuple[int, str]:
-        """
-        Score user intent from 0-100
-        
-        Returns:
-            Tuple of (score, reasoning)
-        """
         user_input_lower = user_input.lower().strip()
-        scores = []
         reasons = []
-        
-        # 1. Check explicit triggers (immediate high score)
+
+        # 1. Explicit triggers — immediate return
         for trigger in self.EXPLICIT_TRIGGERS:
             if trigger in user_input_lower:
-                return 95, f"Explicit trigger detected: '{trigger}'"
-        
-        # 2. Check learned phrases (strong signal)
+                return 95, f"Explicit trigger: '{trigger}'"
+
+        # 2. Determine if any agentic verb is present
+        words = set(re.findall(r'\b\w+\b', user_input_lower))
+        has_agentic_verb = bool(words & self.AGENTIC_VERBS)
+
+        # 3. Chat block — only fires when there is NO agentic verb
+        #    Fixes: 'write hello world' was blocked because 'hello' matched chat
+        #    Now: 'hello' alone with no action verb = chat
+        chat_score = self._check_chat_indicators_strict(user_input_lower, has_agentic_verb)
+        if chat_score > 0 and not has_agentic_verb:
+            return 20, f"Chat message — no action verb detected"
+
+        # 4. Collect positive signals — take MAX not average
+        #    Averaging was the bug: context score of 30 dragged 90+70+90 down to 65
+        positive_scores = []
+
         learned_score = self._check_learned_phrases(user_input_lower)
         if learned_score > 0:
-            scores.append(learned_score * 0.9)  # 90% weight
-            reasons.append(f"Learned pattern match ({learned_score})")
-        
-        # 3. Check agentic verbs
+            positive_scores.append(learned_score * 0.9)
+            reasons.append(f"Learned pattern ({int(learned_score * 0.9)})")
+
         verb_score = self._check_agentic_verbs(user_input_lower)
         if verb_score > 0:
-            scores.append(verb_score)
-            reasons.append(f"Agentic verbs detected ({verb_score})")
-        
-        # 4. Check chat indicators (negative signal for agent mode)
-        chat_score = self._check_chat_indicators(user_input_lower)
-        if chat_score > 0:
-            scores.append(100 - chat_score)  # Invert: high chat = low agent
-            reasons.append(f"Chat indicators ({chat_score})")
-        
-        # 5. Context awareness
-        context_score = self._check_context(user_input_lower, context)
-        if context_score > 0:
-            scores.append(context_score)
-            reasons.append(f"Contextual relevance ({context_score})")
-        
-        # 6. Pattern similarity to past executed commands
-        similarity_score = self._check_similarity_to_executed(user_input_lower)
-        if similarity_score > 0:
-            scores.append(similarity_score)
-            reasons.append(f"Similarity to executed commands ({similarity_score})")
-        
-        # Calculate weighted average
-        if not scores:
-            # Default: check if it looks like a command
-            base_score = self._base_command_score(user_input_lower)
-            return base_score, "Base command analysis"
-        
-        final_score = sum(scores) / len(scores)
-        final_score = max(0, min(100, final_score))  # Clamp to 0-100
-        
-        reasoning = "; ".join(reasons)
-        return int(final_score), reasoning
+            positive_scores.append(verb_score)
+            reasons.append(f"Agentic verb ({int(verb_score)})")
+
+        sim_score = self._check_similarity_to_executed(user_input_lower)
+        if sim_score > 0:
+            positive_scores.append(sim_score)
+            reasons.append(f"Similar to past commands ({sim_score:.0f})")
+
+        # 5. Context is a small flat boost — never a drag
+        #    Old code added context score of 30 into the average which HURT the score
+        #    New code: context only adds +5 boost if strongly relevant, never hurts
+        if positive_scores:
+            ctx_score = self._check_context(user_input_lower, context)
+            if ctx_score >= 40:
+                positive_scores[0] = positive_scores[0] + 5  # tiny boost only
+
+        # 6. Final = MAX of all positive signals
+        if not positive_scores:
+            base = self._base_command_score(user_input_lower)
+            return base, "Base command analysis"
+
+        final_score = int(max(positive_scores))
+        final_score = max(0, min(100, final_score))
+        return final_score, "; ".join(reasons)
     
     def _check_learned_phrases(self, user_input: str) -> float:
         """Check against learned phrase database"""
@@ -176,17 +174,47 @@ class AdaptiveIntentScorer:
         base_score = 60 + (verb_count * 10)  # 60-90 range
         return min(90, base_score)
     
-    def _check_chat_indicators(self, user_input: str) -> float:
-        """Score based on chat-like patterns"""
-        for indicator in self.CHAT_INDICATORS:
-            if indicator in user_input:
-                return 80  # High chat probability
-        
-        # Question marks suggest chat
-        if user_input.endswith('?'):
+    def _check_chat_indicators_strict(self, user_input: str, has_agentic_verb: bool) -> float:
+        """
+        Only returns a chat score when input is genuinely conversational.
+        Does NOT match 'hello' inside 'hello world' or 'write hello'.
+        """
+        words = re.findall(r'\b\w+\b', user_input)
+        first_word = words[0] if words else ''
+
+        # Pure greetings — first word only, short sentence, no action verb
+        pure_greetings = {'hello', 'hi', 'hey', 'howdy', 'greetings'}
+        if first_word in pure_greetings and len(words) <= 5 and not has_agentic_verb:
+            return 80
+
+        # Time-of-day greetings
+        time_greetings = ['good morning', 'good afternoon', 'good evening', 'good night']
+        for g in time_greetings:
+            if user_input.startswith(g) and not has_agentic_verb:
+                return 80
+
+        # Conversational question openers — only without action verbs
+        question_starters = [
+            'how are you', 'what can you do', 'who are you', 'tell me about',
+            'what is ', 'what are ', 'how does ', 'why do', 'when did',
+            'can you explain', 'could you explain', 'do you know',
+            'i want to know', 'what about'
+        ]
+        if not has_agentic_verb:
+            for q in question_starters:
+                if q in user_input:
+                    return 80
+
+        # Questions — only without action verb
+        if user_input.endswith('?') and not has_agentic_verb:
             return 70
-        
+
         return 0
+
+    def _check_chat_indicators(self, user_input: str) -> float:
+        words = set(re.findall(r'\b\w+\b', user_input))
+        has_verb = bool(words & self.AGENTIC_VERBS)
+        return self._check_chat_indicators_strict(user_input, has_verb)
     
     def _check_context(self, user_input: str, context: Optional[Dict]) -> float:
         """Score based on recent context"""
