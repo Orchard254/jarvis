@@ -20,31 +20,18 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
 ENV/
-env/
-.venv/
-.env/
+env.bak/
+venv.bak/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*.tmp
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-
-# Coverage
-.coverage
-htmlcov/
-.coverage.*
 ```
