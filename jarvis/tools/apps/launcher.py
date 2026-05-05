@@ -63,23 +63,32 @@ class OpenAppTool(BaseTool):
     name = "open_app"
     description = "Open an application by name. Common apps: chrome, notepad, calculator, word, excel, edge, vscode, spotify."
     parameters = {
-        "app_name": {
+        "app": {
             "type": "string",
             "description": "Name of the application to open",
         },
     }
-    required_parameters = ["app_name"]
+    required_parameters = ["app"]
     
     def validate(self, **kwargs) -> tuple[bool, str]:
-        app_name = kwargs.get("app_name")
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = kwargs.get("app") or kwargs.get("app_name")
         if not app_name or not isinstance(app_name, str):
-            return False, "app_name must be a non-empty string"
+            return False, "app must be a non-empty string"
         return True, ""
     
     def execute(self, **kwargs) -> ToolResult:
         global _last_opened_hwnd, _last_opened_app
         
-        app_name = kwargs["app_name"].strip().lower()
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = kwargs.get("app") or kwargs.get("app_name")
+        if app_name is None:
+            return ToolResult(
+                success=False,
+                output="No app specified",
+                error="Missing required parameter: app"
+            )
+        app_name = app_name.strip().lower()
         
         # Use the complete app_mappings dict
         executable = APP_MAPPINGS.get(app_name, app_name)
@@ -240,7 +249,7 @@ class CloseAppTool(BaseTool):
     name = "close_app"
     description = "Force-close an application by name. Use with caution as unsaved work will be lost."
     parameters = {
-        "app_name": {
+        "app": {
             "type": "string",
             "description": "Name of the application to close",
         },
@@ -249,16 +258,21 @@ class CloseAppTool(BaseTool):
             "description": "Force kill without graceful shutdown (default: true)",
         },
     }
-    required_parameters = ["app_name"]
+    required_parameters = ["app"]
     
     def validate(self, **kwargs) -> tuple[bool, str]:
-        app_name = kwargs.get("app_name")
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = kwargs.get("app") or kwargs.get("app_name")
         if not app_name or not isinstance(app_name, str):
-            return False, "app_name must be a non-empty string"
+            return False, "app must be a non-empty string"
         return True, ""
     
     def execute(self, **kwargs) -> ToolResult:
-        app_name = kwargs["app_name"].strip().lower()
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = kwargs.get("app") or kwargs.get("app_name")
+        if app_name is None:
+            return ToolResult.fail(error="Missing required parameter: app")
+        app_name = app_name.strip().lower()
         force = kwargs.get("force", True)
         
         closed_count = 0
