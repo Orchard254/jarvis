@@ -1027,6 +1027,41 @@ RULES:
         
         text = text.strip()
         
+        # CRITICAL FIX: Detect and auto-execute leaked plan JSON BEFORE any other parsing
+        # This prevents mode confusion from causing JSON leaks to the user
+        if text.startswith('{'):
+            try:
+                parsed_json = json.loads(text)
+                if isinstance(parsed_json, dict):
+                    # Check for plan structure (goal + steps)
+                    if 'steps' in parsed_json and isinstance(parsed_json.get('steps'), list):
+                        steps = parsed_json['steps']
+                        if len(steps) > 0:
+                            # Auto-execute first step immediately
+                            first_step = steps[0]
+                            tool_name = first_step.get('tool')
+                            params = first_step.get('params', {})
+                            if tool_name:
+                                logger.warning(f"Plan JSON leaked - auto-executing: {tool_name}")
+                                return {
+                                    'type': 'TOOL',
+                                    'tool': tool_name,
+                                    'params': params,
+                                    'thought': f"Auto-extracted from plan: {first_step.get('reason', 'Step 1')}"
+                                }
+                        # No valid steps - return error message
+                        return {
+                            'type': 'FINAL',
+                            'response': "I encountered an issue. Let me try again.",
+                            'thought': 'Empty plan detected'
+                        }
+                    # Check for direct tool call in JSON format
+                    elif parsed_json.get('type') == 'TOOL':
+                        return parsed_json
+            except Exception as e:
+                logger.debug(f"Not a valid JSON plan: {e}")
+                pass  # Continue with normal parsing
+        
         # STRICT SEPARATION: If TOOL: pattern found, extract ONLY the tool call
         # Remove any trailing text after the tool call to prevent mixed output
         tool_pattern_match = re.search(
