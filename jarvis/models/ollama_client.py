@@ -516,6 +516,49 @@ class OllamaClient:
             "and local Ollama server is not running."
         )
     
+    def chat_with_image(
+        self,
+        image_base64: str,
+        prompt: str,
+        model: str = None,
+        response_format: str = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> Dict[str, Any]:
+        """
+        Alias for chat_with_vision for backward compatibility.
+        Send chat request with image support (multimodal).
+        
+        Args:
+            image_base64: Base64-encoded image
+            prompt: Text prompt/question about the image
+            model: Optional model override
+            response_format: Optional response format hint ('json', 'text')
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+            
+        Returns:
+            Dict with keys: content, tool_calls, done, error
+        """
+        # Build messages array with image
+        messages = [
+            {
+                "role": "user",
+                "content": prompt,
+                "images": [image_base64] if image_base64 else []
+            }
+        ]
+        
+        # Use provided model or default
+        model_to_use = model or self.model
+        
+        # Make the vision call
+        return self.chat_with_vision(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
 
     async def generate_async(self, prompt: str, temperature: float = 0.7) -> str:
         """
