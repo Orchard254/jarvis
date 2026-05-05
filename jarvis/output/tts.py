@@ -77,10 +77,25 @@ class KokoroEngine(TTSEngine):
                 speed=self.speed
             )
             
-            for _, audio_data, _ in generator:
-                # Play audio
-                sd.play(audio_data.numpy(), samplerate=24000)
-                sd.wait()
+            for item in generator:
+                # Handle different return formats from Kokoro
+                if isinstance(item, tuple) and len(item) >= 2:
+                    _, audio_data, _ = item
+                    # Check if audio_data is already a numpy array or needs conversion
+                    if hasattr(audio_data, 'numpy'):
+                        audio_array = audio_data.numpy()
+                    elif isinstance(audio_data, np.ndarray):
+                        audio_array = audio_data
+                    else:
+                        # If it's a string or other format, skip this item
+                        logger.debug(f"Skipping unexpected audio data type: {type(audio_data)}")
+                        continue
+                    
+                    # Play audio
+                    sd.play(audio_array, samplerate=24000)
+                    sd.wait()
+                else:
+                    logger.debug(f"Unexpected generator item format: {type(item)}")
             
             return True
             
@@ -168,6 +183,11 @@ class EdgeTTSEngine(TTSEngine):
         
         try:
             import edge_tts
+            # Validate the voice by checking if it's a valid format
+            # Common valid voice formats: en-US-JennyNeural, en-GB-SoniaNeural, etc.
+            if not voice or '-' not in voice:
+                logger.warning(f"Invalid voice format '{voice}', using default: en-US-JennyNeural")
+                self.voice = "en-US-JennyNeural"
             self._initialized = True
             logger.info("Edge TTS engine initialized successfully")
         except ImportError:
@@ -245,6 +265,11 @@ class TTSManager:
         self._engines: Dict[str, TTSEngine] = {}
         self._active_engine: Optional[TTSEngine] = None
         
+        # Set default voice based on preferred engine
+        if self.preferred_engine == 'edge-tts' and (not self.voice or self.voice in ['af_bella', 'af_heart', 'af_nicole', 'af_sarah', 'af_sky', 'am_adam', 'am_michael']):
+            # Kokoro voices are not compatible with Edge TTS, use Edge TTS default
+            self.voice = "en-US-JennyNeural"
+        
         self._initialize_engines()
         
         logger.info(f"TTS Manager initialized (enabled={self.enabled}, engine={self._get_active_engine_name()})")
@@ -314,12 +339,19 @@ class TTSManager:
             success = self._active_engine.speak(text)
             if not success:
                 # Try fallback engines
+                current_engine_name = self._get_active_engine_name()
                 for name, engine in self._engines.items():
                     if engine is not self._active_engine:
                         logger.info(f"Switching to fallback engine: {name}")
                         self._active_engine = engine
+                        # Set appropriate voice for the new engine
+                        if name == 'edge-tts' and self.voice in ['af_bella', 'af_heart', 'af_nicole', 'af_sarah', 'af_sky', 'am_adam', 'am_michael']:
+                            engine.set_voice("en-US-JennyNeural")
+                        else:
+                            engine.set_voice(self.voice)
                         if engine.speak(text):
                             break
+                        # If this engine also fails, continue to next fallback
         
         thread = threading.Thread(target=_speak_thread, daemon=True)
         thread.start()
