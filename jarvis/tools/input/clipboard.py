@@ -125,6 +125,7 @@ def ensure_window_active(title_pattern: str, app_name: Optional[str] = None) -> 
 def get_clipboard_text(retries: int = 5, delay: float = 0.5) -> Optional[str]:
     """
     Get text content from clipboard with retry logic.
+    Uses pyperclip for cross-platform compatibility and better error handling.
     
     Args:
         retries: Number of times to retry if clipboard is busy
@@ -135,75 +136,23 @@ def get_clipboard_text(retries: int = 5, delay: float = 0.5) -> Optional[str]:
     """
     for attempt in range(retries):
         try:
-            import ctypes
-            from ctypes import wintypes
+            import pyperclip
             
-            # Small initial delay to let clipboard operations settle
-            time.sleep(0.2)
+            # Initial delay to let previous operations complete
+            time.sleep(0.5)
             
-            # Open clipboard with retry on failure
-            for open_attempt in range(5):
-                if ctypes.windll.user32.OpenClipboard(None):
-                    break
-                time.sleep(0.1 * (open_attempt + 1))  # Exponential backoff
+            # Try to get clipboard text using pyperclip
+            text = pyperclip.paste()
+            
+            if text and len(text.strip()) > 0:
+                return text
             else:
-                log.debug(f"Failed to open clipboard after 5 attempts")
+                log.debug(f"Clipboard text is empty (attempt {attempt + 1}/{retries})")
                 if attempt < retries - 1:
-                    time.sleep(delay * (attempt + 1))  # Increasing delay
+                    time.sleep(delay * (attempt + 1))
                     continue
                 return None
-            
-            try:
-                # Check if clipboard has text (CF_UNICODETEXT = 13)
-                if not ctypes.windll.user32.IsClipboardFormatAvailable(13):
-                    log.debug("Clipboard does not contain text format")
-                    if attempt < retries - 1:
-                        ctypes.windll.user32.CloseClipboard()
-                        time.sleep(delay)
-                        continue
-                    return None
                 
-                # Get text data handle
-                handle = ctypes.windll.user32.GetClipboardData(13)
-                if not handle:
-                    log.debug("GetClipboardData returned null handle")
-                    if attempt < retries - 1:
-                        ctypes.windll.user32.CloseClipboard()
-                        time.sleep(delay)
-                        continue
-                    return None
-                
-                # Lock the memory and get pointer
-                ptr = ctypes.windll.kernel32.GlobalLock(handle)
-                if not ptr:
-                    log.debug("GlobalLock failed")
-                    if attempt < retries - 1:
-                        ctypes.windll.user32.CloseClipboard()
-                        time.sleep(delay)
-                        continue
-                    return None
-                
-                try:
-                    # Read the text - use direct pointer access
-                    text = ctypes.wstring_at(ptr)
-                    return text
-                finally:
-                    # Always unlock
-                    ctypes.windll.kernel32.GlobalUnlock(handle)
-                    
-            finally:
-                # Always close clipboard
-                ctypes.windll.user32.CloseClipboard()
-                
-        except OSError as e:
-            # Windows API errors - likely access violation
-            win_error = e.winerror if hasattr(e, 'winerror') else 0
-            log.debug(f"Clipboard OS error (attempt {attempt + 1}/{retries}): WinError {win_error} - {e}")
-            if attempt < retries - 1:
-                # Longer delay for OS errors
-                time.sleep(delay * (attempt + 1))
-            else:
-                log.error(f"All clipboard read attempts failed with OS error: {e}")
         except Exception as e:
             log.debug(f"Failed to get clipboard (attempt {attempt + 1}/{retries}): {e}")
             if attempt < retries - 1:
@@ -215,49 +164,26 @@ def get_clipboard_text(retries: int = 5, delay: float = 0.5) -> Optional[str]:
 
 
 def set_clipboard_text(text: str) -> bool:
-    """Set text content to clipboard."""
+    """Set text content to clipboard using pyperclip."""
     try:
-        import ctypes
-        from ctypes import wintypes
+        import pyperclip
         
-        GHND = 0x42
-        GMEM_MOVEABLE = 0x0002
-        GMEM_ZEROINIT = 0x0040
-        
-        # Open clipboard
-        if not ctypes.windll.user32.OpenClipboard(None):
-            return False
-        
-        try:
-            # Empty clipboard
-            ctypes.windll.user32.EmptyClipboard()
-            
-            # Convert text to bytes with null terminator
-            text_bytes = (text + '\0').encode('utf-16-le')
-            size = len(text_bytes)
-            
-            # Allocate global memory
-            handle = ctypes.windll.kernel32.GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size)
-            if not handle:
-                return False
-            
-            # Lock memory and copy data
-            ptr = ctypes.windll.kernel32.GlobalLock(handle)
-            if ptr:
-                ctypes.memmove(ptr, text_bytes, size)
-                ctypes.windll.kernel32.GlobalUnlock(handle)
-                
-                # Set clipboard data
-                if ctypes.windll.user32.SetClipboardData(13, handle):  # CF_UNICODETEXT
+        # Retry logic for setting clipboard
+        for attempt in range(3):
+            try:
+                pyperclip.copy(text)
+                # Verify it was set correctly
+                time.sleep(0.2)
+                verify = pyperclip.paste()
+                if verify == text:
                     return True
-            
-            # Clean up on failure
-            ctypes.windll.kernel32.GlobalFree(handle)
-            return False
-            
-        finally:
-            ctypes.windll.user32.CloseClipboard()
-            
+            except Exception as e:
+                log.debug(f"Failed to set clipboard (attempt {attempt + 1}/3): {e}")
+                if attempt < 2:
+                    time.sleep(0.3 * (attempt + 1))
+                continue
+        return False
+        
     except Exception as e:
         log.error(f"Failed to set clipboard: {e}")
         return False
@@ -330,7 +256,7 @@ class PasteFromClipboardTool(BaseTool):
         
         # Add initial delay to allow previous clipboard operations to fully complete
         # This is critical after Ctrl+C which may not have finished yet
-        time.sleep(0.5)
+        time.sleep(1.0)
         
         text = get_clipboard_text(retries=retries, delay=delay)
         
