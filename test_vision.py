@@ -22,31 +22,35 @@ def capture_and_encode_screenshot(filename="vision_test.png"):
     print("📸 Capturing screenshot...")
     
     try:
-        # Take screenshot
-        screenshot_tool = ScreenshotTool()
-        result = screenshot_tool.execute(filename=filename)
+        # Take screenshot using PIL directly (more reliable)
+        from PIL import ImageGrab
+        import tempfile
         
-        if not result.success:
-            print(f"❌ Screenshot failed: {result.error}")
-            return None
+        # Capture screen
+        screenshot = ImageGrab.grab()
+        
+        # Save to temp file then read
+        temp_path = Path(tempfile.gettempdir()) / filename
+        screenshot.save(temp_path)
         
         # Read and encode image
-        img_path = Path(filename)
-        if not img_path.exists():
-            # Try default location
-            img_path = Path("screenshots") / filename
-            if not img_path.exists():
-                print(f"❌ Screenshot file not found at {filename} or {img_path}")
-                return None
-        
-        with open(img_path, "rb") as f:
+        with open(temp_path, "rb") as f:
             image_data = f.read()
             base64_image = base64.b64encode(image_data).decode('utf-8')
             print(f"✅ Screenshot captured and encoded ({len(base64_image)} chars)")
+            
+            # Also save to current directory for reference
+            local_path = Path(filename)
+            screenshot.save(local_path)
+            print(f"💾 Saved copy to: {local_path.absolute()}")
+            
             return base64_image
             
     except Exception as e:
         print(f"❌ Error capturing screenshot: {e}")
+        print("\n💡 Troubleshooting:")
+        print("   - Install Pillow: pip install Pillow")
+        print("   - On Windows, also install: pip install pywin32")
         return None
 
 def test_vision_with_gemma(base64_image, prompt):
