@@ -636,6 +636,31 @@ class Orchestrator:
             else:
                 final_response = str(response)
             
+            # FIX: Ensure response is not JSON structured data leaking into chat
+            # If response looks like a structured plan/JSON, extract just the natural language part
+            if final_response and isinstance(final_response, str) and final_response.strip().startswith('{'):
+                try:
+                    import json as json_module
+                    parsed = json_module.loads(final_response.strip())
+                    # If it's a structured response, extract the goal or provide a generic response
+                    if isinstance(parsed, dict):
+                        # Check if this is a clarification request that leaked through
+                        if parsed.get('needs_clarification', False):
+                            goal = parsed.get('goal', 'your request')
+                            corrections = parsed.get('corrections', [])
+                            final_response = f"I need more information about: {goal}"
+                            if corrections:
+                                final_response += f" ({', '.join(corrections)})"
+                            final_response += " Could you clarify?"
+                        elif parsed.get('goal'):
+                            final_response = parsed.get('goal', final_response)
+                        else:
+                            # Fallback to generic response
+                            final_response = "I understand. How can I help you further?"
+                except (json_module.JSONDecodeError, Exception):
+                    # If parsing fails, keep original response
+                    pass
+            
             # Speak response
             self._speak(final_response)
             

@@ -162,6 +162,35 @@ Do not output any text outside the JSON block when acting.
                     if isinstance(response, dict):
                         content = response.get('content', '')
                         if content:
+                            # FIX: Check if content is a JSON clarification request
+                            try:
+                                import json as json_module
+                                # Try to parse as JSON to detect structured responses
+                                if content.strip().startswith('{'):
+                                    parsed_json = json_module.loads(content)
+                                    # Check if this is a clarification request from predictive planner
+                                    if parsed_json.get('needs_clarification', False):
+                                        # This is a clarification request, not a final answer
+                                        goal = parsed_json.get('goal', task)
+                                        corrections = parsed_json.get('corrections', [])
+                                        
+                                        # Build a helpful clarification message
+                                        clarification_msg = f"I need clarification to complete: {goal}"
+                                        if corrections:
+                                            clarification_msg += f" (I noticed: {', '.join(corrections)})"
+                                        clarification_msg += " Could you provide more details?"
+                                        
+                                        logger.info(f"[ReAct] Detected clarification request: {clarification_msg}")
+                                        return clarification_msg
+                                    
+                                    # If it has steps but needs_clarification is false, extract the response
+                                    if parsed_json.get('steps'):
+                                        # This shouldn't happen in ReAct mode, but handle gracefully
+                                        content = parsed_json.get('goal', content)
+                            except (json_module.JSONDecodeError, Exception):
+                                # If parsing fails, treat as regular text
+                                pass
+                            
                             return content
                         # Check if there was an error
                         if not response.get('success', True):
