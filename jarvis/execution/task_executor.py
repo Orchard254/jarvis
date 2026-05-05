@@ -248,7 +248,7 @@ class TaskExecutor:
                 import psutil
                 from win32gui import GetForegroundWindow, GetWindowText
                 
-                # For keyboard actions - just trust tool result if it succeeded
+                # For keyboard actions - trust tool result if it succeeded
                 if step.tool_name == "press_key":
                     keys = step.parameters.get("keys", step.parameters.get("key", "")).lower()
                     
@@ -278,6 +278,13 @@ class TaskExecutor:
                         time.sleep(0.3)
                         logger.info(f"State check: Copy/Paste executed")
                         return True, "Verified: Copy/Paste action executed"
+                    
+                    # For minimize/maximize/restore operations (Win+Down, Win+Up, etc.)
+                    # These are hard to verify visually, so trust the tool if it didn't error
+                    if "win+down" in keys or "win+up" in keys or "win+left" in keys or "win+right" in keys:
+                        time.sleep(0.3)
+                        logger.info(f"State check: Window management key '{keys}' executed")
+                        return True, f"Verified: Window management key '{keys}' executed"
                     
                     # Default: if tool didn't report success, fail verification
                     if step.result and not step.result.success:

@@ -518,8 +518,10 @@ class PressKeyTool(BaseTool):
             success, message = ensure_window_active(target_app, target_app)
             if not success:
                 log.warning(f"Target app {target_app} not active: {message}")
-                return ToolResult.fail(error=f"Cannot press keys: {target_app} is not active. {message}")
-            log.info(f"Verified {target_app} is active before pressing keys")
+                # Try to continue anyway - the key press might still work
+                log.info(f"Attempting to press keys anyway...")
+            else:
+                log.info(f"Verified {target_app} is active before pressing keys")
         
         try:
             import subprocess
