@@ -15,6 +15,11 @@ import argparse
 import logging
 from pathlib import Path
 
+# Fix UTF-8 encoding for Windows console (critical stability fix)
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # Add project root to path correctly
 current_file = Path(__file__).resolve()
 project_root = current_file.parent  # This is the workspace root directory

@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 
 # Intent threshold constant - minimum score to execute actions
-INTENT_THRESHOLD = 45  # Below this, only chat responses allowed
+INTENT_THRESHOLD = 70  # Below this, only chat responses allowed (raised from 45 to prevent accidental tool execution)
 
 
 def _safe_log(message: str, max_length: int = 500) -> str:
@@ -910,6 +910,7 @@ RULES:
         Parse natural language response for tool calls or final answers.
         
         CRITICAL: Only allows SINGLE tool calls. Multiple tools in one response are rejected.
+        CRITICAL: Strictly separates tool calls from text - no mixing allowed.
         
         Uses the tool_parser module for deterministic parsing with schema validation.
         
@@ -926,23 +927,48 @@ RULES:
         
         text = text.strip()
         
-        # Use the new tool_parser module for detection and parsing
-        # First check for multiple tool calls (which we reject)
-        tool_matches = re.findall(r'TOOL:\s*\w+\s*\([^)]*(?:\([^)]*\))*[^)]*\)', text, re.IGNORECASE)
-        if len(tool_matches) > 1:
-            logger.warning(f"Multiple tool calls detected in response: {tool_matches}")
-            return None  # Reject multiple tool calls
-
-        # Delegate to the dedicated parser module
-        parsed = parse_tool_call(text)
-        if parsed and parsed.get('type') == 'tool':
-            # Convert to the internal format expected by _handle_unified_mode
-            return {
-                'type': 'TOOL',
-                'tool': parsed['name'],
-                'params': parsed['args'],
-                'thought': parsed.get('thought', 'Parsed by tool_parser module')
-            }
+        # STRICT SEPARATION: If TOOL: pattern found, extract ONLY the tool call
+        # Remove any trailing text after the tool call to prevent mixed output
+        tool_pattern_match = re.search(
+            r'(TOOL:\s*\w+\s*\([^)]*(?:\([^)]*\))*[^)]*\))',
+            text,
+            re.IGNORECASE | re.DOTALL
+        )
+        if tool_pattern_match:
+            # Extract only the tool call portion
+            tool_call_only = tool_pattern_match.group(1)
+            # Check for multiple tool calls (reject if found)
+            all_tool_matches = re.findall(
+                r'TOOL:\s*\w+\s*\([^)]*(?:\([^)]*\))*[^)]*\)',
+                text,
+                re.IGNORECASE
+            )
+            if len(all_tool_matches) > 1:
+                logger.warning(f"Multiple tool calls detected in response: {all_tool_matches}")
+                return None  # Reject multiple tool calls
+            
+            # Parse only the clean tool call
+            parsed = parse_tool_call(tool_call_only)
+            if parsed and parsed.get('type') == 'tool':
+                # Convert to the internal format expected by _handle_unified_mode
+                return {
+                    'type': 'TOOL',
+                    'tool': parsed['name'],
+                    'params': parsed['args'],
+                    'thought': parsed.get('thought', 'Parsed by tool_parser module')
+                }
+        else:
+            # No TOOL: pattern - use normal parsing
+            # Delegate to the dedicated parser module
+            parsed = parse_tool_call(text)
+            if parsed and parsed.get('type') == 'tool':
+                # Convert to the internal format expected by _handle_unified_mode
+                return {
+                    'type': 'TOOL',
+                    'tool': parsed['name'],
+                    'params': parsed['args'],
+                    'thought': parsed.get('thought', 'Parsed by tool_parser module')
+                }
         
         # Fallback: Check for simpler tool patterns like "use tool_name" or "call tool_name"
         simple_tool_matches = re.findall(r'(?:use|call|run)\s+(\w+)', text, re.IGNORECASE)
