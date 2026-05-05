@@ -38,7 +38,8 @@ def create_schema(name: str, description: str,
     Returns:
         Complete tool schema dict
     """
-    schema = TOOL_SCHEMA_TEMPLATE.copy()
+    import copy
+    schema = copy.deepcopy(TOOL_SCHEMA_TEMPLATE)
     schema["function"]["name"] = name
     schema["function"]["description"] = description
     schema["function"]["parameters"]["properties"] = properties
@@ -151,18 +152,18 @@ APP_SCHEMAS = {
         name="open_app",
         description="Open/launch an application",
         properties={
-            "app_name": {
+            "app": {
                 "type": "string",
                 "description": "Name of the application to open"
             }
         },
-        required=["app_name"]
+        required=["app"]
     ),
     "close_app": create_schema(
         name="close_app",
         description="Close an application by name",
         properties={
-            "app_name": {
+            "app": {
                 "type": "string",
                 "description": "Name of the application to close"
             },
@@ -171,7 +172,7 @@ APP_SCHEMAS = {
                 "description": "Force close if not responding"
             }
         },
-        required=["app_name"]
+        required=["app"]
     )
 }
 
@@ -198,12 +199,12 @@ WINDOW_SCHEMAS = {
         name="focus_window",
         description="Bring a window to foreground by title",
         properties={
-            "window_title": {
+            "title": {
                 "type": "string",
                 "description": "Title or partial title of the window"
             }
         },
-        required=["window_title"]
+        required=["title"]
     ),
     "get_window_list": create_schema(
         name="get_window_list",

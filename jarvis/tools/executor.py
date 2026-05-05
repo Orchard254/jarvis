@@ -141,9 +141,11 @@ class ToolExecutor:
         """Verify app is running."""
         import psutil
         
-        app_name = arguments.get("app_name", "").lower()
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = arguments.get("app") or arguments.get("app_name", "")
         if not app_name:
             return {"verified": False, "message": "No app name specified"}
+        app_name = app_name.lower()
         
         for proc in psutil.process_iter(["name"]):
             if app_name in proc.info["name"].lower():
@@ -155,9 +157,11 @@ class ToolExecutor:
         """Verify app is not running."""
         import psutil
         
-        app_name = arguments.get("app_name", "").lower()
+        # Support both 'app' (preferred) and 'app_name' (legacy) parameter names
+        app_name = arguments.get("app") or arguments.get("app_name", "")
         if not app_name:
             return {"verified": False, "message": "No app name specified"}
+        app_name = app_name.lower()
         
         for proc in psutil.process_iter(["name"]):
             if app_name in proc.info["name"].lower():
