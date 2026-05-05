@@ -36,12 +36,95 @@ class WebSearchChromeSkill(BaseSkill):
         "find information about",
     ]
     
-    def can_handle(self, command: str) -> bool:
-        """Check if this skill can handle the command."""
-        cmd_lower = command.lower()
-        return any(trigger in cmd_lower for trigger in self.TRIGGERS)
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for this skill."""
+        return "You are a web search assistant that opens searches in the user's existing Chrome browser."
     
-    def execute(self, command: str, context: Optional[Dict] = None) -> SkillResult:
+    def can_handle(self, task: str) -> float:
+        """Check if this skill can handle the given request."""
+        cmd_lower = task.lower()
+        if any(trigger in cmd_lower for trigger in self.TRIGGERS):
+            return 0.9
+        return 0.0
+    
+    def plan(self, task: str) -> list:
+        """Create a plan of steps to accomplish the task."""
+        query = self._extract_query(task)
+        return [{
+            'id': 'search',
+            'name': 'Execute web search',
+            'action': 'search',
+            'params': {'query': query},
+            'completed': False
+        }]
+    
+    def execute(self, plan: list) -> Dict[str, Any]:
+        """Execute the skill with state tracking."""
+        try:
+            # Extract query from the first step
+            query = plan[0]['params'].get('query', '') if plan else ''
+            if not query:
+                return {'success': False, 'error': 'No search query provided'}
+            
+            success, message = self._open_in_existing_chrome(query)
+            
+            if success:
+                return {
+                    'success': True,
+                    'output': f"Opened search for '{query}' in Chrome",
+                    'metadata': {'query': query, 'method': 'existing_chrome'}
+                }
+            
+            # Fallback to automation
+            return self._search_via_automation_dict(query)
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _search_via_automation_dict(self, query: str) -> Dict[str, Any]:
+        """Fallback: use automation engine for search (dict version)."""
+        try:
+            # Use the existing automation tools
+            result1 = execute_tool("navigate_to_url", url="https://www.google.com")
+            
+            if not result1.get('success', False):
+                return {'success': False, 'error': f"Navigation failed: {result1.get('error', 'Unknown error')}"}
+            
+            time.sleep(1)
+            
+            result2 = execute_tool("fill_input", selector="input[name='q']", value=query)
+            
+            if not result2.get('success', False):
+                return {'success': False, 'error': f"Fill input failed: {result2.get('error', 'Unknown error')}"}
+            
+            time.sleep(0.5)
+            
+            result3 = execute_tool("press_key", keys="Enter")
+            
+            return {
+                'success': True,
+                'output': f"Search executed via automation: {query}",
+                'metadata': {"query": query, "method": "automation"}
+            }
+            
+        except Exception as e:
+            logger.error(f"Automation search failed: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def handle_failure(self, step: Any, error: Exception) -> Any:
+        """Handle a failure during step execution."""
+        logger.error(f"Step failed: {error}")
+        return None
+    
+    def rollback(self) -> Dict[str, Any]:
+        """Undo completed steps in reverse order."""
+        return {'success': True, 'message': 'No actions to rollback for web search'}
+    
+    def summarize(self) -> str:
+        """Provide a one-sentence summary of what was accomplished."""
+        return "Web search completed."
+    
+    def execute_search(self, command: str, context: Optional[Dict] = None) -> SkillResult:
         """
         Execute web search in existing Chrome.
         

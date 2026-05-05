@@ -10,6 +10,25 @@ from enum import Enum
 from dataclasses import dataclass
 
 
+@dataclass
+class SkillResult:
+    """Result of a skill execution."""
+    success: bool
+    output: Optional[str] = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    
+    @classmethod
+    def ok(cls, output: str = None, metadata: Dict[str, Any] = None) -> 'SkillResult':
+        """Create a successful result."""
+        return cls(success=True, output=output, metadata=metadata)
+    
+    @classmethod
+    def fail(cls, error: str = None, metadata: Dict[str, Any] = None) -> 'SkillResult':
+        """Create a failed result."""
+        return cls(success=False, error=error, metadata=metadata)
+
+
 class RecoveryAction(Enum):
     """Actions that can be taken during error recovery."""
     RETRY = "retry"
