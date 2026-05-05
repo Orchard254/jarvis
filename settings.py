@@ -158,7 +158,12 @@ OLLAMA_MODEL: str = _get_str(
 
 OLLAMA_VISION_MODEL: str = _get_str(
     "OLLAMA_VISION_MODEL",
-    default="llava:latest"
+    default="gemma3:27b"
+)
+
+LLM_MODEL: str = _get_str(
+    "LLM_MODEL",
+    default="gpt-oss:120b-cloud"
 )
 
 OLLAMA_CODER_MODEL: str = _get_str(
@@ -520,7 +525,9 @@ if MODE not in ("chat", "agent"):
 DEFAULT_CONFIG = {
     'ollama_cloud_url': OLLAMA_CLOUD_URL,
     'ollama_local_url': OLLAMA_LOCAL_URL,
-    'model': OLLAMA_MODEL,
+    'model': LLM_MODEL,  # Use reasoning model by default
+    'vision_model': OLLAMA_VISION_MODEL,  # Vision model for image tasks
+    'llm_model': LLM_MODEL,  # Reasoning model for text tasks
     'ollama_api_key': OLLAMA_API_KEY,
     'fallback_to_local': FALLBACK_TO_LOCAL,
     'max_retries': OLLAMA_MAX_RETRIES,

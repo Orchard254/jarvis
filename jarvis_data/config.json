@@ -1,0 +1,10 @@
+{
+    "llm_model": "gpt-oss:120b-cloud",
+    "vision_model": "gemma3:27b",
+    "ollama_cloud_url": "https://api.ollama.com/api/chat",
+    "ollama_local_url": "http://localhost:11434/api/chat",
+    "ollama_timeout": 180,
+    "ollama_max_retries": 3,
+    "conversation_history_limit": 20,
+    "max_tool_iterations": 5
+}
