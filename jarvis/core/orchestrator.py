@@ -25,6 +25,7 @@ from jarvis.core.brain import Brain
 from jarvis.core.react_agent import ReActAgent
 from jarvis.core.predictive_planner import PredictivePlanner
 from jarvis.core.intent_scorer import AdaptiveIntentScorer
+from jarvis.core.tool_parser import is_tool_call, parse_tool_call, validate_tool_call_schema
 from jarvis.execution.task_executor import TaskExecutor, TaskStep, VerificationStrategy
 from jarvis.tools.registry import ToolRegistry
 from jarvis.skills.registry import SkillsRegistry as SkillRegistry
@@ -600,7 +601,7 @@ class Orchestrator:
                 # Debug: Log the raw response
                 logger.debug(f"LLM raw response: {assistant_message[:200]}...")
                 
-                # Parse response for tool calls or final answer
+                # Parse response for tool calls or final answer using new parser
                 parsed = self._parse_natural_response(assistant_message)
                 if not parsed:
                     logger.warning(f"Could not parse response: '{assistant_message}' (length: {len(assistant_message)})")
@@ -611,23 +612,24 @@ class Orchestrator:
                 action_type = parsed.get('type', '').upper()
                 
                 if action_type == 'TOOL':
-                    # Execute tool immediately
-                    tool_name = parsed.get('tool')
-                    params = parsed.get('params', {})
-                    thought = parsed.get('thought', '')
+                    # Execute tool immediately using the new _execute_action method
+                    tool_call_dict = {
+                        "type": "tool",
+                        "name": parsed.get('tool'),
+                        "args": parsed.get('params', {}),
+                        "thought": parsed.get('thought', '')
+                    }
                     
-                    if not tool_name:
-                        messages.append({"role": "user", "content": "Missing tool name in TOOL response. Please specify which tool to call."})
-                        continue
+                    # Log raw LLM output
+                    logger.info(f"[LLM] Raw output: {assistant_message[:200]}...")
                     
-                    # Validate tool exists
-                    if tool_name not in self.tool_registry.get_all_tools():
-                        messages.append({"role": "user", "content": f"Unknown tool: {tool_name}. Available tools: {', '.join(list(self.tool_registry.get_all_tools().keys())[:10])}..."})
-                        continue
+                    # Use the structured execution pipeline
+                    exec_result = self._execute_action(tool_call_dict)
                     
-                    # Execute tool
-                    logger.info(f"Executing tool: {tool_name}({params})")
-                    tool_result = self._execute_tool_in_loop(tool_name, params)
+                    tool_name = tool_call_dict['name']
+                    params = tool_call_dict['args']
+                    tool_result = exec_result['output']
+                    thought = tool_call_dict.get('thought', '')
                     
                     # Record tool call
                     tool_calls.append({
@@ -895,6 +897,162 @@ RULES:
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)
             return f"Error executing {tool_name}: {str(e)}"
+    
+    def _execute_action(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute a parsed tool call and return structured result.
+        
+        This is the main entry point for executing LLM-generated tool calls.
+        It validates the schema, checks safety, executes the tool, and logs everything.
+        
+        Pipeline: Input → LLM → detect tool call → parse → execute → return result
+        
+        Args:
+            tool_call: Parsed tool call dict with schema:
+                {
+                    "type": "tool",
+                    "name": "<tool_name>",
+                    "args": {},
+                    "thought": "<optional reasoning>"
+                }
+        
+        Returns:
+            Result dict with:
+                - success: bool
+                - output: str (tool output or error message)
+                - tool_name: str
+                - args: dict
+                - duration_ms: int
+        """
+        import time as time_module
+        start_time = time_module.time()
+        
+        # Log raw input
+        logger.info(f"[EXEC] Received tool call: {tool_call}")
+        
+        # Validate schema
+        valid, error_msg = validate_tool_call_schema(tool_call)
+        if not valid:
+            logger.error(f"[EXEC] Invalid tool call schema: {error_msg}")
+            return {
+                'success': False,
+                'output': f"Invalid tool call format: {error_msg}",
+                'tool_name': tool_call.get('name', 'unknown'),
+                'args': tool_call.get('args', {}),
+                'duration_ms': int((time_module.time() - start_time) * 1000)
+            }
+        
+        tool_name = tool_call['name']
+        args = tool_call.get('args', {})
+        thought = tool_call.get('thought', '')
+        
+        # Log parsed plan
+        logger.info(f"[EXEC] Parsed plan: tool={tool_name}, args={args}, thought={thought}")
+        
+        # Safety validation
+        is_valid, error_msg = self.tool_guard.validate_tool_call(tool_name, args)
+        if not is_valid:
+            logger.warning(f"[EXEC] Tool call blocked by safety: {error_msg}")
+            self.audit_log.log_security_event(
+                event_type='tool_blocked',
+                details={
+                    'tool_name': tool_name,
+                    'args': args,
+                    'reason': error_msg
+                }
+            )
+            return {
+                'success': False,
+                'output': f"Safety blocked: {error_msg}",
+                'tool_name': tool_name,
+                'args': args,
+                'duration_ms': int((time_module.time() - start_time) * 1000)
+            }
+        
+        # Get tool from registry
+        tool = self.tool_registry.get_all_tools().get(tool_name)
+        if tool is None:
+            logger.error(f"[EXEC] Tool not found: {tool_name}")
+            return {
+                'success': False,
+                'output': f"Tool '{tool_name}' not found in registry",
+                'tool_name': tool_name,
+                'args': args,
+                'duration_ms': int((time_module.time() - start_time) * 1000)
+            }
+        
+        # Execute tool
+        try:
+            logger.info(f"[EXEC] Executing: {tool_name}({args})")
+            
+            if hasattr(tool, 'execute'):
+                result = tool.execute(**args)
+            elif callable(tool):
+                result = tool(**args)
+            else:
+                raise TypeError(f"Tool {tool_name} is not callable")
+            
+            # Process result
+            if isinstance(result, dict):
+                success = result.get('success', True)
+                output = result.get('output', str(result))
+                if not success:
+                    output = f"Error: {result.get('error', 'Unknown error')}"
+            elif isinstance(result, str):
+                success = True
+                output = result
+            else:
+                success = True
+                output = str(result)
+            
+            duration_ms = int((time_module.time() - start_time) * 1000)
+            
+            # Log execution result
+            logger.info(f"[EXEC] Result: success={success}, output={output[:100]}..., duration={duration_ms}ms")
+            
+            # Audit log
+            self.audit_log.log_action(
+                action_type='tool_execution',
+                details={
+                    'tool_name': tool_name,
+                    'args': args,
+                    'thought': thought,
+                    'success': success,
+                    'output_preview': output[:200],
+                    'duration_ms': duration_ms
+                }
+            )
+            
+            return {
+                'success': success,
+                'output': output,
+                'tool_name': tool_name,
+                'args': args,
+                'thought': thought,
+                'duration_ms': duration_ms
+            }
+            
+        except Exception as e:
+            logger.error(f"[EXEC] Execution error: {e}", exc_info=True)
+            duration_ms = int((time_module.time() - start_time) * 1000)
+            
+            self.audit_log.log_action(
+                action_type='tool_error',
+                details={
+                    'tool_name': tool_name,
+                    'args': args,
+                    'error': str(e),
+                    'duration_ms': duration_ms
+                }
+            )
+            
+            return {
+                'success': False,
+                'output': f"Execution error: {str(e)}",
+                'tool_name': tool_name,
+                'args': args,
+                'duration_ms': duration_ms
+            }
     
     def _handle_chat_request(self, command: str) -> Dict[str, Any]:
         """Handle simple chat requests that don't require tool execution."""
