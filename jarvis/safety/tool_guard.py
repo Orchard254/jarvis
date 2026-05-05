@@ -47,9 +47,9 @@ class ToolGuard:
     ]
     
     DESTRUCTIVE_REGEX = [
-        r"shutil\.rmtree\s*\(\s*['\"]C:\\Windows",
-        r"shutil\.rmtree\s*\(\s*['\"]C:\\Program Files",
-        r"os\.remove\s*\(\s*['\"]C:\\Windows",
+        r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Windows",
+        r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Program\s+Files",
+        r"os\.remove\s*\(\s*['\"]C:[/\\\\]+Windows",
     ]
     
     # All original unsafe patterns from control_plane.py - must be preserved
@@ -394,6 +394,18 @@ class ToolGuard:
         else:
             # Strict rules for user-submitted code — block additional dangerous patterns
             # Include eval, exec, os.system, ctypes which were missing
+            
+            # Block shutil destruction on system dirs - all quote and slash variants
+            import re
+            shutil_patterns = [
+                re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
+                re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Program\s+Files", re.IGNORECASE),
+                re.compile(r"os\.remove\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
+            ]
+            for pat in shutil_patterns:
+                if pat.search(code):
+                    return False, f"Destructive operation blocked: {pat.pattern}"
+            
             dangerous_patterns = [
                 '__import__',
                 r'eval\s*\(',

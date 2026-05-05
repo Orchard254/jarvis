@@ -1170,16 +1170,11 @@ RULES:
         if strategy in ['direct', 'plan']:
             logger.info(f"[Predictive] Using LLM's internal knowledge for direct execution...")
             
-            # Generate predictive plan using LLM's world knowledge
+            # Generate predictive plan using LLM's world knowledge (extracted to avoid duplication)
             tools_dict = {name: {'description': getattr(tool, 'description', '')} 
                          for name, tool in self.tool_registry.get_all_tools().items()}
             
-            plan = self.predictive_planner.generate_plan(
-                command, 
-                tools_dict,
-                recent_results=self._recent_results,
-                failed_actions=self._failed_actions
-            )
+            plan = self._generate_predictive_plan(command, tools_dict)
             
             if plan and plan.get('steps'):
                 logger.info(f"Generated predictive plan with {len(plan['steps'])} steps (confidence: {plan.get('confidence', 'unknown')})")
@@ -1375,17 +1370,12 @@ RULES:
         strategy = self._map_complexity_to_strategy(classification.complexity)
         system_prompt = get_system_prompt(mode='agent')
         
-        # Generate predictive plan
+        # Generate predictive plan (extracted to avoid duplication)
         if strategy in ['direct', 'plan']:
             tools_dict = {name: {'description': getattr(tool, 'description', '')} 
                          for name, tool in self.tool_registry.get_all_tools().items()}
             
-            plan = self.predictive_planner.generate_plan(
-                command, 
-                tools_dict,
-                recent_results=self._recent_results,
-                failed_actions=self._failed_actions
-            )
+            plan = self._generate_predictive_plan(command, tools_dict)
             
             if plan and plan.get('steps'):
                 # Check if LLM requested clarification
@@ -1438,18 +1428,28 @@ RULES:
                             return self._handle_agent_mode(modified_command)
                             
                     except (EOFError, KeyboardInterrupt):
+                        logger.warning("User cancelled confirmation")
                         return {
                             'success': False,
-                            'response': "Cancelled.",
+                            'response': "Confirmation cancelled.",
                             'confirmed': False,
                             'mode': 'agent_confirm'
                         }
                 else:
-                    # No clarification needed - execute directly without confirmation
-                    logger.info(f"No clarification needed (confidence: {plan.get('confidence', 'unknown')}) - executing directly...")
+                    # No clarification needed - execute directly
+                    logger.info("LLM did not request clarification - executing plan directly...")
                     result = self._handle_agent_mode(command)
                     result['confirmed'] = True
                     return result
+    
+    def _generate_predictive_plan(self, command: str, tools_dict: dict) -> dict:
+        """Helper method to generate predictive plan, avoiding code duplication."""
+        return self.predictive_planner.generate_plan(
+            command, 
+            tools_dict,
+            recent_results=self._recent_results,
+            failed_actions=self._failed_actions
+        )
         
         # Fallback: just execute without confirmation for simple cases
         logger.info("Fallback - executing without confirmation")
