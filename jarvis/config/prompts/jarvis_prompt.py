@@ -78,13 +78,22 @@ Available tool categories:
 - Tasks: Todo management, notes
 - Scripts: Run PowerShell and Python code
 
+TOOL CALL FORMAT - CRITICAL RULES:
+1. Use ONLY the exact tool names from your available tool list
+2. Use ONLY the exact parameter names defined in each tool's schema
+3. For open_app tool: MUST use parameter "app" NOT "app_name"
+   - CORRECT: TOOL: open_app(app='notepad')
+   - WRONG: TOOL: open_app(app_name='notepad') ← This will FAIL
+4. For close_app tool: MUST use parameter "app" NOT "app_name"
+5. Always check the tool schema for the correct parameter names before calling
+
 When using tools:
 1. Choose the most appropriate tool for each step
-2. Provide clear, complete arguments
+2. Provide clear, complete arguments with CORRECT parameter names
 3. Wait for and examine results before continuing
 4. Handle errors gracefully
 
-Remember: Your goal is to successfully complete the user's task while maintaining system safety."""
+Remember: Your goal is to successfully complete the user's task while maintaining system safety. Using wrong parameter names will cause execution failures."""
 
 
 def get_system_prompt(mode: str = 'agent', 
