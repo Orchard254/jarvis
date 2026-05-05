@@ -266,6 +266,11 @@ class OllamaClient:
                     log.debug(f"[OLLAMA] Skipping thinking chunk from {name}")
                     continue
                 
+                # Warn if response is completely empty even when done
+                if not content and is_done:
+                    log.warning(f"[OLLAMA] Empty response from {name} endpoint (done=True). Model may not be responding correctly.")
+                    continue  # Try next endpoint
+                
                 return {
                     "content": content,
                     "tool_calls": msg.get("tool_calls") or [],

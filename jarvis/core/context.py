@@ -25,7 +25,8 @@ class ContextAssembler:
     """
     
     def __init__(self, config: Dict[str, Any], memory_system, 
-                 tool_registry=None, skill_registry=None):
+                 tool_registry=None, skill_registry=None, 
+                 get_app_context=None):
         """
         Initialize context assembler.
         
@@ -34,11 +35,13 @@ class ContextAssembler:
             memory_system: CoreMemory instance
             tool_registry: ToolRegistry instance
             skill_registry: SkillRegistry instance
+            get_app_context: Optional callback to get current app context
         """
         self.config = config
         self.memory = memory_system
         self.tool_registry = tool_registry
         self.skill_registry = skill_registry
+        self._get_app_context = get_app_context
         
         logger.info("Context assembler initialized")
     
@@ -71,7 +74,8 @@ class ContextAssembler:
             'tools': [],
             'skills': [],
             'system_state': {},
-            'user_profile': {}
+            'user_profile': {},
+            'app_context': {}
         }
         
         # Get conversation history
@@ -98,6 +102,10 @@ class ContextAssembler:
         
         # Include user profile
         context['user_profile'] = self._get_user_profile()
+        
+        # Include app context if callback provided
+        if self._get_app_context:
+            context['app_context'] = self._get_app_context()
         
         logger.debug(f"Assembled context with {len(context['conversation'])} messages, "
                     f"{len(context['tools'])} tools, {len(context['skills'])} skills")
@@ -229,6 +237,24 @@ class ContextAssembler:
             Formatted string for LLM
         """
         parts = []
+        
+        # App context header (NEW - helps LLM understand which app user is in)
+        if context.get('app_context'):
+            app_ctx = context['app_context']
+            current_app = app_ctx.get('current_app', 'unknown')
+            last_app = app_ctx.get('last_active_app', 'unknown')
+            
+            if current_app and current_app != 'unknown':
+                parts.append(f"[Current App: {current_app}]")
+            
+            if last_app and last_app != 'unknown' and last_app != current_app:
+                parts.append(f"[Last Active App: {last_app}]")
+            
+            # Show recent app switches if relevant
+            recent_switches = app_ctx.get('recent_app_switches', [])
+            if recent_switches:
+                switches_str = ' → '.join([s['to_app'] for s in recent_switches[-3:]])
+                parts.append(f"[Recent Apps: {switches_str}]")
         
         # System state header
         if context.get('system_state'):

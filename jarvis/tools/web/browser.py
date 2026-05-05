@@ -36,18 +36,25 @@ class SearchWebTool(BaseTool):
     
     def execute(self, **kwargs) -> ToolResult:
         query = kwargs["query"]
-        
+
         try:
             # URL encode the query
             encoded_query = urllib.parse.quote_plus(query)
             search_url = f"https://www.google.com/search?q={encoded_query}"
-            
-            # Open in default browser
-            import webbrowser
-            webbrowser.open(search_url)
-            
-            return ToolResult.ok(f"Searching for: {query}")
-            
+
+            # Use automation engine to open in Chrome with debug port (so extract_content works)
+            try:
+                from jarvis.tools.web.automation import get_automation_engine
+                engine = get_automation_engine()
+                page = engine.ensure_browser(headless=False, use_existing=True)
+                page.goto(search_url, timeout=15000)
+                return ToolResult.ok(f"Searching for: {query}")
+            except Exception as automation_err:
+                log.warning(f"Automation engine failed, falling back to default browser: {automation_err}")
+                import webbrowser
+                webbrowser.open(search_url)
+                return ToolResult.ok(f"Searching for: {query}")
+
         except Exception as e:
             log.error(f"Web search failed: {e}")
             return ToolResult.fail(error=f"Web search failed: {e}")

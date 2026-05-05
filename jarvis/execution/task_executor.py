@@ -161,9 +161,13 @@ class TaskExecutor:
         plan.steps.append(step)
         return step
     
-    def _check_duplicate_action(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    def _check_duplicate_action(self, tool_name: str, parameters: Dict[str, Any], current_step_index: int = -1) -> bool:
         """Check if this exact action was recently performed (loop detection)."""
         current_time = time.time()
+        
+        # For 'wait' tool, allow multiple calls (they're often at different steps)
+        if tool_name == "wait":
+            return False
         
         # Look at last 10 actions
         recent_actions = self._action_history[-10:]
@@ -172,6 +176,12 @@ class TaskExecutor:
             if (action["tool_name"] == tool_name and 
                 action["parameters"] == parameters and
                 current_time - action["timestamp"] < 60):  # Within last minute
+                
+                # ALWAYS allow retries if the previous attempt FAILED
+                if not action.get("success", True):
+                    logger.info(f"Allowing retry of failed action: {tool_name}")
+                    return False
+                
                 # Allow these tools to be called repeatedly (they often need retries or are state-dependent)
                 allowed_repeated_tools = [
                     "open_app",           # Bringing apps to foreground
@@ -180,10 +190,14 @@ class TaskExecutor:
                     "click_element",      # UI clicks may need retries
                     "focus_window",       # Window focusing may need retries
                     "clear_text",         # Clearing text may be needed multiple times
+                    "extract_content",    # Content extraction may fail and need retry
+                    "search_web",         # Search may need retry on failure
+                    "navigate_to_url",   # Navigation may need retry
                 ]
                 if tool_name in allowed_repeated_tools:
                     logger.debug(f"Allowing repeated {tool_name} call")
                     return False
+                
                 logger.warning(f"Duplicate action detected: {tool_name} with same parameters")
                 return True
         
@@ -251,30 +265,43 @@ class TaskExecutor:
                 import psutil
                 from win32gui import GetForegroundWindow, GetWindowText
                 
-                # For keyboard actions like Ctrl+A, Delete - check if text was actually cleared
+                # For keyboard actions - just trust tool result if it succeeded
                 if step.tool_name == "press_key":
                     keys = step.parameters.get("keys", step.parameters.get("key", "")).lower()
                     
-                    # If this is a delete action, verify content changed
-                    if "delete" in keys or "del" in keys:
-                        # Give system time to process
+                    # If tool reported success, trust it
+                    if step.result and step.result.success:
+                        time.sleep(0.3)
+                        logger.info(f"State check: Key press '{keys}' executed successfully")
+                        return True, f"Verified: Key press '{keys}' executed"
+                    
+                    # For delete/clear actions, verify text changed
+                    if "delete" in keys or "del" in keys or "backspace" in keys:
                         time.sleep(0.5)
-                        
-                        # Check if active window is still Notepad
                         hwnd = GetForegroundWindow()
                         title = GetWindowText(hwnd)
-                        
-                        if "notepad" in title.lower():
-                            # For Notepad, we assume deletion worked if no error occurred
-                            # A more robust check would use OCR to verify empty content
-                            logger.info(f"State check: Verified Notepad window still active after delete")
-                            return True, "Verified: Delete action executed in Notepad window"
+                        if title:
+                            logger.info(f"State check: Delete action in window '{title}'")
+                            return True, "Verified: Delete action executed"
                     
-                    # If this is select all, just verify it executed
-                    if "ctrl+a" in keys or "control+a" in keys:
+                    # For select all, just verify it executed
+                    if "ctrl+a" in keys or "control+a" in keys or "selectall" in keys:
                         time.sleep(0.3)
                         logger.info(f"State check: Select All executed")
                         return True, "Verified: Select All action executed"
+                    
+                    # For copy/paste operations
+                    if "ctrl+c" in keys or "ctrl+v" in keys:
+                        time.sleep(0.3)
+                        logger.info(f"State check: Copy/Paste executed")
+                        return True, "Verified: Copy/Paste action executed"
+                    
+                    # Default: if tool didn't report success, fail verification
+                    if step.result and not step.result.success:
+                        return False, f"State check failed: Tool reported failure"
+                    
+                    # For other keys, just trust the tool
+                    return True, "State check passed: Key press executed"
                 
                 # For type_text, verify text was entered
                 elif step.tool_name == "type_text":

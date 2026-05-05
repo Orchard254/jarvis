@@ -58,6 +58,7 @@ class WebAutomationEngine:
         self.page: Optional[Page] = None
         self._use_existing_chrome = False
         self._chrome_debug_port = 9222
+        self._chrome_process = None
         self._initialized = True
         logger.info("WebAutomationEngine initialized")
     
@@ -172,16 +173,25 @@ class WebAutomationEngine:
         # Start a new Chrome instance with debug port
         try:
             self.playwright = sync_playwright().start()
-            
-            # Launch with args to enable CDP
-            self.browser = self.playwright.chromium.launch(
-                headless=headless,
-                args=[f"--remote-debugging-port={self._chrome_debug_port}"]
+
+            # Launch user's Chrome with debug port instead of Chromium
+            self._chrome_process = self.launch_chrome_with_debug()
+            # Wait briefly for Chrome to start
+            import time
+            time.sleep(2)
+
+            # Connect to the launched Chrome via CDP
+            self.browser = self.playwright.chromium.connect_over_cdp(
+                f"http://127.0.0.1:{self._chrome_debug_port}"
             )
-            self.context = self.browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
+            contexts = self.browser.contexts
+            if contexts:
+                self.context = contexts[0]
+            else:
+                self.context = self.browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                )
             self.page = self.context.new_page()
             logger.info(f"Browser started (headless={headless}, debug_port={self._chrome_debug_port})")
         except Exception as e:
@@ -193,18 +203,30 @@ class WebAutomationEngine:
         if self.browser:
             try:
                 # Don't close the browser if we connected to an existing Chrome
-                if not self._use_existing_chrome:
-                    self.browser.close()
-                else:
+                if self._use_existing_chrome:
                     # Just close our page and context, leave Chrome running
                     if self.page:
                         self.page.close()
                     if self.context:
                         self.context.close()
                     logger.info("Detached from existing Chrome (browser left running)")
+                elif self._chrome_process:
+                    # We launched Chrome, detach from CDP but leave Chrome running
+                    if self.page:
+                        self.page.close()
+                    if self.context:
+                        self.context.close()
+                    logger.info("Detached from launched Chrome (browser left running)")
+                else:
+                    self.browser.close()
             except Exception as e:
                 logger.warning(f"Error closing browser: {e}")
             finally:
+                if self.playwright:
+                    try:
+                        self.playwright.stop()
+                    except:
+                        pass
                 self.browser = None
                 self.page = None
                 self.context = None
@@ -483,7 +505,8 @@ class ExtractContentTool(BaseTool):
         "mode": {
             "type": "string",
             "description": "What to extract: 'text', 'links', 'tables', 'prices'",
-            "enum": ["text", "links", "tables", "prices"]
+            "enum": ["text", "links", "tables", "prices"],
+            "default": "text"
         },
         "selector": {
             "type": "string",
@@ -496,17 +519,17 @@ class ExtractContentTool(BaseTool):
             "default": 20
         }
     }
-    required_parameters = ["mode"]
+    required_parameters = []
     
     def validate(self, **kwargs) -> tuple[bool, str]:
-        mode = kwargs.get("mode")
+        mode = kwargs.get("mode", "text")
         valid_modes = ["text", "links", "tables", "prices"]
-        if not mode or mode not in valid_modes:
+        if mode not in valid_modes:
             return False, f"mode must be one of: {valid_modes}"
         return True, ""
     
     def execute(self, **kwargs) -> ToolResult:
-        mode = kwargs["mode"]
+        mode = kwargs.get("mode", "text")
         selector = kwargs.get("selector")
         limit = kwargs.get("limit", 20)
         

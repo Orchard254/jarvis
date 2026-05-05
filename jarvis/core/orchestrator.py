@@ -137,7 +137,8 @@ class Orchestrator:
             config=config,
             memory_system=self.memory,
             tool_registry=self.tool_registry,
-            skill_registry=self.skill_registry
+            skill_registry=self.skill_registry,
+            get_app_context=self.get_app_context  # Pass callback for app context
         )
         
         # Brain (LLM coordinator)
@@ -193,8 +194,8 @@ class Orchestrator:
         self.tts = TTSManager(config)
         
         # Task Executor for Plan-Execute-Verify loop (with visual verification disabled by default)
-        # use_separate_process=True spawns a separate subprocess per task for isolation
-        self.task_executor = TaskExecutor(enable_visual_verification=False, use_separate_process=True)
+        # use_separate_process=False to allow web tools to share browser state
+        self.task_executor = TaskExecutor(enable_visual_verification=False, use_separate_process=False)
         
         # Action Memory for loop prevention (tracks last 50 actions within 60 seconds)
         self._action_memory: Dict[str, float] = {}  # action_hash -> timestamp
@@ -217,6 +218,13 @@ class Orchestrator:
         self._failed_actions: List[Dict[str, Any]] = []  # Last 10 failed actions
         self._max_recent_results = 20
         self._max_failed_actions = 10
+
+        # App context tracking - track which apps are active for context-aware operations
+        self._last_active_app: Optional[str] = None
+        self._app_switch_history: List[Dict[str, Any]] = []  # Last 10 app switches
+        self._max_app_history = 10
+        self._last_app_check_time: float = 0
+        self._app_check_interval: float = 2.0  # Check active app every 2 seconds
         
         # Abort mechanism
         self._abort_flag = threading.Event()
@@ -272,6 +280,11 @@ class Orchestrator:
         timer_thread = threading.Thread(target=self._timer_monitor_loop, daemon=True)
         timer_thread.start()
         self.ambient_monitors.append(timer_thread)
+        
+        # App context monitor thread (NEW)
+        app_monitor_thread = threading.Thread(target=self._app_context_monitor_loop, daemon=True)
+        app_monitor_thread.start()
+        self.ambient_monitors.append(app_monitor_thread)
         
         logger.info(f"Started {len(self.ambient_monitors)} ambient monitor threads")
     
@@ -333,6 +346,15 @@ class Orchestrator:
                 logger.debug(f"Timer monitor error: {e}")
             time.sleep(5)  # Check every 5 seconds
     
+    def _app_context_monitor_loop(self) -> None:
+        """Monitor and update app context in background."""
+        while self.running:
+            try:
+                self._update_app_context()
+            except Exception as e:
+                logger.debug(f"App context monitor error: {e}")
+            time.sleep(2)  # Check every 2 seconds
+    
     def check_abort(self) -> bool:
         """Check if abort was requested (wake word spoken during execution)."""
         if not self._abort_queue.empty():
@@ -392,6 +414,9 @@ class Orchestrator:
         self.state['current_activity'] = 'processing_command'
         
         try:
+            # Update app context tracking
+            self._update_app_context()
+            
             # Phase 3 Safety: Input filtering (first safety layer)
             filter_result = self.input_filter.check(command)
             if not filter_result.is_safe:
@@ -416,8 +441,10 @@ class Orchestrator:
             
             # Classify intent using adaptive scoring system
             # Get context for scoring
+            app_ctx = self.get_app_context()
             context = {
-                'active_app': self._get_active_app_name(),
+                'active_app': app_ctx.get('current_app') or app_ctx.get('last_active_app'),
+                'last_active_app': app_ctx.get('last_active_app'),
                 'recent_commands': self.intent_scorer.context_window[-5:] if hasattr(self, 'intent_scorer') else [],
                 'current_mode': self.mode
             }
@@ -429,12 +456,14 @@ class Orchestrator:
             
             logger.info(f"Intent score: {intent_score}/100 - {intent_analysis['reasoning']}")
             
-            # Add to memory for all commands
-            self.memory.add_user_message(command, metadata={'source': 'voice' if voice else 'text'})
-            
-            # Unified mode - LLM decides everything via predictive planner
-            # The intent scorer is only used for learning patterns, not routing
-            result = self._handle_unified_mode(command, intent_analysis)
+            # Detect multi-step commands and route appropriately
+            is_multi_step = self._is_multi_step_command(command)
+            if is_multi_step:
+                logger.info(f"Multi-step command detected, routing to predictive planner: {command[:50]}...")
+                result = self._handle_agent_mode(command)
+            else:
+                # Single-step command, use unified loop
+                result = self._handle_unified_mode(command, intent_analysis)
             
             # Update state
             self.state['total_interactions'] += 1
@@ -669,7 +698,20 @@ class Orchestrator:
     
     def _build_single_loop_prompt(self, tools_json: str) -> str:
         """Build system prompt for single-loop execution with natural language parsing."""
+        # Get current app context
+        app_ctx = self.get_app_context()
+        app_context_str = ""
+        
+        if app_ctx.get('current_app'):
+            app_context_str += f"\nCurrent active app: {app_ctx['current_app']}"
+        if app_ctx.get('last_active_app') and app_ctx['last_active_app'] != app_ctx.get('current_app'):
+            app_context_str += f"\nLast active app: {app_ctx['last_active_app']}"
+        if app_ctx.get('recent_app_switches'):
+            switches = ' → '.join([s['to_app'] for s in app_ctx['recent_app_switches'][-3:]])
+            app_context_str += f"\nRecent app switches: {switches}"
+        
         return f"""You are JARVIS, an AI assistant that can use tools to help users.
+{app_context_str}
 
 CRITICAL: You must ONLY output ONE tool call at a time. Never plan multiple steps.
 
@@ -703,7 +745,8 @@ RULES:
 - ONE tool call per response
 - Wait for tool result before deciding next action
 - Use FINAL when task is complete
-- Never output multiple TOOL calls in one response"""
+- Never output multiple TOOL calls in one response
+- When user refers to "it", "that", or "the app", use the app context above"""
     
     def _validate_and_parse_json(self, text: str) -> Optional[Dict]:
         """Validate and parse JSON from LLM response."""
@@ -1409,6 +1452,100 @@ RULES:
             logger.debug(f"Could not get active app: {e}")
         
         return None
+
+    def _is_multi_step_command(self, command: str) -> bool:
+        """
+        Detect if a command requires multiple sequential steps.
+        
+        Args:
+            command: User command string
+            
+        Returns:
+            True if command appears to be multi-step
+        """
+        import re
+        
+        command_lower = command.lower().strip()
+        
+        # Check for conjunctions indicating multiple actions
+        conjunctions = [' and ', ' then ', ' after ', ' before ', ' followed by ']
+        for conj in conjunctions:
+            if conj in command_lower:
+                return True
+        
+        # Check for commas separating actions
+        if ',' in command and len(command.split(',')) > 1:
+            return True
+        
+        # Check for multiple imperative verbs (action words)
+        action_verbs = ['open', 'close', 'type', 'write', 'click', 'press', 'navigate', 
+                       'search', 'find', 'create', 'delete', 'move', 'copy', 'paste',
+                       'launch', 'start', 'stop', 'minimize', 'maximize', 'switch']
+        
+        verb_count = 0
+        for verb in action_verbs:
+            if re.search(r'\b' + verb + r'\b', command_lower):
+                verb_count += 1
+                if verb_count >= 2:
+                    return True
+        
+        # Check for compound commands with "and" between actions
+        # e.g., "open notepad and write hello"
+        if re.search(r'\b(and|then)\b', command_lower):
+            # Count action verbs after conjunction
+            parts = re.split(r'\b(and|then)\b', command_lower)
+            if len(parts) >= 2:
+                return True
+        
+        return False
+
+    def _update_app_context(self) -> None:
+        """
+        Update the last active app tracking.
+        Called periodically to track which app the user is working in.
+        """
+        current_time = time.time()
+        
+        # Rate limit checks to avoid excessive polling
+        if current_time - self._last_app_check_time < self._app_check_interval:
+            return
+        
+        self._last_app_check_time = current_time
+        current_app = self._get_active_app_name()
+        
+        if not current_app:
+            return
+        
+        # Check if app changed
+        if current_app != self._last_active_app:
+            if self._last_active_app:
+                # Record the app switch
+                self._app_switch_history.append({
+                    'from_app': self._last_active_app,
+                    'to_app': current_app,
+                    'timestamp': current_time,
+                    'time': datetime.now().strftime('%H:%M:%S')
+                })
+                # Keep only last N entries
+                if len(self._app_switch_history) > self._max_app_history:
+                    self._app_switch_history.pop(0)
+                
+                logger.debug(f"App switched: {self._last_active_app} -> {current_app}")
+            
+            self._last_active_app = current_app
+
+    def get_app_context(self) -> Dict[str, Any]:
+        """
+        Get the current app context for LLM awareness.
+        
+        Returns:
+            Dict with last active app and recent app history
+        """
+        return {
+            'last_active_app': self._last_active_app,
+            'recent_app_switches': self._app_switch_history[-5:] if self._app_switch_history else [],
+            'current_app': self._get_active_app_name()
+        }
     
     def _execute_direct(self, command: str, system_prompt: str) -> Dict[str, Any]:
         """
@@ -1840,6 +1977,9 @@ RULES:
                 if command.lower() == 'show memory':
                     self._handle_show_memory()
                     continue
+                elif command.lower() == 'show app context' or command.lower() == 'app context':
+                    self._handle_show_app_context()
+                    continue
                 elif command.lower() == 'setup keys':
                     self._handle_setup_keys()
                     continue
@@ -1894,6 +2034,17 @@ RULES:
                 print(f"\n{i}. [{record['timestamp'][:16]}]")
                 print(f"   You: {record['user'][:80]}...")
                 print(f"   JARVIS: {record['assistant'][:80]}...")
+        print()
+    
+    def _handle_show_app_context(self):
+        """Display current app context tracking info."""
+        app_ctx = self.get_app_context()
+        print("\n=== App Context Tracking ===")
+        print(f"Current App: {app_ctx.get('current_app', 'unknown')}")
+        print(f"Last Active App: {app_ctx.get('last_active_app', 'unknown')}")
+        print(f"\nRecent App Switches ({len(app_ctx.get('recent_app_switches', []))}):")
+        for i, switch in enumerate(app_ctx.get('recent_app_switches', [])[-5:], 1):
+            print(f"  {i}. {switch['time']}: {switch['from_app']} → {switch['to_app']}")
         print()
     
     def _handle_search_memory(self, query: str):

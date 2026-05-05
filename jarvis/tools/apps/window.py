@@ -84,7 +84,34 @@ class FocusWindowTool(BaseTool):
             hwnd = find_window_by_title(title)
             
             if hwnd is None:
-                return ToolResult.fail(error=f"No window found matching '{title}'")
+                # Try harder - search for windows with broader matching
+                from ctypes import windll
+                from ctypes.wintypes import BOOL, HWND, LPARAM
+                
+                target = title.lower()
+                found_hwnd = None
+                
+                def callback(hwnd, lparam):
+                    nonlocal found_hwnd
+                    if windll.user32.IsWindowVisible(hwnd):
+                        title_buf = ctypes.create_unicode_buffer(256)
+                        windll.user32.GetWindowTextW(hwnd, title_buf, 256)
+                        window_title = title_buf.value.lower()
+                        
+                        # Check if target is in window title (partial match)
+                        if target in window_title:
+                            found_hwnd = hwnd
+                            return False  # Stop enumeration
+                    return True
+                
+                WNDENUMPROC = ctypes.WINFUNCTYPE(BOOL, HWND, LPARAM)
+                enum_func = WNDENUMPROC(callback)
+                windll.user32.EnumWindows(enum_func, 0)
+                
+                if found_hwnd:
+                    hwnd = found_hwnd
+                else:
+                    return ToolResult.fail(error=f"No window found matching '{title}'")
             
             bring_to_foreground(hwnd)
             
