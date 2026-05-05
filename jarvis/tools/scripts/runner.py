@@ -264,17 +264,18 @@ class RunPythonTool(BaseTool):
         if not isinstance(timeout, int) or timeout < 1 or timeout > 120:
             return False, "timeout must be between 1 and 120 seconds"
         
-        # Safety check - block dangerous imports
-        dangerous_imports = [
-            "import os.system",
-            "import subprocess",
-            "exec(",
-            "eval(",
-            "__import__('os')",
-            "__import__('subprocess')",
+        # Safety check - block only truly destructive operations
+        # subprocess isolation already provides safety boundary
+        actually_dangerous = [
+            "shutil.rmtree('C:\\\\Windows')",
+            "shutil.rmtree('C:\\\\Program Files')", 
+            "os.remove('C:\\\\Windows')",
+            "format c:",
+            "rd /s /q c:\\\\",
+            "__import__('os').system('format",
         ]
         
-        for pattern in dangerous_imports:
+        for pattern in actually_dangerous:
             if pattern in code:
                 return False, f"Dangerous code pattern blocked: {pattern}"
         

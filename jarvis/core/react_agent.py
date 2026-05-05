@@ -8,9 +8,13 @@ import logging
 import asyncio
 import aiofiles
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Callable
 from datetime import datetime
 import traceback
+
+from jarvis.safety.tool_guard import ToolGuard
+from jarvis.safety.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,7 @@ class ReActAgent:
         self.vault = vault  # Credential vault for secure access
         self.system_prompt = self._build_system_prompt()
         self._error_history = []  # Track errors for self-healing
+        self.audit = AuditLog()
 
     def _build_system_prompt(self) -> str:
         """Builds a prompt that enforces ReAct behavior and lists available tools."""
@@ -242,16 +247,24 @@ Do not output any text outside the JSON block when acting.
             if not tool_name or not code:
                 return "ERROR: Missing tool_name or code for dynamic tool generation"
             
-            # Create a temporary module file
-            tool_filename = f"jarvis/tools/generated/{tool_name.lower()}.py"
+            # Validate code using permissive rules for generated tools
+            is_valid, error_msg = ToolGuard().validate_generated_tool_code(code)
+            if not is_valid:
+                return f"ERROR: Generated tool code failed validation: {error_msg}"
+            
+            # Create a temporary module file using absolute path
+            tool_filename = Path(__file__).parent.parent / 'tools' / 'generated' / f'{tool_name.lower()}.py'
             
             # Ensure directory exists
             import os
-            os.makedirs("jarvis/tools/generated", exist_ok=True)
+            os.makedirs(tool_filename.parent, exist_ok=True)
             
             # Write the tool code
             with open(tool_filename, 'w') as f:
                 f.write(code)
+            
+            # Log to audit
+            self.audit.log('tool_generated', {'name': tool_name, 'description': description, 'code_lines': len(code.splitlines())})
             
             # Hot-load the module
             import importlib.util
@@ -263,6 +276,7 @@ Do not output any text outside the JSON block when acting.
             if hasattr(module, tool_name):
                 tool_class = getattr(module, tool_name)
                 self.tool_registry.register_tool(tool_class())
+                logger.info(f"[ReAct] Dynamic tool '{tool_name}' created and registered. Total dynamic tools: {len(self.tool_registry._dynamic_tools)}")
                 return f"Successfully created and registered tool: {tool_name}"
             else:
                 return f"ERROR: Generated code does not contain expected class {tool_name}"

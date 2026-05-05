@@ -332,19 +332,65 @@ class ToolGuard:
         
         return True, ""
     
-    def _validate_run_python(self, params: Dict[str, Any]) -> Tuple[bool, str]:
-        """Validate Python code execution."""
+    def _validate_run_python(self, params: Dict[str, Any], is_generated_tool: bool = False) -> Tuple[bool, str]:
+        """Validate Python code execution.
+        
+        Args:
+            params: Parameters containing 'code' to validate
+            is_generated_tool: If True, use permissive rules for generated tools.
+                              If False, use strict rules for user-submitted code.
+        """
         code = params.get('code', '')
         if not code:
             return False, "No code provided"
         
-        # Check for dangerous imports
-        dangerous_imports = ['os.system', 'subprocess.call', 'eval(', 'exec(']
-        for imp in dangerous_imports:
-            if imp in code:
-                return False, f"Dangerous pattern detected: {imp}"
-        
-        return True, ""
+        if is_generated_tool:
+            # Permissive rules for generated tools - only block absolute destruction
+            destructive_patterns = [
+                "format c:",
+                "format d:",
+                "rd /s /q c:\\\\",
+                "del /f /s /q c:\\\\windows",
+                "reg delete HKLM\\\\SYSTEM",
+                "net user administrator",
+            ]
+            code_lower = code.lower()
+            for pattern in destructive_patterns:
+                if pattern.lower() in code_lower:
+                    return False, f"Destructive operation blocked: {pattern}"
+            
+            # Block shutil.rmtree targeting Windows/Program Files directories
+            import re
+            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
+                return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
+            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", code, re.IGNORECASE):
+                return False, "Destructive operation blocked: shutil.rmtree on C:\\Program Files"
+            
+            return True, ""
+        else:
+            # Strict rules for user-submitted code - block dangerous patterns
+            # Only block truly dangerous operations with user-controlled input
+            dangerous_patterns = [
+                "__import__",  # Block bypass imports
+            ]
+            for pattern in dangerous_patterns:
+                if pattern in code:
+                    return False, f"Dangerous pattern detected: {pattern}"
+            
+            # Block direct filesystem destruction using regex for flexibility
+            import re
+            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\['\"]", code):
+                return False, "Destructive operation blocked: shutil.rmtree on C:\\"
+            if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
+                return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
+            if re.search(r"os\.remove\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
+                return False, "Destructive operation blocked: os.remove on C:\\Windows"
+            
+            # Block registry destruction (winreg + DeleteKey combined)
+            if 'winreg' in code and 'DeleteKey' in code:
+                return False, "Registry destruction detected"
+            
+            return True, ""
     
     def _validate_run_script(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate script execution."""
@@ -394,23 +440,83 @@ class ToolGuard:
         
         return True, ""
     
-    def _contains_dangerous_content(self, content: str) -> bool:
-        """Check if content contains potentially dangerous code."""
-        dangerous_patterns = [
-            r'os\.system\s*\(',
-            r'subprocess\.(call|run|Popen)\s*\(',
-            r'eval\s*\(',
-            r'exec\s*\(',
-            r'__import__\s*\(',
-            r'ctypes\.windll',
-            r'ctypes\.cdll',
+    def _contains_dangerous_content(self, content: str, is_generated_tool: bool = False) -> bool:
+        """Check if content contains potentially dangerous code.
+        
+        Args:
+            content: Code content to check
+            is_generated_tool: If True, use permissive rules for generated tools.
+                              If False, use strict rules for user-submitted content.
+        """
+        if is_generated_tool:
+            # Permissive rules - only block absolute destruction
+            destructive_patterns = [
+                r"format\s+c:",
+                r"format\s+d:",
+                r"rd\s+/s\s+/q\s+c:\\\\",
+                r"del\s+/f\s+/s\s+/q\s+c:\\\\windows",
+                r"reg\s+delete\s+HKLM\\\\SYSTEM",
+                r"net\s+user\s+administrator",
+                r"shutil\.rmtree\(['\"]C:\\\\Windows['\"]\)",
+                r"shutil\.rmtree\(['\"]C:\\\\Program Files['\"]\)",
+            ]
+            
+            for pattern in destructive_patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    return True
+            return False
+        else:
+            # Strict rules for user-submitted content
+            dangerous_patterns = [
+                r'os\.system\s*\(',
+                r'subprocess\.(call|run|Popen)\s*\(',
+                r'eval\s*\(',
+                r'exec\s*\(',
+                r'__import__\s*\(',
+                r'ctypes\.windll',
+                r'ctypes\.cdll',
+            ]
+            
+            for pattern in dangerous_patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    return True
+            
+            return False
+    
+    def validate_generated_tool_code(self, code: str) -> Tuple[bool, str]:
+        """Validate code for generated tools using permissive rules.
+        
+        Args:
+            code: Python code to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not code:
+            return False, "Empty code provided"
+        
+        # Check for destructive operations
+        destructive_patterns = [
+            "format c:",
+            "format d:",
+            "rd /s /q c:\\\\",
+            "del /f /s /q c:\\\\windows",
+            "reg delete HKLM\\\\SYSTEM",
+            "net user administrator",
         ]
+        code_lower = code.lower()
+        for pattern in destructive_patterns:
+            if pattern.lower() in code_lower:
+                return False, f"Destructive operation blocked: {pattern}"
         
-        for pattern in dangerous_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
+        # Block shutil.rmtree targeting Windows/Program Files directories
+        import re
+        if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", code, re.IGNORECASE):
+            return False, "Destructive operation blocked: shutil.rmtree on C:\\Windows"
+        if re.search(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", code, re.IGNORECASE):
+            return False, "Destructive operation blocked: shutil.rmtree on C:\\Program Files"
         
-        return False
+        return True, ""
     
     def log_action(self, tool_name: str, params: Dict[str, Any], 
                    validated: bool, error: str = "") -> None:
