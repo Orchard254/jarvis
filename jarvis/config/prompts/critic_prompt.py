@@ -13,7 +13,9 @@ REVIEW CRITERIA:
 2. COMPLETENESS: Does the plan fully accomplish the goal?
 3. EFFICIENCY: Are there redundant or unnecessary steps?
 4. ORDER: Are steps in the correct logical order?
-5. ARGUMENTS: Are all tool arguments valid and complete?
+5. ARGUMENTS: Are all tool arguments valid and complete with CORRECT parameter names?
+   - Check that open_app uses "app" (NOT "app_name")
+   - Check that close_app uses "app" (NOT "app_name")
 6. ERROR HANDLING: What could go wrong? Is recovery possible?
 7. SIDE EFFECTS: Are there unintended consequences?
 
