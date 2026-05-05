@@ -27,7 +27,7 @@ REQUIRED_PARAMETERS = {
     'search_web': ['query'],
     'open_app': ['app'],
     'close_app': ['app'],
-    'press_key': ['key'],
+    'press_key': ['keys'],  # Changed from 'key' to 'keys' to match actual tool parameter
     'type_text': ['text'],
     'focus_window': ['title'],
     'clear_text': [],  # Optional target_app parameter
@@ -60,7 +60,7 @@ RULES:
     - open_app requires "app" (e.g., {{"app": "notepad"}})
     - close_app requires "app" (e.g., {{"app": "notepad"}})
     - navigate_to_url requires "url" (e.g., {{"url": "https://example.com"}})
-    - press_key requires "key" (e.g., {{"key": "Ctrl+A"}})
+    - press_key requires "keys" (e.g., {{"keys": "Ctrl+A"}} or {{"keys": "Win+Down", "target_app": "chrome"}})
     - type_text requires "text" (e.g., {{"text": "hello"}}). CRITICAL: When typing after opening an app, ALWAYS include "target_app" parameter to ensure the correct window receives the text (e.g., {{"text": "hello", "target_app": "notepad"}})
     - fill_input requires "selector" and "value"
     - click_element requires "selector"
