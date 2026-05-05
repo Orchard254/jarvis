@@ -67,8 +67,9 @@ RULES:
     - search_web requires "query"
     - focus_window requires "title"
     - create_file/write_file/read_file/delete_file require "path"
-11. CLARIFICATION FLAG: Set "needs_clarification": true ONLY if the request is ambiguous, dangerous, or missing critical information. Set to false for clear, straightforward requests.
+11. CLARIFICATION FLAG: Set "needs_clarification": true ONLY if the request is ambiguous, dangerous, or missing critical information that prevents execution. For clear requests like "open notepad", set to false and include the steps. NEVER set needs_clarification to true just because you can generate a plan - only use it when you genuinely cannot proceed without more information.
 12. STEP INDEPENDENCE: Each step should be independent. Do NOT include steps that simply retrieve data that was already retrieved in a previous step. If a previous step already obtained the information, use it directly in subsequent steps.
+13. MANDATORY STEP GENERATION: If the request is clear and actionable (like opening an app, typing text, navigating to a known website), you MUST generate the steps. Do NOT return empty steps array for straightforward commands. Empty steps are only acceptable for genuinely impossible or dangerously ambiguous requests.
 
 {context_section}
 AVAILABLE TOOLS:
@@ -195,6 +196,10 @@ class PredictivePlanner:
                             logger.info(f"Retrying due to invalid plan structure (attempt {attempt + 2}/{max_retries})...")
                             continue
                         logger.error(f"Invalid plan structure after all retries: {error_msg}")
+                        # If plan has no steps but LLM requested clarification, return it anyway for user confirmation
+                        if error_msg == "Plan has no steps" and plan.get('needs_clarification', False):
+                            logger.warning("Returning plan with no steps for user clarification")
+                            return plan
                         return None
                     
                     logger.info(f"Plan generated with {len(plan['steps'])} steps (Confidence: {plan.get('confidence', 'unknown')})")
