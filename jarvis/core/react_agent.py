@@ -6,14 +6,13 @@ Production-ready with async execution, self-healing, and dynamic tool generation
 import json
 import logging
 import asyncio
-import aiofiles
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Callable
 from datetime import datetime
 import traceback
 
-from jarvis.safety.tool_guard import ToolGuard
+from jarvis.safety.tool_guard import get_tool_guard
 from jarvis.safety.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -101,6 +100,10 @@ Do not output any text outside the JSON block when acting.
         
         for i in range(self.max_iterations):
             logger.debug(f"[ReAct] Iteration {i+1}/{self.max_iterations}")
+            
+            # Trim history to prevent context overflow (keep system + last 20 messages)
+            if len(history) > 21:
+                history = history[:1] + history[-20:] if history[0].get('role') == 'system' else history[-20:]
             
             try:
                 # 1. REASON: Ask LLM for next step with retry logic for empty/malformed responses
@@ -259,7 +262,7 @@ Do not output any text outside the JSON block when acting.
                 return "ERROR: Missing tool_name or code for dynamic tool generation"
             
             # Validate code using permissive rules for generated tools
-            is_valid, error_msg = ToolGuard().validate_generated_tool_code(code)
+            is_valid, error_msg = get_tool_guard().validate_generated_tool_code(code)
             if not is_valid:
                 return f"ERROR: Generated tool code failed validation: {error_msg}"
             
@@ -277,21 +280,19 @@ Do not output any text outside the JSON block when acting.
             # Log to audit
             self.audit.log('tool_generated', {'name': tool_name, 'description': description, 'code_lines': len(code.splitlines())})
             
-            # FIX #2: Validate the code by importing in a subprocess first (not executing in main process)
-            # This prevents arbitrary code from running with full process access
+            # FIX #2: Validate by dry-running in subprocess before loading in-process
             import subprocess as _sp
+            import sys
             try:
                 validate_result = _sp.run(
-                    ["python", "-c", (
-                        f"import ast, sys; "
-                        f"ast.parse(open(r'{tool_filename}').read()); "
-                        f"print('OK')"
-                    )],
-                    capture_output=True, text=True, timeout=10
+                    [sys.executable, '-c', f'import importlib.util; spec = importlib.util.spec_from_file_location("test", r"{tool_filename}"); mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)'],
+                    capture_output=True, text=True, timeout=5
                 )
                 if validate_result.returncode != 0:
-                    return f"ERROR: Generated tool code has syntax errors: {validate_result.stderr[:500]}"
+                    os.unlink(tool_filename)
+                    return f"ERROR: Generated code has syntax/import errors: {validate_result.stderr[:500]}"
             except _sp.TimeoutExpired:
+                os.unlink(tool_filename)
                 return "ERROR: Code validation timed out"
             
             # Hot-load the module — code is already validated for safety patterns above,
@@ -314,8 +315,8 @@ Do not output any text outside the JSON block when acting.
                 # Run the tool's own validate() as a sanity check
                 if hasattr(instance, 'validate'):
                     instance.validate()  # Validate with no args (schema-only)
-                self.tool_registry.register_tool(instance)
-                logger.info(f"[ReAct] Dynamic tool '{tool_name}' created and registered. Total dynamic tools: {len(self.tool_registry._dynamic_tools)}")
+                self.tool_registry.register(instance)
+                logger.info(f"[ReAct] Dynamic tool '{tool_name}' created and registered. Total tools: {len(self.tool_registry.get_tool_names())}")
                 return f"Successfully created and registered tool: {tool_name}"
             else:
                 return f"ERROR: Generated code does not contain expected class {tool_name}"
