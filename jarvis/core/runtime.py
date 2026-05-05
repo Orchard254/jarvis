@@ -41,7 +41,7 @@ class JarvisRuntime:
         from jarvis.skills.supervisor import SupervisorSkill
         from jarvis.core.memory import CoreMemory
         from jarvis.core.recovery import HierarchicalRecovery, RecoveryConfig
-        from jarvis.tools.registry_dynamic import get_registry
+        from jarvis.tools.registry import get_registry
         
         # Initialize components
         logger.info("Initializing JARVIS Runtime...")

@@ -268,6 +268,7 @@ def get_registry() -> ToolRegistry:
     global _registry
     if _registry is None:
         _registry = ToolRegistry.get_instance()
+        _registry.load_all_tools()  # ensure tools are discovered
     return _registry
 
 

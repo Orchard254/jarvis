@@ -106,7 +106,7 @@ class TestPortKiller(BaseTool):
         return True, ""
 '''
     
-    tool_filename = Path(__file__).parent / 'jarvis' / 'tools' / 'generated' / f'{tool_name.lower()}.py'
+    tool_filename = Path(__file__).parent.parent / 'jarvis' / 'tools' / 'generated' / f'{tool_name.lower()}.py'
     
     try:
         # Ensure directory exists
@@ -137,7 +137,7 @@ def test_generated_tool_registration():
     import importlib.util
     
     tool_name = "TestPortKiller"
-    tool_filename = Path(__file__).parent / 'jarvis' / 'tools' / 'generated' / f'{tool_name.lower()}.py'
+    tool_filename = Path(__file__).parent.parent / 'jarvis' / 'tools' / 'generated' / f'{tool_name.lower()}.py'
     
     if not tool_filename.exists():
         print("SKIP: Generated tool file doesn't exist (run test 4 first)")

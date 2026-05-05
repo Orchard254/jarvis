@@ -268,12 +268,12 @@ class RunPythonTool(BaseTool):
         import re
         
         DESTRUCTION_PATTERNS = [
-            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Windows", re.IGNORECASE),
-            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:\\\\Program Files", re.IGNORECASE),
-            re.compile(r"shutil\.rmtree\s*\(\s*Path\s*\(\s*['\"]C:/Windows", re.IGNORECASE),
-            re.compile(r"os\.remove\s*\(\s*['\"]C:\\\\Windows", re.IGNORECASE),
+            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
+            re.compile(r"shutil\.rmtree\s*\(\s*['\"]C:[/\\\\]+Program\s+Files", re.IGNORECASE),
+            re.compile(r"shutil\.rmtree\s*\(\s*Path\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
+            re.compile(r"os\.remove\s*\(\s*['\"]C:[/\\\\]+Windows", re.IGNORECASE),
             re.compile(r"format\s+[cCdD]:"),
-            re.compile(r"rd\s+/s\s+/q\s+[cCdD]:\\\\"),
+            re.compile(r"rd\s+/s\s+/q\s+[cCdD]:[/\\\\]"),
             re.compile(r"__import__\s*\(\s*['\"]os['\"]\s*\)\.system\s*\(\s*['\"]format"),
         ]
         

@@ -16,15 +16,34 @@ from typing import Callable, Generator, Optional, List, Dict, Any
 
 import requests
 
-# Import settings - single source of truth for configuration
-from settings import (
-    OLLAMA_CLOUD_URL,
-    OLLAMA_LOCAL_URL,
-    OLLAMA_API_KEY,
-    OLLAMA_MODEL,
-    OLLAMA_TIMEOUT,
-    OLLAMA_MAX_RETRIES,
-)
+
+def _load_settings():
+    """Load settings with fallback to config system."""
+    try:
+        from settings import (
+            OLLAMA_CLOUD_URL, OLLAMA_LOCAL_URL, OLLAMA_API_KEY,
+            OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_MAX_RETRIES,
+        )
+        return {
+            'cloud_url': OLLAMA_CLOUD_URL,
+            'local_url': OLLAMA_LOCAL_URL,
+            'api_key': OLLAMA_API_KEY,
+            'model': OLLAMA_MODEL,
+            'timeout': OLLAMA_TIMEOUT,
+            'max_retries': OLLAMA_MAX_RETRIES,
+        }
+    except ImportError:
+        from jarvis.config.config import get_config
+        cfg = get_config()
+        return {
+            'cloud_url': cfg.get('ollama_cloud_url', 'https://api.ollama.com'),
+            'local_url': cfg.get('ollama_local_url', 'http://localhost:11434'),
+            'api_key': cfg.get('ollama_api_key', ''),
+            'model': cfg.get('ollama_model', 'nemotron-3-nano:30b-cloud'),
+            'timeout': cfg.get('ollama_timeout', 60),
+            'max_retries': cfg.get('ollama_max_retries', 3),
+        }
+
 
 log = logging.getLogger("ollama_client")
 
@@ -47,13 +66,16 @@ class OllamaClient:
         max_retries: int = None,
         base_backoff: float = 1.0,
     ):
+        # Load settings with fallback
+        _settings = _load_settings()
+        
         # Use settings defaults, allow overrides
-        self.cloud_url = cloud_url or OLLAMA_CLOUD_URL
-        self.local_url = local_url or OLLAMA_LOCAL_URL
-        self.api_key = api_key or OLLAMA_API_KEY
-        self.model = model or OLLAMA_MODEL
-        self.timeout = timeout or OLLAMA_TIMEOUT
-        self.max_retries = max_retries if max_retries is not None else OLLAMA_MAX_RETRIES
+        self.cloud_url = cloud_url or _settings['cloud_url']
+        self.local_url = local_url or _settings['local_url']
+        self.api_key = api_key or _settings['api_key']
+        self.model = model or _settings['model']
+        self.timeout = timeout or _settings['timeout']
+        self.max_retries = max_retries if max_retries is not None else _settings['max_retries']
         self.base_backoff = base_backoff
         
         # Track which endpoint is working
@@ -477,6 +499,45 @@ class OllamaClient:
             "and local Ollama server is not running."
         )
     
+
+    async def generate_async(self, prompt: str, temperature: float = 0.7) -> str:
+        """
+        Async wrapper around synchronous chat() for Tree of Thoughts compatibility.
+        
+        Runs the blocking chat() call in a thread pool executor so it does not
+        block the event loop while the ToT engine awaits multiple branches.
+        
+        Args:
+            prompt: The prompt string to send
+            temperature: Sampling temperature (default 0.7)
+            
+        Returns:
+            Response content as string
+        """
+        import asyncio
+        messages = [{"role": "user", "content": prompt}]
+        
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: self.chat(
+                messages=messages,
+                temperature=temperature,
+                stream=False,
+            )
+        )
+        
+        # Extract string content from response
+        if isinstance(result, dict):
+            # Standard chat response format
+            content = result.get('content', '')
+            if not content:
+                # Try nested message format
+                content = result.get('message', {}).get('content', '')
+            return content or ''
+        
+        return str(result) if result else ''
+
     def is_available(self) -> bool:
         """Check if any Ollama endpoint is available."""
         for url, headers, name in self._get_endpoints():
@@ -488,6 +549,44 @@ class OllamaClient:
             except Exception as e:
                 log.debug(f"[OLLAMA] Health check failed for {name}: {e}")
         return False
+    
+    async def generate_async(
+        self,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> str:
+        """
+        Async wrapper for chat completion - generates text response.
+        
+        Args:
+            prompt: User prompt
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+            
+        Returns:
+            Generated text content
+        """
+        messages = [{"role": "user", "content": prompt}]
+        result = await self._async_chat(messages, temperature=temperature, max_tokens=max_tokens)
+        return result.get("content", "")
+    
+    async def _async_chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> Dict[str, Any]:
+        """Internal async chat method."""
+        import asyncio
+        
+        # Run synchronous chat in executor to make it async-compatible
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: self.chat(messages, temperature=temperature, max_tokens=max_tokens)
+        )
+        return result
 
 
 # Global client instance (lazy initialization)

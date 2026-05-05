@@ -1,6 +1,35 @@
 ```
-# Python
+# Compiled and build artifacts
+*.pyc
 __pycache__/
+*.o
+*.obj
+
+# Dependencies
+.venv/
+venv/
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Python specific
 *.py[cod]
 *$py.class
 *.so
@@ -21,28 +50,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
-venv/
-env/
-ENV/
-.venv/
-.env/
+# Testing
+.pytest_cache/
+.mypy_cache/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Environment
-.env
-.env.local
-*.env.*
+# Distribution / packaging
+.hypothesis/
+cover/
 ```
