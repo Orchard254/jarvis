@@ -206,7 +206,7 @@ FALLBACK_TO_LOCAL: bool = _get_bool(
 
 CONVERSATION_HISTORY_LIMIT: int = _get_int(
     "CONVERSATION_HISTORY_LIMIT",
-    default=20
+    default=6  # Reduced from 20 to prevent context bloat causing Ollama timeouts
 )
 
 # ── Audio Settings ────────────────────────────────────────

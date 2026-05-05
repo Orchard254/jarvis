@@ -179,7 +179,7 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         tools: Optional[List[dict]] = None,
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int = 1024,  # Reduced from 2000 to prevent context overflow
         stream: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -291,7 +291,15 @@ class OllamaClient:
                 # Warn if response is completely empty even when done
                 if not content and is_done:
                     log.warning(f"[OLLAMA] Empty response from {name} endpoint (done=True). Model may not be responding correctly.")
-                    continue  # Try next endpoint
+                    # Don't skip - return empty response so caller can handle it
+                    # This prevents retrying on rate-limited cloud endpoints
+                    return {
+                        "content": "",
+                        "tool_calls": msg.get("tool_calls") or [],
+                        "done": is_done,
+                        "error": None,
+                        "endpoint": name,
+                    }
                 
                 return {
                     "content": content,

@@ -127,7 +127,7 @@ class Brain:
     def chat(self, messages: List[Dict], 
              system_prompt: Optional[str] = None,
              temperature: float = 0.7,
-             max_tokens: int = 2048,
+             max_tokens: int = 1024,  # Reduced from 2048 to prevent context overflow
              stream: bool = False,
              include_tools: bool = True) -> Dict[str, Any]:
         """
@@ -380,7 +380,8 @@ class Brain:
             prepared.append({'role': 'system', 'content': system_prompt})
         
         # Add conversation history (limited to avoid token overflow)
-        history_limit = self.config.get('conversation_history_limit', 20)
+        # Reduced from 20 to 6 to prevent context bloat causing Ollama timeouts
+        history_limit = self.config.get('conversation_history_limit', 6)
         prepared.extend(self.conversation_history[-history_limit:])
         
         # Add new messages
@@ -397,7 +398,8 @@ class Brain:
             response: LLM response
         """
         # Only add the last user message and the response
-        history_limit = self.config.get('conversation_history_limit', 20)
+        # Reduced from 20 to 6 to prevent context bloat causing Ollama timeouts
+        history_limit = self.config.get('conversation_history_limit', 6)
         
         # Find last user message
         last_user_msg = None
