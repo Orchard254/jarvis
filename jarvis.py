@@ -250,18 +250,30 @@ class JARVISAgent:
                 # Use target_capability from intent result if available, otherwise use intent
                 target_capability = intent_result.get('output', {}).get('target_capability', intent)
                 
+                # Build parameters based on the target capability
+                # Different capabilities expect different parameter names
+                if target_capability == "reasoning_engine":
+                    params = {'task': command, 'mode': 'analyze'}
+                elif target_capability in ["web_search", "web_scraper", "url_reader", "file_reader", 
+                                           "file_search", "data_parser", "ocr_extract_text",
+                                           "vision_analyzer", "summarizer", "fact_checker"]:
+                    # These capabilities expect 'query' or 'url' or specific params
+                    params = {'query': command}
+                else:
+                    params = {'input_text': command}
+                
                 # For general_query and other intents that map to capabilities,
                 # use the reasoning_engine with proper parameters
                 if target_capability == "reasoning_engine":
                     result = tool_dispatcher.execute(
                         tool_name=target_capability,
-                        parameters={'task': command, 'mode': 'analyze'}
+                        parameters=params
                     )
                 else:
                     # Call ToolDispatcher.execute(tool_name, parameters)
                     result = tool_dispatcher.execute(
                         tool_name=target_capability,  # Which tool to dispatch to
-                        parameters={'input_text': command}  # Parameters for that tool
+                        parameters=params  # Parameters for that tool
                     )
                 
                 return result
