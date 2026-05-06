@@ -392,3 +392,62 @@ Traceback (most recent call last):
     result = self.registry.execute(
              ^^^^^^^^^^^^^^^^^^^^^^
 TypeError: CapabilityRegistry.execute() got multiple values for argument 'tool_name'
+2026-05-06 05:39:55,838 - __main__ - INFO - ============================================================
+2026-05-06 05:39:55,838 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 05:39:55,838 - __main__ - INFO - ============================================================
+2026-05-06 05:39:55,839 - __main__ - INFO - Starting in agent mode
+2026-05-06 05:39:55,839 - __main__ - INFO - Test mode: True
+2026-05-06 05:39:55,839 - __main__ - INFO - Running in TEST MODE - models will use fallback behavior
+2026-05-06 05:39:55,839 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 05:39:55,839 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 05:39:55,839 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 05:39:55,839 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 05:39:55,839 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 05:39:55,839 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 05:39:55,839 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 05:39:55,839 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 05:39:55,839 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 05:39:55,839 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 05:51:09,362 - __main__ - INFO - ======================================================================
+2026-05-06 05:51:09,362 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 05:51:09,362 - __main__ - INFO - ======================================================================
+2026-05-06 05:51:09,362 - __main__ - INFO - Starting in agent mode
+2026-05-06 05:51:09,362 - __main__ - INFO - Test mode: True
+2026-05-06 05:51:09,362 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 05:51:09,362 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 05:51:09,363 - __main__ - INFO - Running in TEST MODE - models will use fallback behavior
+2026-05-06 05:51:09,363 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 05:51:09,363 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 05:51:09,363 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 05:51:09,363 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 05:51:09,363 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 05:51:09,363 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 05:51:09,363 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 05:51:09,363 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 05:51:10,018 - __main__ - INFO - ======================================================================
+2026-05-06 05:51:10,018 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 05:51:10,018 - __main__ - INFO - ======================================================================
+2026-05-06 05:51:10,018 - __main__ - INFO - Starting in agent mode
+2026-05-06 05:51:10,018 - __main__ - INFO - Test mode: True
+2026-05-06 05:51:10,019 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 05:51:10,019 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 05:51:10,019 - __main__ - INFO - Running in TEST MODE - models will use fallback behavior
+2026-05-06 05:51:10,019 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 05:51:10,019 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 05:51:10,019 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 05:51:10,019 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 05:51:10,019 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 05:51:10,019 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 05:51:10,019 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 05:51:10,019 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 05:51:12,977 - __main__ - INFO - Processing command: ls -la /workspace/*.py /workspace/*.md 2>/dev/null | grep -E "(jarvis|MIGRATION|health)" | head -10
+2026-05-06 05:51:12,978 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: ls -la /workspace/*.py /workspace/*.md 2>/dev/null...
+2026-05-06 05:51:12,978 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 05:51:15,042 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'execute_command' → run_terminal_command
+2026-05-06 05:51:15,043 - __main__ - INFO - Detected intent: execute_command (confidence: 0.98)
+2026-05-06 05:51:15,043 - __main__ - ERROR - Error processing command: CapabilityRegistry.execute() got multiple values for argument 'tool_name'
+Traceback (most recent call last):
+  File "/workspace/jarvis.py", line 242, in process_command
+    result = self.registry.execute(
+             ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: CapabilityRegistry.execute() got multiple values for argument 'tool_name'

@@ -6,7 +6,7 @@ Main entry point using the new 30-tool capability architecture.
 This version replaces the old tool-based system with a clean capability-driven design.
 
 Usage:
-    python jarvis_new.py [--config <config_file>] [--mode <chat|agent>]
+    python jarvis.py [--config <config_file>] [--mode <chat|agent>]
 """
 
 import sys
@@ -365,15 +365,65 @@ def main() -> int:
     setup_logging(config)
     
     logger = logging.getLogger(__name__)
-    logger.info("="*60)
+    
+    # Enhanced startup banner with model status
+    print("\n" + "="*70)
+    print("  🤖 JARVIS - Capability-Based AI Agent v2.0")
+    print("="*70)
+    print(f"\n📋 Configuration:")
+    print(f"   Mode: {args.mode}")
+    print(f"   Test Mode: {'Yes' if args.test else 'No'}")
+    print(f"   Debug: {'Yes' if args.debug else 'No'}")
+    
+    logger.info("="*70)
     logger.info("JARVIS - Capability-Based AI Agent")
-    logger.info("="*60)
+    logger.info("="*70)
     logger.info(f"Starting in {args.mode} mode")
     logger.info(f"Test mode: {args.test}")
+    
+    # Pre-initialize models to show status before agent creation
+    print(f"\n🔧 Initializing Models...")
+    try:
+        from jarvis.models.model_adapter import get_reasoning_model, get_vision_model
+        
+        # Try to initialize reasoning model (GPT-OSS 120B)
+        try:
+            reasoning_model = get_reasoning_model()
+            print(f"   ✓ GPT-OSS 120B: {reasoning_model.model_name}")
+        except Exception as e:
+            print(f"   ⚠ GPT-OSS 120B: Unavailable ({str(e)[:50]})")
+        
+        # Try to initialize vision model (Gemma 3 27B)
+        try:
+            vision_model = get_vision_model()
+            print(f"   ✓ Gemma 3 27B: {vision_model.model_name}")
+        except Exception as e:
+            print(f"   ⚠ Gemma 3 27B: Unavailable ({str(e)[:50]})")
+            
+    except Exception as e:
+        print(f"   ⚠ Model initialization warning: {e}")
+    
+    print(f"\n📦 Loading Capabilities...")
     
     try:
         # Create and run agent
         agent = JARVISAgent(config, test_mode=args.test)
+        
+        # Show final status
+        status = agent.model_manager.get_status()
+        is_fully_operational = agent.model_manager.is_fully_operational()
+        
+        print(f"\n{'='*70}")
+        if is_fully_operational:
+            print("  ✅ STATUS: Fully Operational")
+        else:
+            print("  ⚠️  STATUS: Limited Mode (some models unavailable)")
+        print(f"{'='*70}")
+        print(f"   Capabilities Loaded: {len(agent.registry.list_capabilities())}")
+        print(f"   Reasoning Model: {'Active' if status['reasoning_model']['available'] else 'Inactive'}")
+        print(f"   Vision Model: {'Active' if status['vision_model']['available'] else 'Inactive'}")
+        print(f"{'='*70}\n")
+        
         agent.run_interactive()
         return 0
         
