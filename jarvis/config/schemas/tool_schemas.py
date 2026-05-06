@@ -324,6 +324,32 @@ WEB_SCHEMAS = {
             }
         },
         required=["url"]
+    ),
+    "close_tab": create_schema(
+        name="close_tab",
+        description="Close a specific browser tab by matching its title or URL. Use this to close individual tabs (e.g., 'grok.com', 'Grok AI') WITHOUT closing the entire browser. Preferred over vision-based clicking for tab closure.",
+        properties={
+            "query": {
+                "type": "string",
+                "description": "Title or URL substring to match the tab to close (e.g., 'grok.com', 'Grok')"
+            }
+        },
+        required=["query"]
+    ),
+    "click_element": create_schema(
+        name="click_element",
+        description="Click a button, link, or interactive element within a browser page using CSS selector or visible text. Use this for in-page elements, NOT for window controls like close/minimize buttons.",
+        properties={
+            "selector": {
+                "type": "string",
+                "description": "CSS selector (e.g., 'button.search-btn') OR visible text (prefix with text:)"
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in ms to find element (default: 10000)"
+            }
+        },
+        required=["selector"]
     )
 }
 

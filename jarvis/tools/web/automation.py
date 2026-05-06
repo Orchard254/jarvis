@@ -1030,7 +1030,94 @@ class SearchAndNavigateTool(BaseTool):
         return "low"
 
 
-# Export all tool classes
+# Export all tool classes - CloseTabTool defined first, then exported
+
+class CloseTabTool(BaseTool):
+    """Close a browser tab by title or URL match.
+    
+    ✅ RELIABLE TOOL - PREFERRED FOR CLOSING BROWSER TABS
+    
+    This tool uses Playwright's DOM-level control to close specific browser tabs.
+    It identifies tabs by their title or URL and closes them precisely without
+    affecting other tabs or the browser window itself.
+    
+    Use this for:
+    - Closing specific tabs (e.g., "grok.com", "YouTube", "Gmail")
+    - Closing tabs when you know part of the URL or title
+    - Multi-tab management workflows
+    
+    Do NOT use for:
+    - Closing entire browser windows → Use close_browser instead
+    - Closing application windows (Notepad, etc.) → Use close_window instead
+    
+    Why this is better than find_on_screen + click_at:
+    - 100% accurate - targets exact tab by title/URL
+    - Won't accidentally close wrong tab or entire browser
+    - Works regardless of tab position on screen
+    - No coordinate guessing or vision errors
+    """
+    
+    name = "close_tab"
+    description = "Close a specific browser tab by matching its title or URL. RELIABLE: Use for closing individual tabs like 'grok.com', 'YouTube', 'Gmail'. For entire browser, use close_browser. For apps like Notepad, use close_window."
+    parameters = {
+        "query": {
+            "type": "string",
+            "description": "Title or URL substring to match the tab to close (e.g., 'grok.com', 'Grok', 'YouTube', 'Gmail')"
+        }
+    }
+    required_parameters = ["query"]
+    
+    def validate(self, **kwargs) -> tuple[bool, str]:
+        query = kwargs.get("query")
+        if not query or not isinstance(query, str):
+            return False, "query must be a non-empty string"
+        return True, ""
+    
+    def execute(self, **kwargs) -> ToolResult:
+        query = kwargs["query"].lower()
+        
+        try:
+            engine = get_automation_engine()
+            
+            # Ensure browser is running
+            page = engine.ensure_browser(headless=False, use_existing=True)
+            
+            # Get all tabs/pages in the context
+            if not engine.context:
+                return ToolResult.fail(error="No browser context available")
+            
+            pages = engine.context.pages
+            matched_page = None
+            
+            for p in pages:
+                try:
+                    title = p.title().lower()
+                    url = p.url.lower()
+                    if query in title or query in url:
+                        matched_page = p
+                        break
+                except Exception:
+                    continue
+            
+            if not matched_page:
+                return ToolResult.fail(error=f"No tab found matching '{query}'")
+            
+            # Close the matched tab
+            matched_page.close()
+            
+            return ToolResult.ok(f"Closed tab matching '{query}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to close tab: {e}")
+            return ToolResult.fail(error=f"Failed to close tab: {e}")
+    
+    def estimate_duration(self, **kwargs) -> float:
+        return 0.5
+    
+    def risk_level(self) -> str:
+        return "low"
+
+
 WEB_AUTOMATION_TOOLS = [
     NavigateToUrlTool,
     ClickElementTool,
@@ -1039,4 +1126,5 @@ WEB_AUTOMATION_TOOLS = [
     WaitForElementTool,
     ScreenshotTool,
     SearchAndNavigateTool,
+    CloseTabTool,
 ]

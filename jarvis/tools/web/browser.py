@@ -111,10 +111,17 @@ class OpenUrlTool(BaseTool):
 
 
 class CloseBrowserTool(BaseTool):
-    """Close the web browser or specific tabs."""
+    """Close the web browser or all browser windows.
+    
+    IMPORTANT: This tool closes ENTIRE browser windows/processes.
+    - To close a single tab, use close_tab instead
+    - To close an application window (Notepad, etc.), use close_window instead
+    
+    Use this when you want to completely exit Chrome, Firefox, Edge, etc.
+    """
     
     name = "close_browser"
-    description = "Close the web browser or all browser windows. Use this to close Chrome, Firefox, Edge, or any open browser."
+    description = "Close entire browser windows/processes (Chrome, Firefox, Edge). Use ONLY to completely exit browsers. For closing individual tabs use close_tab. For closing app windows use close_window."
     parameters = {
         "browser": {
             "type": "string",

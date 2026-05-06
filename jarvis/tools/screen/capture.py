@@ -194,10 +194,34 @@ class AnalyzeScreenTool(BaseTool):
 
 
 class ClickAtTool(BaseTool):
-    """Click at specific screen coordinates."""
+    """Click at specific screen coordinates.
+    
+    ⚠️  LOW-LEVEL TOOL - USE AS LAST RESORT
+    
+    This tool clicks at exact pixel coordinates. It should ONLY be used:
+    1. AFTER find_on_screen returns coordinates with HIGH confidence (≥80%)
+    2. When NO specialized tool exists for your task
+    3. For custom UI elements, games, or non-standard applications
+    
+    ❌ DO NOT USE for these common tasks (use specialized tools instead):
+    - Closing windows → Use close_window(title="...")
+    - Closing browser tabs → Use close_tab(query="...")
+    - Minimizing windows → Use minimize_window(title="...")
+    - Clicking web buttons → Use click_element(selector="...")
+    
+    Why avoid coordinate clicking?
+    - Coordinates may change if windows move
+    - Vision might identify wrong element (e.g., Chrome's close button instead of Notepad's)
+    - No built-in verification that you're clicking the right target
+    
+    ✅ BETTER APPROACH for standard operations:
+    "close notepad" → close_window(title="Notepad") [100% reliable]
+    "close grok tab" → close_tab(query="grok.com") [DOM-level precision]
+    "minimize chrome" → minimize_window(title="Chrome") [Windows API]
+    """
     
     name = "click_at"
-    description = "Click the mouse at specific x,y screen coordinates. Origin (0,0) is top-left corner."
+    description = "⚠️ LOW-LEVEL: Click mouse at x,y coordinates. ONLY use after find_on_screen with high confidence. PREFER: close_window for apps, close_tab for browser tabs, minimize_window for minimizing, click_element for web. Origin (0,0) is top-left."
     parameters = {
         "x": {
             "type": "integer",
@@ -273,15 +297,39 @@ class ClickAtTool(BaseTool):
 
 
 class FindOnScreenTool(BaseTool):
-    """Find an element on screen using vision."""
+    """Find an element on screen using vision.
+    
+    CRITICAL FOR ACCURACY: This tool uses Gemma4 vision to locate UI elements.
+    When searching for window controls (close/minimize/maximize buttons), the vision
+    model will identify ALL matching buttons and return coordinates for the MOST LIKELY match.
+    
+    IMPORTANT TIPS FOR BETTER ACCURACY:
+    - Be specific in descriptions: "the red X close button on Notepad window" is better than "close button"
+    - Include window context: Mention which window the element belongs to
+    - For window controls, consider using close_window or minimize_window tools instead - they're more reliable
+    
+    Use cases:
+    - Finding where a button is located before clicking it
+    - Locating UI elements for automation scripts
+    - Debugging UI layout
+    
+    For closing windows, use close_window instead (more reliable).
+    For closing browser tabs, use close_tab instead (more reliable).
+    For minimizing windows, use minimize_window instead (more reliable).
+    """
     
     name = "find_on_screen"
-    description = "Find a specific element on screen by description. Uses AI vision to locate buttons, text, icons, or UI elements and returns their coordinates."
+    description = "Find a specific element on screen by description using AI vision. Returns coordinates (x,y). BE SPECIFIC: include window name and element details (e.g., 'close button on Notepad window'). For closing/minimizing, prefer close_window/minimize_window tools instead."
     parameters = {
         "description": {
             "type": "string",
-            "description": "Description of what to find (e.g., 'the close button', 'Save icon', 'Submit text')",
+            "description": "Detailed description of what to find. Include window context! Examples: 'the red X close button on the Notepad window', 'minimize button on Chrome title bar', 'Save icon in top toolbar'",
         },
+        "window_context": {
+            "type": "string",
+            "description": "Optional: Name of the window where the element is expected (helps vision focus). E.g., 'Notepad', 'Chrome', 'File Explorer'",
+            "default": None
+        }
     }
     required_parameters = ["description"]
     
@@ -293,6 +341,13 @@ class FindOnScreenTool(BaseTool):
     
     def execute(self, **kwargs) -> ToolResult:
         description = kwargs["description"]
+        window_context = kwargs.get("window_context")
+        
+        # Enhance description with window context if provided
+        if window_context:
+            enhanced_description = f"{description} in the {window_context} window"
+        else:
+            enhanced_description = description
         
         # Take screenshot
         success, message, base64_data = take_screenshot()
@@ -306,13 +361,19 @@ class FindOnScreenTool(BaseTool):
             vision = get_vision_analyzer()
             
             # Find element on screen - returns coordinates dict
-            result = vision.find_on_screen(description, screenshot_base64=base64_data)
+            # Use enhanced description for better accuracy
+            result = vision.find_on_screen(enhanced_description, screenshot_base64=base64_data)
             
             if result.get('success') and result.get('found'):
                 coords = result['coordinates']
                 x = coords.get('x')
                 y = coords.get('y')
                 confidence = result.get('confidence', 0.5)
+                
+                # Add warning if confidence is low
+                if confidence < 0.7:
+                    log.warning(f"Low confidence ({confidence:.0%}) for finding '{description}'. Coordinates may be inaccurate.")
+                
                 return ToolResult.ok(f"Found '{description}' at coordinates ({x}, {y}) with {confidence:.0%} confidence")
             elif not result.get('success') and result.get('error') == 'No Ollama client configured':
                 return ToolResult.fail(error="Vision analyzer not initialized. Please restart JARVIS.")
