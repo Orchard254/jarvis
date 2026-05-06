@@ -209,7 +209,8 @@ class FileSearch:
                                 })
                                 if len(results) >= max_results:
                                     break
-                    except:
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to read file for content search: {file}")
                         continue
             
             return {

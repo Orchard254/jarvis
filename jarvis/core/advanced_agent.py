@@ -4,8 +4,11 @@ Combines ReAct reasoning with ToT multi-path exploration for complex tasks.
 """
 
 import asyncio
+import logging
 from typing import Dict, Any, Optional, List
 from .tot_engine import TreeOfThoughtsEngine, ThoughtNode
+
+logger = logging.getLogger(__name__)
 
 class AdvancedReActAgent:
     """
@@ -188,6 +191,7 @@ If you have enough information to answer, provide the Final Answer."""
     def _parse_action(self, text: str) -> Optional[Dict[str, Any]]:
         """Parse action from LLM response."""
         import re
+        import json
         
         # Look for Action: pattern
         action_match = re.search(r'Action:\s*(\w+)', text)
@@ -198,9 +202,9 @@ If you have enough information to answer, provide the Final Answer."""
             args = {}
             if input_match:
                 try:
-                    import json
                     args = json.loads(input_match.group(1))
-                except:
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse action input JSON: {e}")
                     args = {"raw": input_match.group(1)}
             
             return {"name": action_name, "args": args}

@@ -5,10 +5,13 @@ Enables multi-path reasoning, self-evaluation, and backtracking for complex prob
 
 import asyncio
 import json
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import time
+
+logger = logging.getLogger(__name__)
 
 class ThoughtStatus(Enum):
     PENDING = "pending"
@@ -112,7 +115,7 @@ class TreeOfThoughtsEngine:
             return new_nodes
             
         except Exception as e:
-            print(f"Error generating branches: {e}")
+            logger.error(f"Error generating branches: {e}", exc_info=True)
             return []
     
     async def evaluate_node(self, node_id: str, context: str) -> float:
@@ -139,7 +142,7 @@ class TreeOfThoughtsEngine:
             node.value_score = max(0.0, min(1.0, score))
             return node.value_score
         except Exception as e:
-            print(f"Error evaluating node: {e}")
+            logger.error(f"Error evaluating node: {e}", exc_info=True)
             return 0.5  # Default neutral score
     
     async def execute_node(self, node_id: str, tools_context: Dict[str, Any]) -> Any:
@@ -164,13 +167,15 @@ class TreeOfThoughtsEngine:
     def _parse_llm_json(self, text: str) -> List[Dict]:
         """Robustly extract JSON from LLM response."""
         import re
+        import json
         try:
             # Try to find JSON array pattern
             match = re.search(r'\[.*\]', text, re.DOTALL)
             if match:
                 return json.loads(match.group())
             return []
-        except:
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}")
             return []
 
     async def solve(self, problem: str, tools_context: Dict[str, Any]) -> Optional[str]:

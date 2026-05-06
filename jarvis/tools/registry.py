@@ -157,7 +157,8 @@ class ToolRegistry:
         try:
             cap = self._capability_registry.get(name)
             return cap is not None
-        except:
+        except Exception as e:
+            logger.warning(f"Error checking capability {name}: {e}")
             return False
     
     def get_tool(self, name: str) -> Optional[SimpleBaseTool]:
@@ -201,8 +202,8 @@ class ToolRegistry:
             for cap in caps:
                 if cap.get("registered"):
                     names.add(cap["name"])
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error listing capabilities: {e}")
         
         return sorted(list(names))
     
@@ -235,8 +236,8 @@ class ToolRegistry:
                         "category": cap.get("category", "capability"),
                         "enabled": True
                     })
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error listing capabilities for tool registry: {e}")
         
         return result
     
