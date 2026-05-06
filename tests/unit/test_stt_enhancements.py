@@ -31,24 +31,22 @@ def test_stt_result():
     
     # Test successful result
     result = STTResult(
-        success=True,
         text="Hello world",
         confidence=0.95,
         language="en"
     )
     
-    assert result.is_success() == True
+    assert result.is_success == True
     assert result.text == "Hello world"
     assert result.confidence == 0.95
     
     # Test failed result
     fail_result = STTResult(
-        success=False,
         text="",
         error="Audio not detected"
     )
     
-    assert fail_result.is_success() == False
+    assert fail_result.is_success == False
     assert "Audio not detected" in fail_result.error
     
     print("✅ PASSED: STTResult class works correctly\n")

@@ -101,27 +101,27 @@ class TestSkillRegistryIntegration:
     
     def test_skill_registry_init(self):
         """Test skill registry initialization"""
-        from jarvis.skills.registry import SkillRegistry
+        from jarvis.skills.registry import SkillsRegistry
         
-        registry = SkillRegistry()
+        registry = SkillsRegistry()
         assert registry is not None
     
     def test_load_skills(self):
         """Test loading built-in skills"""
-        from jarvis.skills.registry import SkillRegistry
+        from jarvis.skills.registry import SkillsRegistry
         
-        registry = SkillRegistry()
-        count = registry.load_skills()
+        registry = SkillsRegistry()
+        count = registry.initialize()
         
         assert count > 0, "Should load at least some skills"
         assert count >= 5, f"Expected 5+ skills, got {count}"
     
     def test_skill_execution(self):
         """Test skill execution"""
-        from jarvis.skills.registry import SkillRegistry
+        from jarvis.skills.registry import SkillsRegistry
         
-        registry = SkillRegistry()
-        registry.load_skills()
+        registry = SkillsRegistry()
+        registry.initialize()
         
         # Get available skills using list_skills method
         skills = registry.list_skills()
@@ -315,26 +315,23 @@ class TestReasoningModulesIntegration:
     
     def test_strategy_selector(self):
         """Test strategy selection"""
-        from jarvis.reasoning.strategy_selector import StrategySelector
+        from jarvis.reasoning.strategy_selector import StrategySelector, TaskComplexity
         
         selector = StrategySelector()
         
-        # Test simple command - returns dict with strategy info
-        result = selector.select_strategy("What time is it?")
-        assert isinstance(result, dict), "Should return a dictionary"
-        assert 'strategy' in result, "Should have strategy key"
-        assert 'reasoning' in result, "Should have reasoning key"
-        assert 'estimated_complexity' in result, "Should have complexity score"
-        assert result['strategy'] in ['direct', 'plan_only', 'plan_and_review', 'full_cycle']
+        # Test simple command - returns ClassificationResult
+        result = selector.classify("What time is it?")
+        assert hasattr(result, 'complexity'), "Should have complexity attribute"
+        assert hasattr(result, 'reasoning'), "Should have reasoning attribute"
+        assert hasattr(result, 'verb_count'), "Should have verb_count attribute"
         
         # Test complex command
-        result = selector.select_strategy(
+        result = selector.classify(
             "Create a backup of all my documents and upload them to cloud storage"
         )
-        assert isinstance(result, dict), "Should return a dictionary"
-        assert result['strategy'] in ['direct', 'plan_only', 'plan_and_review', 'full_cycle']
-        # Complex task should require planning
-        assert result['requires_planning'] is True or result['estimated_complexity'] >= 2
+        assert hasattr(result, 'complexity'), "Should have complexity attribute"
+        # Complex task should require planning (check complexity level or other indicators)
+        assert result.complexity in [TaskComplexity.COMPLEX, TaskComplexity.STRATEGIC] or result.has_sequential or result.verb_count > 1
 
 
 class TestOrchestratorIntegration:
