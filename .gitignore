@@ -17,3 +17,5 @@ __pycache__/
 jarvis_data/episodes/session_*.json
 
 ```
+"__pycache__/" 
+"*.pyc" 
