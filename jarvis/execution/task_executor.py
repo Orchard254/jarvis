@@ -25,7 +25,13 @@ from pathlib import Path
 import json
 
 from ..tools.base import ToolResult
-from ..tools.registry import get_registry, execute_tool
+from ..tools.registry import get_registry
+
+
+def execute_tool(tool_name: str, **kwargs):
+    """Execute a tool by name (compatibility function)."""
+    registry = get_registry()
+    return registry.execute_tool(tool_name, **kwargs)
 
 logger = logging.getLogger("task_executor")
 
