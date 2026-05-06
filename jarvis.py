@@ -238,11 +238,19 @@ class JARVISAgent:
             
             # Step 4: Simple task - execute directly via tool_dispatcher
             else:
-                # For tool_dispatcher, pass parameters as keyword args (registry passes **kwargs)
-                result = self.registry.execute(
-                    "tool_dispatcher",
-                    tool_name=intent,
-                    parameters={'input_text': command}
+                # Get the tool_dispatcher capability and call its execute method directly
+                # This avoids the parameter collision issue
+                tool_dispatcher = self.registry.get("tool_dispatcher")
+                if not tool_dispatcher:
+                    return {
+                        "success": False,
+                        "error": "Tool dispatcher not available"
+                    }
+                
+                # Call ToolDispatcher.execute(tool_name, parameters)
+                result = tool_dispatcher.execute(
+                    tool_name=intent,  # Which tool to dispatch to
+                    parameters={'input_text': command}  # Parameters for that tool
                 )
                 
                 return result
