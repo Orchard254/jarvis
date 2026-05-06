@@ -1,73 +1,21 @@
-```gitignore
+```
 # Python compiled files
-__pycache__/
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
 
-# Virtual environments
+# Virtual environment
 venv/
-.venv/
-env/
-
-# Dependencies
-node_modules/
 
 # Logs
 *.log
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
+# Temp files
+*.tmp
+temp_tts.mp3
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Dependencies in venv
+venv/lib/python3.12/site-packages/
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Package distributions
-dist/
-build/
-*.egg-info/
-
-# MyPy cache
-.mypy_cache/
-
-# Pytest cache
-.pytest_cache/
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-*$pyc.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg
+# Data files that might be generated
+jarvis_data/
 ```
