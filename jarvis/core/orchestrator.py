@@ -8,6 +8,58 @@ The central coordinator for JARVIS that:
 - Manages system state and modes
 - Implements full pipeline: listen → transcribe → classify → retrieve → 
   select strategy → plan if complex → critic review → execute → reflect → store → respond
+
+ARCHITECTURAL NOTES (from abandoned patches):
+=============================================
+The following concepts were explored in prototype patches but not integrated:
+
+1. DETERMINISTIC TOOL SELECTION FLOW (orchestrator_patch.py):
+   Proposed flow: Input → Tool Hint Filter → LLM (with 3-5 tools) → Structured JSON Parse → 
+                  Validation → Execution
+   This would replace: Input → All Tools → LLM → TOOL: pattern parse → Execute
+   
+   Key ideas:
+   - Filter tools BEFORE sending to LLM based on intent hints (reduce context, improve determinism)
+   - Use strict JSON output format instead of TOOL: pattern matching
+   - Validate tool calls with schema + semantic validation before execution
+   - Defense-in-depth: double-check validation right before execution
+   
+   Why not integrated: Current ReAct agent and tool parser already handle dynamic tool selection
+   effectively. The existing tool_registry.filter_tools() provides similar hint-based filtering.
+
+2. RESILIENT TOOL ROUTING (orchestrator_resilient_patch.py):
+   Proposed flow: Input → Intent Detection → Direct Match? → Yes → Execute
+                                              ↓ No
+                                        LLM Available? → No → Error/Retry
+                                              ↓ Yes
+                                        Filter Tools (Intent Gate + Embedding)
+                                              ↓
+                                        Confidence Check → Low → Ask Clarification
+                                              ↓ High
+                                        LLM Plan with 3 tools max
+                                              ↓
+                                        Parse JSON (tool_call/respond/plan)
+                                              ↓
+                                        Validate (schema + semantic)
+                                              ↓
+                                        Execute with Feedback Loop
+                                              ↓
+                                        Verify Result → Fail → Retry (max 3)
+                                              ↓ Success
+                                        Respond
+   
+   Key ideas:
+   - Fast path for direct tool matches without LLM invocation
+   - Confidence-based clarification requests when intent is unclear
+   - Multi-step plan execution with verification at each step
+   - Retry logic with feedback loops for failed executions
+   - Graceful degradation when LLM is unavailable
+   
+   Why not integrated: Current architecture handles these concerns through:
+   - IntentClassifier for intent detection
+   - StrategySelector for complexity-based routing
+   - TaskExecutor with built-in verification strategies
+   - ReActAgent with MAX_AGENT_ROUNDS for retry/failure handling
 """
 
 import logging
