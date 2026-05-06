@@ -1,5 +1,5 @@
 ```
-# Python cache
+# Python cache files
 __pycache__/
 *.pyc
 *.pyo
@@ -10,7 +10,4 @@ venv/
 
 # Dependencies
 pip/
-
-# Logs
-*.log
 ```
