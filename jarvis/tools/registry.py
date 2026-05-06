@@ -358,6 +358,7 @@ class ToolRegistry:
             "delete_file": "file_writer",
             "list_files": "file_search",
             "find_file": "file_search",
+            "run_script": "run_python_code",
         }
         
         for alias_name, real_cap_name in legacy_aliases.items():
