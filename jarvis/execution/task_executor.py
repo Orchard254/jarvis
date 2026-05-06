@@ -385,7 +385,15 @@ class TaskExecutor:
                         if isinstance(result_value, str):
                             result = ToolResult(success=True, output=result_value)
                         elif isinstance(result_value, dict):
-                            result = ToolResult(**result_value)
+                            # Extract only ToolResult-compatible fields; ignore extras
+                            result = ToolResult(
+                                success=result_value.get('success', True),
+                                output=result_value.get('output'),
+                                error=result_value.get('error'),
+                                duration_ms=result_value.get('duration_ms', 0.0),
+                                rollback_actions=result_value.get('rollback_actions', []),
+                                metadata=result_value.get('metadata', {})
+                            )
                         else:
                             result = result_value
                     except Exception as exec_error:
