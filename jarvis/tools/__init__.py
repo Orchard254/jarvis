@@ -260,6 +260,23 @@ TOOL_NAME_MAP = {
     "reasoning_engine": ("reasoning_engine", get_reasoning_engine),
     "vision_reasoning_bridge": ("vision_reasoning_bridge", get_vision_bridge),
     "tool_self_evaluator": ("tool_self_evaluator", get_tool_self_evaluator),
+    
+    # Legacy name aliases for backward compatibility with LLM prompts
+    # These map old tool names to new capability names
+    "open_app": ("window_manager", get_window_manager),
+    "close_app": ("window_manager", get_window_manager),
+    "get_time": ("system_info", get_system_info),
+    "lock_pc": ("shutdown_restart_control", get_shutdown_restart_control),
+    "take_screenshot": ("screen_capture", get_screen_capture),
+    "capture_screen": ("screen_capture", get_screen_capture),
+    "search_web": ("web_search", get_web_search),
+    "google_search": ("web_search", get_web_search),
+    "read_file": ("file_reader", get_file_reader),
+    "write_file": ("file_writer", get_file_writer),
+    "create_file": ("file_writer", get_file_writer),
+    "delete_file": ("file_writer", get_file_writer),
+    "list_files": ("file_search", get_file_search),
+    "find_file": ("file_search", get_file_search),
 }
 
 
