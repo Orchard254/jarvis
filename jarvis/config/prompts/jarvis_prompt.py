@@ -102,6 +102,14 @@ TOOL CALL FORMAT - CRITICAL RULES:
 4. For close_app tool: MUST use parameter "app" NOT "app_name"
 5. Always check the tool schema for the correct parameter names before calling
 
+CORRECT TOOL SELECTION FOR WINDOW OPERATIONS:
+- Closing an application window → close_window(title='Notepad') [100% reliable]
+- Closing a browser tab → close_tab(query='grok.com') [DOM-level precision]
+- Minimizing a window → minimize_window(title='Chrome') [Windows API]
+- Finding UI elements → find_on_screen(description='...', window_context='Notepad')
+  - ALWAYS include window_context when searching for elements in a specific window
+  - The system will automatically focus that window before taking the screenshot
+
 When using tools:
 1. Choose the most appropriate tool for each step
 2. Provide clear, complete arguments with CORRECT parameter names

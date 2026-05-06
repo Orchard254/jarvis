@@ -7,6 +7,7 @@ Uses ctypes for Windows API calls.
 
 import ctypes
 import logging
+import time
 from typing import Any, List, Optional, Tuple
 
 import psutil
@@ -250,7 +251,16 @@ class CloseWindowTool(BaseTool):
             # Send WM_CLOSE message for graceful shutdown
             windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
             
-            return ToolResult.ok(f"Closed window '{title}'")
+            # VERIFICATION FIX: Wait briefly and check if window is gone
+            time.sleep(0.5)
+            windows = enumerate_windows()
+            window_still_open = any(title.lower() in w_title.lower() for w_title, _, _ in windows)
+            
+            if not window_still_open:
+                return ToolResult.ok(f"Closed window '{title}'", verified=True, verify_msg="Window no longer in window list")
+            else:
+                log.warning(f"Window '{title}' may still be open after close command")
+                return ToolResult.ok(f"Sent close command to '{title}' (verification inconclusive)", verified=False, verify_msg="Window still detected - may be unresponsive or have unsaved changes")
             
         except Exception as e:
             log.error(f"Failed to close window: {e}")

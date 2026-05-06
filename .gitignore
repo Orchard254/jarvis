@@ -1,5 +1,5 @@
 ```
-# Python cache files
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
@@ -8,10 +8,9 @@ __pycache__/
 # Virtual environment
 venv/
 
+# Dependencies
+pip/
+
 # Logs
 *.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
 ```
