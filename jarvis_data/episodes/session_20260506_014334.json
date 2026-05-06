@@ -1,0 +1,35 @@
+{
+  "session_id": "20260506_014334",
+  "created_at": "2026-05-06T01:43:34.767248",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Remember that I like coffee",
+      "timestamp": "2026-05-06T01:43:34.748361"
+    },
+    {
+      "role": "assistant",
+      "content": "I will remember that you like coffee",
+      "timestamp": "2026-05-06T01:43:34.748376"
+    },
+    {
+      "role": "system",
+      "content": "User preference noted",
+      "timestamp": "2026-05-06T01:43:34.748382"
+    },
+    {
+      "role": "tool",
+      "content": "{\"tool\": \"set_preference\", \"result\": {\"status\": \"saved\"}}",
+      "timestamp": "2026-05-06T01:43:34.748414",
+      "metadata": {
+        "tool_name": "set_preference"
+      }
+    }
+  ],
+  "metadata": {
+    "summary": "Test completed"
+  },
+  "message_count": 4,
+  "first_message": "Remember that I like coffee",
+  "last_message": "{\"tool\": \"set_preference\", \"result\": {\"status\": \"saved\"}}"
+}
