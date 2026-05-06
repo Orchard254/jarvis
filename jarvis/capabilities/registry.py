@@ -56,8 +56,8 @@ from jarvis.capabilities.media_interaction import (
 )
 from jarvis.capabilities.ai_internal import (
     get_reasoning_engine,
-    get_vision_reasoning_bridge,
-    get_tool_self_evaluator
+    get_vision_bridge as get_vision_reasoning_bridge,
+    get_tool_evaluator as get_tool_self_evaluator
 )
 
 logger = logging.getLogger(__name__)
