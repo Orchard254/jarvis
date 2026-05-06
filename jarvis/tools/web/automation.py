@@ -665,11 +665,11 @@ class WaitForElementTool(BaseTool):
         return "low"
 
 
-class ScreenshotTool(BaseTool):
+class BrowserScreenshotTool(BaseTool):
     """Capture screenshot of current page or specific element."""
     
-    name = "take_screenshot"
-    description = "Take a screenshot of the current page or a specific element. Saved to jarvis_data/screenshots/"
+    name = "browser_screenshot"
+    description = "Take a screenshot of the current browser page or a specific element. Saved to jarvis_data/screenshots/"
     parameters = {
         "filename": {
             "type": "string",
@@ -1124,7 +1124,7 @@ WEB_AUTOMATION_TOOLS = [
     FillInputTool,
     ExtractContentTool,
     WaitForElementTool,
-    ScreenshotTool,
+    BrowserScreenshotTool,
     SearchAndNavigateTool,
     CloseTabTool,
 ]
