@@ -8,12 +8,15 @@ Continuously monitors system state for:
 - System events
 """
 
+import logging
 import threading
 import time
 import psutil
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -167,8 +170,8 @@ class AmbientMonitor:
         try:
             import pygetwindow as gw
             active_window = gw.getActiveWindowTitle()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not get active window (pygetwindow not available): {e}")
         
         # Running applications count
         running_app_count = len([p for p in psutil.process_iter(['name']) if p.info['name']])
@@ -182,8 +185,8 @@ class AmbientMonitor:
                     if entries:
                         temperature = entries[0].current
                         break
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not read temperature sensors: {e}")
         
         return SystemState(
             timestamp=datetime.now(),

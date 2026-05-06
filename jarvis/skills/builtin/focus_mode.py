@@ -10,12 +10,15 @@ Speaks a motivational start message
 Fully reversible via rollback
 """
 
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import threading
 import time
 
 from ..base import BaseSkill, SkillStep, Recovery, RecoveryAction
+
+logger = logging.getLogger(__name__)
 
 
 class FocusMode(BaseSkill):
@@ -260,8 +263,8 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
                     subprocess.run(['taskkill', '/IM', f'{app}.exe', '/F'], 
                                  capture_output=True, timeout=2)
                     rolled_back.append(f'closed_{app}')
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to close work app {app} during rollback: {e}")
             
             # Re-open previously closed apps (if we tracked them properly)
             # This would require more sophisticated process tracking
@@ -276,8 +279,8 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
                 volume = cast(interface, POINTER(IAudioEndpointVolume))
                 volume.SetMasterVolumeLevelScalar(self.original_volume, None)
                 rolled_back.append('volume_restored')
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to restore volume during rollback: {e}")
             
             # Restore brightness (would require monitor control library)
             rolled_back.append('brightness_restore_pending')
@@ -336,8 +339,8 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             vol = cast(interface, POINTER(IAudioEndpointVolume))
             volume = vol.GetMasterVolumeLevelScalar()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not get current volume: {e}")
         
         # Get current brightness (placeholder - would use monitor control)
         brightness = 0.7
@@ -366,10 +369,10 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
                         subprocess.run(['taskkill', '/PID', str(running_processes[app_name]), '/F'],
                                      capture_output=True, timeout=2)
                         closed.append(app)
-                    except:
-                        pass
-        except:
-            pass
+                    except Exception as e:
+                        logger.warning(f"Failed to close app {app}: {e}")
+        except Exception as e:
+            logger.warning(f"Error in _close_non_work_apps: {e}")
         
         return {
             'closed_apps': closed,

@@ -9,10 +9,13 @@ Feeds learnings directly into memory/semantic.py and memory/procedural.py
 NEVER slows down response to user — runs in background thread
 """
 
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import threading
 import json
+
+logger = logging.getLogger(__name__)
 
 
 class ReflectionResult:
@@ -135,7 +138,8 @@ class Reflector:
                             time_taken = value * 3600
                         else:
                             time_taken = value
-                except:
+                except ValueError as e:
+                    logger.warning(f"Failed to parse time taken from reflection: {e}")
                     time_taken = 0.0
         
         # Create reflection task
