@@ -544,3 +544,213 @@ TypeError: CapabilityRegistry.execute() got multiple values for argument 'tool_n
 2026-05-06 06:45:14,084 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
 2026-05-06 06:45:14,084 - __main__ - INFO - Initialized 32 capabilities
 2026-05-06 06:45:14,084 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 07:01:50,591 - __main__ - INFO - ======================================================================
+2026-05-06 07:01:50,591 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 07:01:50,591 - __main__ - INFO - ======================================================================
+2026-05-06 07:01:50,591 - __main__ - INFO - Starting in agent mode
+2026-05-06 07:01:50,591 - __main__ - INFO - Test mode: False
+2026-05-06 07:01:50,591 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 07:01:50,591 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 07:01:50,591 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 07:01:50,591 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 07:01:50,591 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 07:01:50,591 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 07:01:50,591 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 07:01:50,591 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 07:01:50,592 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 07:01:50,601 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 07:01:50,601 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 07:01:50,601 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 07:01:50,601 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 07:01:50,602 - __main__ - INFO - Processing command: hello
+2026-05-06 07:01:50,602 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 07:01:50,602 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 07:01:51,701 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → reasoning_engine
+2026-05-06 07:01:51,701 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 07:01:51,701 - jarvis.capabilities.orchestration.tool_dispatcher - ERROR - Tool 'reasoning_engine' not found
+2026-05-06 07:02:36,267 - __main__ - INFO - ======================================================================
+2026-05-06 07:02:36,267 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 07:02:36,267 - __main__ - INFO - ======================================================================
+2026-05-06 07:02:36,268 - __main__ - INFO - Starting in agent mode
+2026-05-06 07:02:36,268 - __main__ - INFO - Test mode: False
+2026-05-06 07:02:36,268 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 07:02:36,268 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 07:02:36,268 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 07:02:36,268 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 07:02:36,268 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 07:02:36,268 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 07:02:36,268 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 07:02:36,268 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 07:02:36,268 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 07:02:36,268 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 07:02:36,268 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_terminal_command
+2026-05-06 07:02:36,268 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_python_code
+2026-05-06 07:02:36,268 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: window_manager
+2026-05-06 07:02:36,268 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: process_manager
+2026-05-06 07:02:36,268 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: system_info
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: shutdown_restart_control
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: screen_capture
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: ocr_extract_text
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_analyzer
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_search
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_scraper
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: url_reader
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: summarizer
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: fact_checker
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_reader
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_writer
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_search
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: data_parser
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: calendar_manager
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: task_scheduler
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: notes_manager
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: email_handler
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: audio_player
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_synthesizer
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_recognizer
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: reasoning_engine
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_reasoning_bridge
+2026-05-06 07:02:36,269 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: tool_self_evaluator
+2026-05-06 07:02:36,269 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 07:02:36,270 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 07:02:36,270 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 07:02:36,270 - __main__ - INFO - Processing command: hello
+2026-05-06 07:02:36,270 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 07:02:36,270 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 07:02:37,732 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → reasoning_engine
+2026-05-06 07:02:37,732 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 07:02:37,732 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Dispatching to reasoning_engine: {'input_text': 'hello'}
+2026-05-06 07:02:37,733 - jarvis.capabilities.orchestration.tool_dispatcher - ERROR - Tool execution failed: reasoning_engine - ReasoningEngine.execute() missing 1 required positional argument: 'task'
+2026-05-06 07:02:56,288 - __main__ - INFO - ======================================================================
+2026-05-06 07:02:56,288 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 07:02:56,288 - __main__ - INFO - ======================================================================
+2026-05-06 07:02:56,289 - __main__ - INFO - Starting in agent mode
+2026-05-06 07:02:56,289 - __main__ - INFO - Test mode: False
+2026-05-06 07:02:56,289 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 07:02:56,289 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 07:02:56,289 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 07:02:56,289 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 07:02:56,289 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 07:02:56,289 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 07:02:56,289 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 07:02:56,289 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 07:02:56,289 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 07:02:56,289 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_terminal_command
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_python_code
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: window_manager
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: process_manager
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: system_info
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: shutdown_restart_control
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: screen_capture
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: ocr_extract_text
+2026-05-06 07:02:56,289 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_analyzer
+2026-05-06 07:02:56,290 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_search
+2026-05-06 07:02:56,290 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_scraper
+2026-05-06 07:02:56,300 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: url_reader
+2026-05-06 07:02:56,300 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: summarizer
+2026-05-06 07:02:56,300 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: fact_checker
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_reader
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_writer
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_search
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: data_parser
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: calendar_manager
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: task_scheduler
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: notes_manager
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: email_handler
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: audio_player
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_synthesizer
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_recognizer
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: reasoning_engine
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_reasoning_bridge
+2026-05-06 07:02:56,301 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: tool_self_evaluator
+2026-05-06 07:02:56,301 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 07:02:56,302 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 07:02:56,302 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 07:02:56,302 - __main__ - INFO - Processing command: hello
+2026-05-06 07:02:56,302 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 07:02:56,302 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 07:02:57,320 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → reasoning_engine
+2026-05-06 07:02:57,320 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 07:02:57,320 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Dispatching to reasoning_engine: {'task': 'hello', 'mode': 'analyze'}
+2026-05-06 07:02:57,321 - jarvis.capabilities.ai_internal - INFO - Initializing <jarvis.models.model_adapter.GPTOSSAdapter object at 0x7effb79ec950> reasoning engine...
+2026-05-06 07:02:57,321 - jarvis.capabilities.ai_internal - INFO - [Reasoning] Mode: analyze, Task: hello...
+2026-05-06 07:02:57,321 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Tool reasoning_engine completed in 0.00s
+2026-05-06 07:02:57,321 - __main__ - ERROR - Fatal error: Object of type GPTOSSAdapter is not JSON serializable
+Traceback (most recent call last):
+  File "/workspace/jarvis.py", line 446, in main
+    agent.run_interactive()
+  File "/workspace/jarvis.py", line 308, in run_interactive
+    print(json.dumps(output, indent=2))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/json/encoder.py", line 202, in encode
+    chunks = list(chunks)
+             ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/json/encoder.py", line 432, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "/usr/local/lib/python3.12/json/encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "/usr/local/lib/python3.12/json/encoder.py", line 439, in _iterencode
+    o = _default(o)
+        ^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type GPTOSSAdapter is not JSON serializable
+2026-05-06 07:03:08,848 - __main__ - INFO - ======================================================================
+2026-05-06 07:03:08,848 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 07:03:08,848 - __main__ - INFO - ======================================================================
+2026-05-06 07:03:08,848 - __main__ - INFO - Starting in agent mode
+2026-05-06 07:03:08,848 - __main__ - INFO - Test mode: False
+2026-05-06 07:03:08,848 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 07:03:08,848 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 07:03:08,848 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 07:03:08,848 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 07:03:08,848 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 07:03:08,849 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 07:03:08,849 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 07:03:08,849 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 07:03:08,849 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 07:03:08,849 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_terminal_command
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: run_python_code
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: window_manager
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: process_manager
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: system_info
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: shutdown_restart_control
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: screen_capture
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: ocr_extract_text
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_analyzer
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_search
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: web_scraper
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: url_reader
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: summarizer
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: fact_checker
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_reader
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_writer
+2026-05-06 07:03:08,849 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: file_search
+2026-05-06 07:03:08,850 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: data_parser
+2026-05-06 07:03:08,850 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: calendar_manager
+2026-05-06 07:03:08,850 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: task_scheduler
+2026-05-06 07:03:08,860 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: notes_manager
+2026-05-06 07:03:08,860 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: email_handler
+2026-05-06 07:03:08,860 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: audio_player
+2026-05-06 07:03:08,860 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_synthesizer
+2026-05-06 07:03:08,861 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: voice_recognizer
+2026-05-06 07:03:08,861 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: reasoning_engine
+2026-05-06 07:03:08,861 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: vision_reasoning_bridge
+2026-05-06 07:03:08,861 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Registered tool: tool_self_evaluator
+2026-05-06 07:03:08,861 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 07:03:08,861 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 07:03:08,861 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 07:03:08,862 - __main__ - INFO - Processing command: hello
+2026-05-06 07:03:08,862 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 07:03:08,862 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 07:03:10,663 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → reasoning_engine
+2026-05-06 07:03:10,663 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 07:03:10,663 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Dispatching to reasoning_engine: {'task': 'hello', 'mode': 'analyze'}
+2026-05-06 07:03:10,664 - jarvis.capabilities.ai_internal - INFO - Initializing <jarvis.models.model_adapter.GPTOSSAdapter object at 0x7f66c81bb710> reasoning engine...
+2026-05-06 07:03:10,664 - jarvis.capabilities.ai_internal - INFO - [Reasoning] Mode: analyze, Task: hello...
+2026-05-06 07:03:10,664 - jarvis.capabilities.orchestration.tool_dispatcher - INFO - Tool reasoning_engine completed in 0.00s

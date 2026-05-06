@@ -247,11 +247,22 @@ class JARVISAgent:
                         "error": "Tool dispatcher not available"
                     }
                 
-                # Call ToolDispatcher.execute(tool_name, parameters)
-                result = tool_dispatcher.execute(
-                    tool_name=intent,  # Which tool to dispatch to
-                    parameters={'input_text': command}  # Parameters for that tool
-                )
+                # Use target_capability from intent result if available, otherwise use intent
+                target_capability = intent_result.get('output', {}).get('target_capability', intent)
+                
+                # For general_query and other intents that map to capabilities,
+                # use the reasoning_engine with proper parameters
+                if target_capability == "reasoning_engine":
+                    result = tool_dispatcher.execute(
+                        tool_name=target_capability,
+                        parameters={'task': command, 'mode': 'analyze'}
+                    )
+                else:
+                    # Call ToolDispatcher.execute(tool_name, parameters)
+                    result = tool_dispatcher.execute(
+                        tool_name=target_capability,  # Which tool to dispatch to
+                        parameters={'input_text': command}  # Parameters for that tool
+                    )
                 
                 return result
                 
@@ -294,7 +305,19 @@ class JARVISAgent:
                     output = result.get('output')
                     if isinstance(output, dict):
                         import json
-                        print(json.dumps(output, indent=2))
+                        from json import JSONEncoder
+                        
+                        # Custom encoder to handle non-serializable objects
+                        class SafeEncoder(JSONEncoder):
+                            def default(self, obj):
+                                if hasattr(obj, '__class__') and hasattr(obj.__class__, '__name__'):
+                                    return f"<{obj.__class__.__name__} object>"
+                                return str(obj)
+                        
+                        try:
+                            print(json.dumps(output, indent=2, cls=SafeEncoder))
+                        except Exception as e:
+                            print(f"Output: {output}")
                     else:
                         print(f"✓ {output}")
                 else:

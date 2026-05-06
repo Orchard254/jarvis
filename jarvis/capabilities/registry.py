@@ -83,58 +83,70 @@ class CapabilityRegistry:
         
         logger.info("Initializing JARVIS 30-tool capability registry...")
         
-        # 1. Core Orchestration (4)
-        self.register("intent_router", get_intent_router(reasoning_model))
-        self.register("task_planner", get_task_planner(get_all_capabilities()))
-        self.register("tool_dispatcher", get_tool_dispatcher())
-        self.register("memory_manager", get_memory_manager())
+        # 1. Core Orchestration (4) - Initialize tool_dispatcher first with all tools
+        # Get all capabilities that will be registered
+        all_capabilities = {}
         
-        # 2. System Control (6)
+        # System Control (6)
         sandbox_mode = self.config.get("sandbox_mode", True)
-        self.register("run_terminal_command", get_run_terminal_command(sandbox_mode=sandbox_mode))
-        self.register("run_python_code", get_run_python_code())
-        self.register("window_manager", get_window_manager())
-        self.register("process_manager", get_process_manager())
-        self.register("system_info", get_system_info())
-        self.register("shutdown_restart_control", get_shutdown_restart_control())
+        all_capabilities["run_terminal_command"] = get_run_terminal_command(sandbox_mode=sandbox_mode)
+        all_capabilities["run_python_code"] = get_run_python_code()
+        all_capabilities["window_manager"] = get_window_manager()
+        all_capabilities["process_manager"] = get_process_manager()
+        all_capabilities["system_info"] = get_system_info()
+        all_capabilities["shutdown_restart_control"] = get_shutdown_restart_control()
         
-        # 3. Vision & Screen Understanding (3)
-        self.register("screen_capture", get_screen_capture())
-        self.register("ocr_extract_text", get_ocr_extract_text())
-        self.register("vision_analyzer", get_vision_analyzer(vision_model))
+        # Vision & Screen Understanding (3)
+        all_capabilities["screen_capture"] = get_screen_capture()
+        all_capabilities["ocr_extract_text"] = get_ocr_extract_text()
+        all_capabilities["vision_analyzer"] = get_vision_analyzer(vision_model)
         
-        # 4. Web & Knowledge (5)
+        # Web & Knowledge (5)
         search_api_key = self.config.get("search_api_key")
-        self.register("web_search", get_web_search(api_key=search_api_key))
-        self.register("web_scraper", get_web_scraper())
-        self.register("url_reader", get_url_reader())
-        self.register("summarizer", get_summarizer(model=reasoning_model))
-        self.register("fact_checker", get_fact_checker())
+        all_capabilities["web_search"] = get_web_search(api_key=search_api_key)
+        all_capabilities["web_scraper"] = get_web_scraper()
+        all_capabilities["url_reader"] = get_url_reader()
+        all_capabilities["summarizer"] = get_summarizer(model=reasoning_model)
+        all_capabilities["fact_checker"] = get_fact_checker()
         
-        # 5. File & Data System (4)
-        self.register("file_reader", get_file_reader())
-        self.register("file_writer", get_file_writer())
-        self.register("file_search", get_file_search())
-        self.register("data_parser", get_data_parser())
+        # File & Data System (4)
+        all_capabilities["file_reader"] = get_file_reader()
+        all_capabilities["file_writer"] = get_file_writer()
+        all_capabilities["file_search"] = get_file_search()
+        all_capabilities["data_parser"] = get_data_parser()
         
-        # 6. Productivity Tools (4)
-        self.register("calendar_manager", get_calendar_manager())
-        self.register("task_scheduler", get_task_scheduler())
-        self.register("notes_manager", get_notes_manager())
-        self.register("email_handler", get_email_handler())
+        # Productivity Tools (4)
+        all_capabilities["calendar_manager"] = get_calendar_manager()
+        all_capabilities["task_scheduler"] = get_task_scheduler()
+        all_capabilities["notes_manager"] = get_notes_manager()
+        all_capabilities["email_handler"] = get_email_handler()
         
-        # 7. Media & Interaction (3)
-        self.register("audio_player", get_audio_player())
-        self.register("voice_synthesizer", get_voice_synthesizer())
-        self.register("voice_recognizer", get_voice_recognizer())
+        # Media & Interaction (3)
+        all_capabilities["audio_player"] = get_audio_player()
+        all_capabilities["voice_synthesizer"] = get_voice_synthesizer()
+        all_capabilities["voice_recognizer"] = get_voice_recognizer()
         
-        # 8. AI Internal Tools (3)
-        self.register("reasoning_engine", get_reasoning_engine(model=reasoning_model))
-        self.register("vision_reasoning_bridge", get_vision_reasoning_bridge(
+        # AI Internal Tools (3)
+        all_capabilities["reasoning_engine"] = get_reasoning_engine(model=reasoning_model)
+        all_capabilities["vision_reasoning_bridge"] = get_vision_reasoning_bridge(
             vision_model=vision_model,
             reasoning_model=reasoning_model
-        ))
-        self.register("tool_self_evaluator", get_tool_self_evaluator())
+        )
+        all_capabilities["tool_self_evaluator"] = get_tool_self_evaluator()
+        
+        # Now create tool_dispatcher with all tools registered
+        tool_dispatcher = get_tool_dispatcher()
+        for name, instance in all_capabilities.items():
+            tool_dispatcher.register_tool(name, instance)
+        
+        self.register("tool_dispatcher", tool_dispatcher)
+        self.register("intent_router", get_intent_router(reasoning_model))
+        self.register("task_planner", get_task_planner(get_all_capabilities()))
+        self.register("memory_manager", get_memory_manager())
+        
+        # Register all other capabilities
+        for name, instance in all_capabilities.items():
+            self.register(name, instance)
         
         self._initialized = True
         logger.info(f"Initialized {len(self._capabilities)} capabilities")
