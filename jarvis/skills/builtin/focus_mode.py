@@ -392,8 +392,14 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             volume = cast(interface, POINTER(IAudioEndpointVolume))
             volume.SetMasterVolumeLevelScalar(level, None)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to set volume level {level}: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Failed to set volume: {e}",
+                'volume_set': None,
+                'makes_changes': False
+            }
         
         return {
             'volume_set': level,
@@ -418,6 +424,7 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
         """Open work applications."""
         apps_to_open = params.get('apps', self.work_apps)
         opened = []
+        failed = []
         
         try:
             import subprocess
@@ -425,16 +432,30 @@ When focus mode ends, celebrate the achievement and offer to start another sessi
                 try:
                     subprocess.Popen([app])
                     opened.append(app)
-                except:
-                    pass
-        except:
-            pass
+                except Exception as e:
+                    logger.warning(f"Failed to open app '{app}': {e}", exc_info=True)
+                    failed.append({'app': app, 'error': str(e)})
+        except Exception as e:
+            logger.error(f"Error opening work apps: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"Failed to open apps: {e}",
+                'opened_apps': [],
+                'failed_apps': [],
+                'makes_changes': False
+            }
         
-        return {
+        result = {
             'opened_apps': opened,
             'makes_changes': True,
             'undo_data': {'closed_apps': opened}
         }
+        
+        if failed:
+            result['failed_apps'] = failed
+            result['partial_success'] = True
+        
+        return result
     
     def _start_timer(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Start Pomodoro timer."""

@@ -3,9 +3,9 @@
 *.pyc
 __pycache__/
 
-# Dependencies
-.venv/
+# Virtual environments
 venv/
+.venv/
 .env
 .env.local
 *.env.*
@@ -26,9 +26,12 @@ htmlcov/
 *.tmp
 
 # Build artifacts
-dist/
 build/
+dist/
 target/
+
+# Dependencies
+node_modules/
 .mypy_cache/
 .pytest_cache/
 ```

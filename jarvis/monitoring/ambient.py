@@ -139,7 +139,7 @@ class AmbientMonitor:
                 self._add_to_history(current_state)
                 
             except Exception as e:
-                print(f"Ambient monitor error: {e}")
+                logger.error(f"Ambient monitor error: {e}", exc_info=True)
             
             time.sleep(self.poll_interval)
     
@@ -277,7 +277,7 @@ class AmbientMonitor:
             try:
                 callback(change)
             except Exception as e:
-                print(f"Error in change callback: {e}")
+                logger.error(f"Error in change callback: {e}", exc_info=True)
         
         # Category-specific callbacks
         if change.category in self._change_callbacks:
@@ -285,7 +285,7 @@ class AmbientMonitor:
                 try:
                     callback(change.old_value, change.new_value)
                 except Exception as e:
-                    print(f"Error in category callback: {e}")
+                    logger.error(f"Error in category callback: {e}", exc_info=True)
     
     def _add_to_history(self, state: SystemState):
         """Add state to history."""

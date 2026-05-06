@@ -8,6 +8,7 @@ Tracks tool execution reliability with:
 - Automatic degradation scoring
 """
 
+import logging
 import threading
 import time
 from typing import Dict, Any, Optional, List, Tuple
@@ -16,6 +17,8 @@ from datetime import datetime, timedelta
 from collections import deque
 import json
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -185,7 +188,7 @@ class ReliabilityTracker:
                     for tool_name, tool_data in data.items():
                         self._tools[tool_name] = self._dict_to_reliability(tool_data)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load reliability data: {e}")
+                logger.warning(f"Could not load reliability data: {e}", exc_info=True)
     
     def _save(self):
         """Save reliability data to storage."""
@@ -195,7 +198,7 @@ class ReliabilityTracker:
             with open(self.storage_path, 'w') as f:
                 json.dump(data, f, indent=2)
         except IOError as e:
-            print(f"Warning: Could not save reliability data: {e}")
+            logger.warning(f"Could not save reliability data: {e}", exc_info=True)
     
     def _dict_to_reliability(self, data: Dict[str, Any]) -> ToolReliability:
         """Convert dictionary to ToolReliability."""

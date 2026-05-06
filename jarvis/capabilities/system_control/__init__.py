@@ -365,9 +365,17 @@ class ProcessManager:
     def _start_process(self, name: str, **kwargs) -> dict:
         """Start a process."""
         try:
-            subprocess.Popen(name, shell=True)
+            import shlex
+            
+            if isinstance(name, list):
+                subprocess.Popen(name)
+            else:
+                args = shlex.split(name)
+                subprocess.Popen(args)
+            
             return {"success": True, "output": {"started": name}}
         except Exception as e:
+            logger.error(f"Failed to start process '{name}': {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
 

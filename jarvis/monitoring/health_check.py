@@ -121,6 +121,7 @@ class HealthChecker:
                 component_health.last_check = datetime.now()
                 components.append(component_health)
             except Exception as e:
+                logger.error(f"Health check '{name}' failed: {e}", exc_info=True)
                 components.append(ComponentHealth(
                     name=name,
                     status=HealthStatus.UNHEALTHY,
@@ -182,6 +183,7 @@ class HealthChecker:
                 }
             )
         except Exception as e:
+            logger.error(f"Memory health check failed: {e}", exc_info=True)
             return ComponentHealth(
                 name='memory',
                 status=HealthStatus.DEGRADED,
@@ -214,6 +216,7 @@ class HealthChecker:
                 details={'tool_count': len(tools)}
             )
         except Exception as e:
+            logger.error(f"Tools health check failed: {e}", exc_info=True)
             return ComponentHealth(
                 name='tools',
                 status=HealthStatus.UNHEALTHY,
@@ -241,6 +244,7 @@ class HealthChecker:
                 latency_ms=latency
             )
         except Exception as e:
+            logger.error(f"Filesystem health check failed: {e}", exc_info=True)
             return ComponentHealth(
                 name='filesystem',
                 status=HealthStatus.UNHEALTHY,
@@ -278,7 +282,7 @@ class HealthChecker:
             try:
                 callback(report)
             except Exception as e:
-                print(f"Error in health callback: {e}")
+                logger.error(f"Error in health callback: {e}", exc_info=True)
     
     def start_periodic_checks(self, interval: float = 30.0):
         """Start periodic health checking."""
