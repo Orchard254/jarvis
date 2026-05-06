@@ -254,11 +254,51 @@ class JARVISAgent:
                 # Different capabilities expect different parameter names
                 if target_capability == "reasoning_engine":
                     params = {'task': command, 'mode': 'analyze'}
-                elif target_capability in ["web_search", "web_scraper", "url_reader", "file_reader", 
-                                           "file_search", "data_parser", "ocr_extract_text",
-                                           "vision_analyzer", "summarizer", "fact_checker"]:
-                    # These capabilities expect 'query' or 'url' or specific params
+                elif target_capability in ["web_search", "web_scraper", "url_reader"]:
+                    # These capabilities expect 'query' or 'url'
                     params = {'query': command}
+                elif target_capability in ["file_reader", "file_search", "data_parser"]:
+                    params = {'input_text': command}
+                elif target_capability in ["ocr_extract_text", "vision_analyzer"]:
+                    params = {'image': None, 'input_text': command}  # image would need screenshot first
+                elif target_capability in ["summarizer", "fact_checker"]:
+                    params = {'text': command}
+                elif target_capability == "process_manager":
+                    # Parse action from command (open/launch/start vs close/kill)
+                    cmd_lower = command.lower()
+                    if any(word in cmd_lower for word in ["open", "launch", "start"]):
+                        # Extract app name
+                        app_name = cmd_lower.replace("open", "").replace("launch", "").replace("start", "").strip()
+                        params = {'action': 'start', 'process_name': app_name}
+                    elif any(word in cmd_lower for word in ["close", "kill", "stop", "quit"]):
+                        app_name = cmd_lower.replace("close", "").replace("kill", "").replace("stop", "").replace("quit", "").strip()
+                        params = {'action': 'stop', 'process_name': app_name}
+                    else:
+                        params = {'action': 'list'}
+                elif target_capability == "window_manager":
+                    # Parse window action
+                    cmd_lower = command.lower()
+                    if "minimize" in cmd_lower:
+                        params = {'action': 'minimize'}
+                    elif "maximize" in cmd_lower:
+                        params = {'action': 'maximize'}
+                    elif "focus" in cmd_lower:
+                        params = {'action': 'focus'}
+                    elif "close" in cmd_lower:
+                        params = {'action': 'close'}
+                    else:
+                        params = {'action': 'focus'}
+                    params['window_title'] = command
+                elif target_capability == "run_terminal_command":
+                    params = {'command': command}
+                elif target_capability == "shutdown_restart_control":
+                    cmd_lower = command.lower()
+                    if "shutdown" in cmd_lower or "shut down" in cmd_lower:
+                        params = {'action': 'shutdown', 'force': True}
+                    elif "restart" in cmd_lower or "reboot" in cmd_lower:
+                        params = {'action': 'restart', 'force': True}
+                    else:
+                        params = {'action': 'shutdown', 'force': True}
                 else:
                     params = {'input_text': command}
                 
