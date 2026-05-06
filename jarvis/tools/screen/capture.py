@@ -19,6 +19,19 @@ from ..base import BaseTool, ToolResult
 log = logging.getLogger("screen_tools")
 
 
+# Import window functions for auto-focus feature
+def find_window_by_title(title: str):
+    """Import from window module lazily to avoid circular imports."""
+    from ..apps.window import find_window_by_title as f
+    return f(title)
+
+
+def bring_to_foreground(hwnd: int) -> bool:
+    """Import from window module lazily to avoid circular imports."""
+    from ..apps.window import bring_to_foreground as b
+    return b(hwnd)
+
+
 # Screenshot directory
 SCREENSHOT_DIR = Path(__file__).parent.parent.parent.parent / "screenshots"
 SCREENSHOT_DIR.mkdir(exist_ok=True)
@@ -348,6 +361,17 @@ class FindOnScreenTool(BaseTool):
             enhanced_description = f"{description} in the {window_context} window"
         else:
             enhanced_description = description
+        
+        # CRITICAL FIX: Auto-focus the target window before taking screenshot
+        # This ensures the vision model sees the correct window's elements
+        if window_context:
+            hwnd = find_window_by_title(window_context)
+            if hwnd:
+                bring_to_foreground(hwnd)
+                time.sleep(0.3)  # Wait for window animation to complete
+                log.info(f"Focused window '{window_context}' before searching for '{description}'")
+            else:
+                log.warning(f"Could not find window '{window_context}' to focus - vision may see wrong window")
         
         # Take screenshot
         success, message, base64_data = take_screenshot()
