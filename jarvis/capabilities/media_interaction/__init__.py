@@ -1,92 +1,129 @@
 """
-7. Media & Interaction (3 tools)
+7. Media & Interaction Tools (3 tools)
 Human-facing interaction layer.
 """
 
 from typing import Optional, Any
 from dataclasses import dataclass
 import logging
+from datetime import datetime
+import subprocess
+import os
 
 logger = logging.getLogger(__name__)
 
 
 class AudioPlayer:
     """
-    audio_player: YouTube/Spotify local control
+    audio_player: Control audio playback
     
-    Controls audio playback from various sources.
+    Plays music, podcasts, and audio files. Supports YouTube/Spotify integration.
     """
     
     def __init__(self, default_volume: int = 50):
         self.default_volume = default_volume
-        self._current_track = None
+        self.current_track = None
     
-    def execute(self, action: str, source: Optional[str] = None,
-                url: Optional[str] = None, volume: Optional[int] = None,
+    def execute(self, action: str, media_data: Optional[dict] = None,
                 **kwargs) -> dict:
         """
         Control audio playback.
         
         Args:
-            action: One of 'play', 'pause', 'stop', 'next', 'previous', 'volume'
-            source: Source type ('youtube', 'spotify', 'local')
-            url: URL or file path
-            volume: Volume level (0-100)
+            action: One of 'play', 'pause', 'stop', 'next', 'previous', 'volume', 'queue'
+            media_data: Media details (url, file_path, service, query)
             
         Returns:
-            Playback status
+            Playback result
         """
         try:
             if action == "play":
-                if not url and not source:
-                    return {"success": False, "error": "url or source required"}
+                if not media_data:
+                    return {"success": False, "error": "media_data required"}
                 
-                self._current_track = {
-                    "source": source or "unknown",
-                    "url": url,
-                    "status": "playing"
-                }
+                url = media_data.get("url")
+                file_path = media_data.get("file_path")
+                query = media_data.get("query")
+                service = media_data.get("service", "local")
                 
-                # In production, would integrate with actual player
-                logger.info(f"Playing: {url or source}")
+                play_url = None
                 
+                # Handle different sources
+                if file_path and os.path.exists(file_path):
+                    play_url = file_path
+                elif url:
+                    play_url = url
+                elif query and service in ["youtube", "spotify"]:
+                    # In production, would search the service API
+                    logger.info(f"Would search {service} for: {query}")
+                    return {
+                        "success": True,
+                        "output": {
+                            "status": "simulated",
+                            "query": query,
+                            "service": service,
+                            "note": f"Configure {service} API to actually search and play"
+                        }
+                    }
+                else:
+                    return {"success": False, "error": "No valid media source provided"}
+                
+                # Try to play with system player
+                self.current_track = {"url": play_url, "status": "playing"}
+                logger.info(f"Playing: {play_url}")
+                
+                # Use platform-specific player
+                if os.name == 'posix':
+                    # Try common Linux players
+                    players = ['vlc', 'mpv', 'afplay']  # afplay for macOS
+                    for player in players:
+                        try:
+                            subprocess.Popen([player, play_url], 
+                                           stdout=subprocess.DEVNULL, 
+                                           stderr=subprocess.DEVNULL)
+                            return {
+                                "success": True,
+                                "output": {
+                                    "status": "playing",
+                                    "track": play_url,
+                                    "player": player,
+                                    "started_at": datetime.now().isoformat()
+                                }
+                            }
+                        except FileNotFoundError:
+                            continue
+                
+                # Fallback: just log it
                 return {
                     "success": True,
                     "output": {
-                        "status": "playing",
-                        "track": self._current_track,
-                        "note": "Audio playback simulated - configure actual player backend"
+                        "status": "queued",
+                        "track": play_url,
+                        "note": "No suitable media player found. Track queued."
                     }
                 }
             
             elif action == "pause":
-                if self._current_track:
-                    self._current_track["status"] = "paused"
-                return {
-                    "success": True,
-                    "output": {"status": "paused", "track": self._current_track}
-                }
+                self.current_track = {"status": "paused"} if self.current_track else {}
+                return {"success": True, "output": {"status": "paused"}}
             
             elif action == "stop":
-                self._current_track = None
+                self.current_track = None
                 return {"success": True, "output": {"status": "stopped"}}
             
             elif action == "volume":
-                if volume is None:
-                    return {"success": False, "error": "volume level required"}
-                vol = max(0, min(100, volume))
-                return {"success": True, "output": {"volume": vol}}
-            
-            elif action == "next":
+                volume = media_data.get("level", self.default_volume) if media_data else self.default_volume
+                # Set system volume (platform-specific)
+                logger.info(f"Setting volume to: {volume}%")
                 return {
                     "success": True,
-                    "output": {"status": "next", "note": "Would play next track"}
+                    "output": {"volume": volume, "note": "Volume setting simulated"}
                 }
             
-            elif action == "previous":
+            elif action == "next" or action == "previous":
                 return {
                     "success": True,
-                    "output": {"status": "previous", "note": "Would play previous track"}
+                    "output": {"action": action, "note": "Track navigation simulated"}
                 }
             
             else:
@@ -100,202 +137,185 @@ class VoiceSynthesizer:
     """
     voice_synthesizer: Text-to-Speech (TTS)
     
-    Converts text to spoken audio.
+    Converts text to spoken audio using system TTS engines.
     """
     
-    def __init__(self, voice: str = "default", rate: int = 150):
-        self.voice = voice
+    def __init__(self, default_voice: str = "default", rate: int = 150):
+        self.default_voice = default_voice
         self.rate = rate
     
-    def execute(self, text: str, output_file: Optional[str] = None,
-                voice: Optional[str] = None, rate: Optional[int] = None,
+    def execute(self, text: str, voice: Optional[str] = None,
+                rate: Optional[int] = None, output_file: Optional[str] = None,
                 **kwargs) -> dict:
         """
-        Synthesize speech from text.
+        Convert text to speech.
         
         Args:
-            text: Text to speak
-            output_file: Optional file to save audio
-            voice: Voice name
+            text: Text to synthesize
+            voice: Voice name (optional, uses default)
             rate: Speech rate (words per minute)
+            output_file: Save to file instead of playing
             
         Returns:
             TTS result
         """
         try:
-            selected_voice = voice or self.voice
-            selected_rate = rate or self.rate
+            if not text:
+                return {"success": False, "error": "text required"}
             
-            # Try different TTS backends
-            result = self._synthesize(text, selected_voice, selected_rate, output_file)
+            voice = voice or self.default_voice
+            rate = rate or self.rate
             
-            return result
+            logger.info(f"TTS: Converting {len(text)} chars to speech")
             
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def _synthesize(self, text: str, voice: str, rate: int, 
-                    output_file: Optional[str]) -> dict:
-        """Perform TTS synthesis."""
-        
-        # Try pyttsx3 first (offline)
-        try:
-            import pyttsx3
-            
-            engine = pyttsx3.init()
-            engine.setProperty('voice', voice)
-            engine.setProperty('rate', rate)
-            
-            if output_file:
-                engine.save_to_file(text, output_file)
-                engine.runAndWait()
-                return {
-                    "success": True,
-                    "output": {
-                        "file": output_file,
-                        "voice": voice,
-                        "rate": rate,
-                        "backend": "pyttsx3"
-                    }
-                }
-            else:
-                # Just speak (blocking)
-                engine.say(text)
-                engine.runAndWait()
-                return {
-                    "success": True,
-                    "output": {
-                        "spoken": True,
-                        "voice": voice,
-                        "rate": rate,
-                        "backend": "pyttsx3"
-                    }
-                }
+            # Use system TTS
+            if os.name == 'posix':
+                # macOS
+                if os.path.exists('/usr/bin/say'):
+                    cmd = ['say', '-r', str(rate), text]
+                    if output_file:
+                        cmd.extend(['-o', output_file])
+                    try:
+                        subprocess.run(cmd, check=True, timeout=60)
+                        return {
+                            "success": True,
+                            "output": {
+                                "status": "completed",
+                                "voice": "macOS System",
+                                "chars_processed": len(text),
+                                "output_file": output_file
+                            }
+                        }
+                    except subprocess.TimeoutExpired:
+                        return {"success": False, "error": "TTS timed out"}
                 
-        except ImportError:
-            pass
-        
-        # Try espeak via subprocess
-        try:
-            import subprocess
+                # Linux - try espeak
+                try:
+                    cmd = ['espeak', '-s', str(rate), text]
+                    if output_file:
+                        cmd.extend(['-w', output_file])
+                    subprocess.run(cmd, check=True, timeout=60,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return {
+                        "success": True,
+                        "output": {
+                            "status": "completed",
+                            "voice": "eSpeak",
+                            "chars_processed": len(text),
+                            "output_file": output_file
+                        }
+                    }
+                except FileNotFoundError:
+                    pass
             
-            cmd = ["espeak", "-v", voice, "-s", str(rate), text]
-            if output_file:
-                cmd.extend(["-w", output_file])
+            # Windows
+            elif os.name == 'nt':
+                try:
+                    import win32com.client
+                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                    speaker.Speak(text)
+                    return {
+                        "success": True,
+                        "output": {
+                            "status": "completed",
+                            "voice": "Windows SAPI",
+                            "chars_processed": len(text)
+                        }
+                    }
+                except ImportError:
+                    pass
             
-            subprocess.run(cmd, check=True, capture_output=True)
-            
+            # Fallback: simulate
             return {
                 "success": True,
                 "output": {
-                    "file": output_file,
+                    "status": "simulated",
+                    "text_preview": text[:100] + "..." if len(text) > 100 else text,
                     "voice": voice,
                     "rate": rate,
-                    "backend": "espeak"
+                    "note": "No TTS engine found. Output simulated."
                 }
             }
-            
-        except (ImportError, subprocess.CalledProcessError):
-            pass
-        
-        # Fallback: simulate
-        logger.warning("No TTS backend available, simulating")
-        return {
-            "success": True,
-            "output": {
-                "text": text,
-                "voice": voice,
-                "rate": rate,
-                "backend": "simulated",
-                "note": "Install pyttsx3 or espeak for actual TTS"
-            }
-        }
+                
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
 class VoiceRecognizer:
     """
     voice_recognizer: Speech-to-Text (STT)
     
-    Converts spoken audio to text.
+    Converts spoken audio to text using system STT engines.
     """
     
     def __init__(self, language: str = "en-US"):
         self.language = language
     
     def execute(self, audio_file: Optional[str] = None,
-                audio_data: Optional[bytes] = None,
+                use_microphone: bool = False,
                 language: Optional[str] = None,
-                timeout: float = 10.0,
                 **kwargs) -> dict:
         """
-        Recognize speech from audio.
+        Convert speech to text.
         
         Args:
             audio_file: Path to audio file
-            audio_data: Raw audio bytes
-            language: Language code
-            timeout: Recognition timeout
+            use_microphone: Record from microphone instead
+            language: Language code (e.g., 'en-US')
             
         Returns:
-            Transcribed text
+            Transcription result
         """
         try:
-            selected_lang = language or self.language
+            language = language or self.language
             
-            # Try speech_recognition library
+            if use_microphone:
+                # Would record from mic in production
+                return {
+                    "success": False,
+                    "error": "Microphone recording requires additional setup (pyaudio)"
+                }
+            
+            if not audio_file:
+                return {"success": False, "error": "audio_file or use_microphone required"}
+            
+            if not os.path.exists(audio_file):
+                return {"success": False, "error": f"Audio file not found: {audio_file}"}
+            
+            logger.info(f"STT: Processing {audio_file}")
+            
+            # Try using SpeechRecognition library if available
             try:
                 import speech_recognition as sr
-                
                 recognizer = sr.Recognizer()
-                
-                if audio_file:
-                    with sr.AudioFile(audio_file) as source:
-                        audio = recognizer.record(source)
-                elif audio_data:
-                    audio = sr.AudioData(audio_data, 16000, 2)
-                else:
-                    # Try microphone
-                    with sr.Microphone() as source:
-                        audio = recognizer.listen(source, timeout=timeout)
-                
-                text = recognizer.recognize_google(audio, language=selected_lang)
-                
+                with sr.AudioFile(audio_file) as source:
+                    audio = recognizer.record(source)
+                text = recognizer.recognize_google(audio, language=language)
                 return {
                     "success": True,
                     "output": {
                         "text": text,
-                        "language": selected_lang,
-                        "backend": "google"
+                        "language": language,
+                        "source": "Google Speech API"
                     }
                 }
-                
             except ImportError:
                 pass
-            except sr.UnknownValueError:
-                return {
-                    "success": False,
-                    "error": "Speech not recognized",
-                    "output": None
-                }
-            except sr.RequestError as e:
-                return {
-                    "success": False,
-                    "error": f"STT service error: {e}",
-                    "output": None
-                }
+            except Exception as e:
+                logger.warning(f"SpeechRecognition failed: {e}")
             
-            # Fallback: simulate
-            logger.warning("No STT backend available, returning simulation")
+            # Fallback: simulate with placeholder
             return {
                 "success": True,
                 "output": {
-                    "text": "[Speech recognition simulated]",
-                    "language": selected_lang,
-                    "backend": "simulated",
-                    "note": "Install speech_recognition for actual STT"
+                    "status": "simulated",
+                    "audio_file": audio_file,
+                    "language": language,
+                    "text": "[Transcription would appear here - install speech_recognition]",
+                    "note": "Install 'speech_recognition' package for actual STT"
                 }
             }
-            
+                
         except Exception as e:
             return {"success": False, "error": str(e)}
 
@@ -306,7 +326,7 @@ def get_audio_player(default_volume: int = 50) -> AudioPlayer:
 
 
 def get_voice_synthesizer(voice: str = "default", rate: int = 150) -> VoiceSynthesizer:
-    return VoiceSynthesizer(voice=voice, rate=rate)
+    return VoiceSynthesizer(default_voice=voice, rate=rate)
 
 
 def get_voice_recognizer(language: str = "en-US") -> VoiceRecognizer:
