@@ -327,7 +327,7 @@ class ResilientToolRouter:
         
         # Load TOOL_HINTS from registry module
         try:
-            from jarvis.tools.registry_refactored import TOOL_HINTS
+            from jarvis.tools.tool_registry import TOOL_HINTS
             self._tool_hints = TOOL_HINTS
         except ImportError:
             self._tool_hints = {}

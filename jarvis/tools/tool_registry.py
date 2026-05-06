@@ -1,9 +1,15 @@
 """
-tools/registry.py — Refactored Tool Registry with strict naming and schemas
+tools/tool_registry.py — Consolidated Tool Registry
+
+Single source of truth for all JARVIS tools.
+Merges registry.py and registry_refactored.py into one authoritative implementation.
 
 Features:
+- Single source of truth for available tools
+- Automatic tool discovery from module structure
+- Validation of tool names before execution
+- Schema generation for LLM function calling
 - Strict naming convention: <domain>.<verb>_<object>
-- Typed JSON schemas for every tool
 - TOOL_HINTS for keyword-based filtering
 - Deterministic tool selection (3-5 tools max to LLM)
 """
@@ -77,7 +83,7 @@ TOOL_HINTS: Dict[str, List[str]] = {
 
 
 # =============================================================================
-# REFACTORED TOOL REGISTRY
+# CONSOLIDATED TOOL REGISTRY
 # =============================================================================
 
 class ToolRegistry:
@@ -245,7 +251,15 @@ class ToolRegistry:
         self.register(tool)
     
     def get(self, name: str) -> Optional[BaseTool]:
-        """Get a tool by name."""
+        """
+        Get a tool by name.
+        
+        Args:
+            name: Tool name
+            
+        Returns:
+            Tool instance or None if not found
+        """
         return self._tools.get(name)
     
     def has_tool(self, name: str) -> bool:
@@ -253,7 +267,16 @@ class ToolRegistry:
         return name in self._tools
     
     def execute(self, name: str, **kwargs) -> ToolResult:
-        """Execute a tool by name with validation."""
+        """
+        Execute a tool by name.
+        
+        Args:
+            name: Tool name
+            **kwargs: Tool parameters
+            
+        Returns:
+            ToolResult from execution
+        """
         tool = self.get(name)
         
         if tool is None:
@@ -284,7 +307,7 @@ class ToolRegistry:
         return [tool.get_schema() for tool in self._tools.values()]
     
     def get_all_schemas(self) -> List[dict]:
-        """Get Ollama function calling schemas for all tools (alias)."""
+        """Get Ollama function calling schemas for all tools (alias for get_schemas)."""
         return self.get_schemas()
     
     def get_schema_for_tool(self, name: str) -> Optional[dict]:
@@ -298,7 +321,17 @@ class ToolRegistry:
         self._loaded_modules.clear()
     
     def load_from_module(self, module_path: str) -> int:
-        """Auto-discover and register tools from a module."""
+        """
+        Auto-discover and register tools from a module.
+        
+        Looks for classes ending with 'Tool' that inherit from BaseTool.
+        
+        Args:
+            module_path: Python module path (e.g., 'tools.system.power')
+            
+        Returns:
+            Number of tools registered
+        """
         if module_path in self._loaded_modules:
             log.debug(f"Module already loaded: {module_path}")
             return 0
@@ -310,6 +343,7 @@ class ToolRegistry:
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
                 
+                # Check if it's a class ending with 'Tool' and subclass of BaseTool
                 if (isinstance(attr, type) and 
                     attr_name.endswith('Tool') and 
                     issubclass(attr, BaseTool) and
@@ -327,12 +361,21 @@ class ToolRegistry:
             return 0
     
     def load_all_tools(self, base_dir: Optional[str] = None) -> int:
-        """Auto-discover and load all tools from the tools directory structure."""
+        """
+        Auto-discover and load all tools from the tools directory structure.
+        
+        Args:
+            base_dir: Base directory to search (defaults to this file's parent)
+            
+        Returns:
+            Total number of tools registered
+        """
         if base_dir is None:
             base_dir = Path(__file__).parent
         
         total = 0
         
+        # Map of category folders to module prefixes - use jarvis.tools prefix for proper imports
         categories = {
             "system": "jarvis.tools.system",
             "apps": "jarvis.tools.apps",
@@ -366,14 +409,24 @@ class ToolRegistry:
         return total
     
     def validate_tool_name(self, name: str) -> tuple[bool, str]:
-        """Validate that a tool name exists in the registry."""
+        """
+        Validate that a tool name exists in the registry.
+        
+        Args:
+            name: Tool name to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
         if name in self._tools:
             return True, ""
         
+        # Provide helpful error message with similar tool names
         available = sorted(self._tools.keys())
         error = f"Unknown tool: '{name}'"
         
         if available:
+            # Suggest similar names using simple string matching
             similar = [t for t in available if name.lower() in t.lower() or t.lower() in name.lower()]
             if similar:
                 error += f". Did you mean: {', '.join(similar[:3])}?"
@@ -448,7 +501,7 @@ def get_registry() -> ToolRegistry:
     global _registry
     if _registry is None:
         _registry = ToolRegistry.get_instance()
-        _registry.load_all_tools()
+        _registry.load_all_tools()  # ensure tools are discovered
     return _registry
 
 

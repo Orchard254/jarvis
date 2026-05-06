@@ -11,16 +11,8 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class ToolResult:
-    """Result of a tool execution."""
-    success: bool
-    output: Any = None
-    error: Optional[str] = None
-    duration_ms: float = 0.0
-    rollback_actions: list = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
+# Import canonical ToolResult from base.py to avoid duplication
+from jarvis.tools.base import ToolResult
 
 
 # Standalone subprocess runner entry point
@@ -56,7 +48,6 @@ if __name__ == "__main__":
     
     # Import and execute the tool
     try:
-        from jarvis.tools.registry import execute_tool, get_registry
         from jarvis.tools.base import ToolResult as BaseToolResult
         
         # Load all tools into the registry before executing
@@ -66,7 +57,7 @@ if __name__ == "__main__":
         result_value = execute_tool(tool_name, **params)
         
         # Convert to serializable format
-        if isinstance(result_value, BaseToolResult):
+        if isinstance(result_value, ToolResult):
             result = {
                 "success": result_value.success,
                 "output": result_value.output,
