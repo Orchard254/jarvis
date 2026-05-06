@@ -61,6 +61,7 @@ class IntentRouter:
             "system_status": "system_info",
             "store_memory": "memory_manager",
             "retrieve_memory": "memory_manager",
+            "general_query": "reasoning_engine",  # Map general queries to reasoning engine
         }
     
     def execute(self, user_input: str, context: Optional[dict] = None,

@@ -451,3 +451,80 @@ Traceback (most recent call last):
     result = self.registry.execute(
              ^^^^^^^^^^^^^^^^^^^^^^
 TypeError: CapabilityRegistry.execute() got multiple values for argument 'tool_name'
+2026-05-06 06:02:41,736 - __main__ - INFO - ======================================================================
+2026-05-06 06:02:41,736 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 06:02:41,736 - __main__ - INFO - ======================================================================
+2026-05-06 06:02:41,736 - __main__ - INFO - Starting in agent mode
+2026-05-06 06:02:41,736 - __main__ - INFO - Test mode: False
+2026-05-06 06:02:41,736 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 06:02:41,736 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 06:02:41,737 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 06:02:41,737 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 06:02:41,737 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 06:02:41,737 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 06:02:41,737 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 06:02:41,737 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 06:02:41,737 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 06:02:41,737 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 06:02:41,737 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 06:02:41,738 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 06:02:41,738 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 06:02:41,738 - __main__ - INFO - Processing command: hello
+2026-05-06 06:02:41,738 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 06:02:41,738 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 06:03:04,692 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → None
+2026-05-06 06:03:04,692 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 06:03:04,692 - __main__ - ERROR - Error processing command: CapabilityRegistry.execute() got multiple values for argument 'tool_name'
+Traceback (most recent call last):
+  File "/workspace/jarvis.py", line 245, in process_command
+    result = self.registry.execute(
+             ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: CapabilityRegistry.execute() got multiple values for argument 'tool_name'
+2026-05-06 06:03:27,622 - __main__ - INFO - ======================================================================
+2026-05-06 06:03:27,622 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 06:03:27,622 - __main__ - INFO - ======================================================================
+2026-05-06 06:03:27,622 - __main__ - INFO - Starting in agent mode
+2026-05-06 06:03:27,622 - __main__ - INFO - Test mode: False
+2026-05-06 06:03:27,622 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 06:03:27,622 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 06:03:27,623 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 06:03:27,623 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 06:03:27,623 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 06:03:27,623 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 06:03:27,623 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 06:03:27,623 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 06:03:27,623 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 06:03:27,623 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 06:03:27,623 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 06:03:27,634 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 06:03:27,634 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 06:03:27,635 - __main__ - INFO - Processing command: hello
+2026-05-06 06:03:27,635 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 06:03:27,635 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 06:03:28,768 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → None
+2026-05-06 06:03:28,768 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 06:03:28,768 - jarvis.capabilities.orchestration.tool_dispatcher - ERROR - Tool 'general_query' not found
+2026-05-06 06:04:31,843 - __main__ - INFO - ======================================================================
+2026-05-06 06:04:31,854 - __main__ - INFO - JARVIS - Capability-Based AI Agent
+2026-05-06 06:04:31,854 - __main__ - INFO - ======================================================================
+2026-05-06 06:04:31,854 - __main__ - INFO - Starting in agent mode
+2026-05-06 06:04:31,854 - __main__ - INFO - Test mode: False
+2026-05-06 06:04:31,854 - jarvis.models.model_adapter - INFO - Initialized GPT-OSS 120B adapter with model: gpt-oss:120b-cloud
+2026-05-06 06:04:31,854 - jarvis.models.model_adapter - INFO - Initialized Gemma 3 27B adapter with model: gemma3:27b-cloud
+2026-05-06 06:04:31,854 - __main__ - INFO - Loading AI models (GPT-OSS 120B + Gemma 3 27B)...
+2026-05-06 06:04:31,854 - __main__ - INFO - Initializing GPT-OSS 120B adapter...
+2026-05-06 06:04:31,854 - __main__ - INFO - ✓ GPT-OSS 120B ready: gpt-oss:120b-cloud
+2026-05-06 06:04:31,854 - __main__ - INFO - Initializing Gemma 3 27B adapter...
+2026-05-06 06:04:31,855 - __main__ - INFO - ✓ Gemma 3 27B ready: gemma3:27b-cloud
+2026-05-06 06:04:31,855 - __main__ - INFO - ✓ Reasoning model ready: gpt-oss:120b-cloud
+2026-05-06 06:04:31,855 - __main__ - INFO - ✓ Vision model ready: gemma3:27b-cloud
+2026-05-06 06:04:31,855 - jarvis.capabilities.registry - INFO - Initializing JARVIS 30-tool capability registry...
+2026-05-06 06:04:31,855 - jarvis.capabilities.registry - INFO - Initialized 32 capabilities
+2026-05-06 06:04:31,855 - __main__ - INFO - Initialized 32 capabilities
+2026-05-06 06:04:31,855 - __main__ - INFO - ✓ JARVIS is fully operational with both models
+2026-05-06 06:04:31,855 - __main__ - INFO - Processing command: hello
+2026-05-06 06:04:31,855 - jarvis.capabilities.orchestration.intent_router - INFO - Classifying intent: hello...
+2026-05-06 06:04:31,855 - ollama_client - INFO - [OLLAMA] Calling cloud endpoint: https://api.ollama.com/api/chat
+2026-05-06 06:04:33,493 - jarvis.capabilities.orchestration.intent_router - INFO - Classified as 'general_query' → reasoning_engine
+2026-05-06 06:04:33,493 - __main__ - INFO - Detected intent: general_query (confidence: 0.95)
+2026-05-06 06:04:33,493 - jarvis.capabilities.orchestration.tool_dispatcher - ERROR - Tool 'general_query' not found
