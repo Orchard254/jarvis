@@ -1,13 +1,17 @@
 ```gitignore
-# Python
+# Compiled Python files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Virtual Environment
+# Virtual environments
 venv/
+.venv/
+env/
 
-# Logs
-*.log
+# Python build artifacts
+build/
+dist/
+*.egg-info/
 ```
