@@ -1,148 +1,102 @@
 # JARVIS 30-Tool Capability Implementation Status
 
-## Overview
-Refactoring from 78+ fragmented tools to a clean 30-tool capability architecture organized around capabilities, not random tools.
+## Progress: 22/30 Tools Complete (73%)
 
-**Progress: 13 of 30 tools implemented (43%)**
+### ✅ Completed Categories (5/8)
 
----
+#### 1. Core Orchestration (4/4) ✓
+- `intent_router` - Classifies commands and routes to appropriate tools
+- `task_planner` - Breaks goals into executable steps  
+- `tool_dispatcher` - Executes selected tools with error handling
+- `memory_manager` - Stores/retrieves short and long-term context
 
-## ✓ Completed Categories (3/8)
+#### 2. System Control (6/6) ✓
+- `run_terminal_command` - Execute shell commands with timeout protection
+- `run_python_code` - Safe sandboxed Python execution
+- `window_manager` - Focus, minimize, maximize, close windows
+- `process_manager` - List, start, kill processes via psutil
+- `system_info` - CPU, RAM, disk, network telemetry
+- `shutdown_restart_control` - Power state management
 
-### 1. System Control (6/6 tools) ✅
-Direct OS-level interaction - **FULLY IMPLEMENTED**
+#### 3. Vision & Screen Understanding (3/3) ✓
+- `screen_capture` - Full screen or region screenshots with base64 encoding
+- `ocr_extract_text` - Tesseract OCR with image preprocessing
+- `vision_analyzer` - Gemma 3 integration for UI interpretation
 
-| Tool | Status | Description |
-|------|--------|-------------|
-| `run_terminal_command` | ✅ | Execute shell commands with timeout protection |
-| `run_python_code` | ✅ | Safe local execution sandbox |
-| `window_manager` | ✅ | Minimize/maximize/focus apps |
-| `process_manager` | ✅ | Kill/start/list processes |
-| `system_info` | ✅ | CPU, RAM, disk, OS state monitoring |
-| `shutdown_restart_control` | ✅ | Power actions with safety checks |
+#### 4. File & Data System (4/4) ✓
+- `file_reader` - Auto-encoding detection, size limits, binary handling
+- `file_writer` - Backup support, directory creation, safe writes
+- `file_search` - Pattern matching, content search, recursive options
+- `data_parser` - CSV/JSON/Excel parsing with column detection
 
-**Location:** `jarvis/capabilities/system_control/`
-
----
-
-### 2. Vision & Screen Understanding (3/3 tools) ✅
-Powered by Gemma 3 27B - **FULLY IMPLEMENTED**
-
-| Tool | Status | Description |
-|------|--------|-------------|
-| `screen_capture` | ✅ | Grab screen or region (PIL-based) |
-| `ocr_extract_text` | ✅ | Text from images/screen (Tesseract OCR) |
-| `vision_analyzer` | ✅ | Interpret UI, detect buttons (Gemma 3 ready) |
-
-**Location:** `jarvis/capabilities/vision/`
-
-**Dependencies installed:**
-- `pytesseract` (Python wrapper)
-- `tesseract-ocr` (System package)
-- `Pillow` (Image processing)
+#### 5. Web & Knowledge (5/5) ✓
+- `web_search` - Multi-engine search (DuckDuckGo/Google/Bing)
+- `web_scraper` - Extract content, links, images, tables from pages
+- `url_reader` - Structured metadata extraction (OG tags, headings)
+- `summarizer` - Text compression with multiple summary types
+- `fact_checker` - Cross-source claim validation with confidence scores
 
 ---
 
-### 3. File & Data System (4/4 tools) ✅
-For local productivity - **FULLY IMPLEMENTED**
+### ⏳ Remaining Categories (3/8)
 
-| Tool | Status | Description |
-|------|--------|-------------|
-| `file_reader` | ✅ | Read files with auto-encoding detection |
-| `file_writer` | ✅ | Write files with backup support |
-| `file_search` | ✅ | Search by name pattern or content |
-| `data_parser` | ✅ | Parse CSV, JSON, Excel files |
+#### 6. Productivity Tools (0/4)
+- `calendar_manager` - Calendar events and scheduling
+- `task_scheduler` - Task/todo list management
+- `notes_manager` - Note taking and retrieval
+- `email_handler` - Email sending and reading
 
-**Location:** `jarvis/capabilities/file_data/`
+#### 7. Media & Interaction (0/3)
+- `audio_player` - YouTube/Spotify/local audio control
+- `voice_synthesizer` - Text-to-speech output
+- `voice_recognizer` - Speech-to-text input
 
----
-
-## ⏳ Remaining Categories (5/8)
-
-### 4. Core Orchestration (0/4 tools)
-Decision flow and system state control.
-
-- [ ] `intent_router` - Classifies user command → tool routing
-- [ ] `task_planner` - Breaks goal into steps
-- [ ] `tool_dispatcher` - Executes selected tool
-- [ ] `memory_manager` - Store/retrieve short + long term context
-
-### 5. Web & Knowledge (0/5 tools)
-External intelligence layer.
-
-- [ ] `web_search` - Real-time search
-- [ ] `web_scraper` - Extract page content
-- [ ] `url_reader` - Structured page parsing
-- [ ] `summarizer` - Compress long text
-- [ ] `fact_checker` - Validate claims across sources
-
-### 6. Productivity (0/4 tools)
-Everyday assistant layer.
-
-- [ ] `calendar_manager`
-- [ ] `task_scheduler`
-- [ ] `notes_manager`
-- [ ] `email_handler`
-
-### 7. Media & Interaction (0/3 tools)
-Human-facing interaction layer.
-
-- [ ] `audio_player` - YouTube/Spotify local control
-- [ ] `voice_synthesizer` - TTS
-- [ ] `voice_recognizer` - STT
-
-### 8. AI Internal Tools (0/3 tools)
-Model-to-model intelligence layer.
-
-- [ ] `reasoning_engine` - GPT-OSS 120B main planner
-- [ ] `vision_reasoning_bridge` - Gemma → text reasoning conversion
-- [ ] `tool_self_evaluator` - Checks tool outputs for errors
+#### 8. AI Internal Tools (0/3)
+- `reasoning_engine` - GPT-OSS 120B main planner integration
+- `vision_reasoning_bridge` - Gemma → text reasoning conversion
+- `tool_self_evaluator` - Output validation and error checking
 
 ---
 
-## Test Results
-
-All 13 implemented tools verified working:
+## Architecture Summary
 
 ```
-✓ RunTerminalCommand: Executed "echo" successfully
-✓ SystemInfo: Reports CPU 0.0% | RAM 36.9% | Disk 77.1%
-✓ ProcessManager: Listed running processes
-✓ FileReader: Read README.md (21,464 chars)
-✓ FileWriter: Wrote test file (43 bytes)
-✓ FileSearch: Found Python files in capabilities/
-✓ DataParser: Parsed JSON (90 rows) and CSV (3 rows)
-✓ ScreenCapture: Captured screenshot (requires X display)
-✓ OCRExtractText: Extracted text from test image
+jarvis/capabilities/
+├── orchestration/          (4/4) ✓
+├── system_control/         (6/6) ✓
+├── vision/                 (3/3) ✓
+├── file_data/              (4/4) ✓
+├── web_knowledge/          (5/5) ✓
+├── productivity/           (0/4) 
+├── media_interaction/      (0/3)
+└── ai_internal/            (0/3)
 ```
 
----
-
-## Next Steps
-
-1. **Implement Core Orchestration** (highest priority)
-   - These tools enable the reasoning loop
-   - Required for integrating GPT-OSS 120B
-
-2. **Implement Web & Knowledge** (high priority)
-   - External data access critical for agent utility
-   - Dependencies: `requests`, `beautifulsoup4`, `httpx`
-
-3. **Update Main Registry** 
-   - Connect new capabilities to entry point
-   - Deprecate old tools folder
-
-4. **Integration Testing**
-   - End-to-end agent workflows
-   - Multi-model coordination tests
+**Total: 22/30 tools implemented (73% complete)**
 
 ---
 
-## Architecture Benefits
+## Next Priority Tasks
 
-- **Reduced Complexity**: 78 → 30 tools (62% reduction)
-- **Clear Boundaries**: No overlapping responsibilities
-- **Deterministic Execution**: Tight, focused capabilities
-- **Model-Ready**: Optimized for GPT-OSS 120B + Gemma 3 27B
-- **Maintainable**: Organized by capability domain
+1. **Implement Productivity Tools** - Essential for assistant functionality
+2. **Implement Media & Interaction** - Human-facing interaction layer
+3. **Implement AI Internal Tools** - Model integration and self-evaluation
+4. **Update Main Registry** - Ensure all 30 tools are properly registered
+5. **Integration Testing** - End-to-end testing with GPT-OSS 120B + Gemma 3
 
+---
+
+## Dependencies Installed
+
+Core dependencies verified:
+- `psutil` - Process and system monitoring
+- `pyautogui` - Window and input control
+- `Pillow` - Image processing
+- `pytesseract` - OCR engine
+- `requests` - HTTP requests
+- `beautifulsoup4` - HTML parsing
+
+Additional needed:
+- `openpyxl` - Excel file parsing
+- `duckduckgo-search` - Enhanced search (optional)
+- `pyaudio` / `speechrecognition` - Voice I/O
