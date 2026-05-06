@@ -4,6 +4,7 @@ Unified interface for working, episodic, semantic, and procedural memory.
 """
 
 import json
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -11,6 +12,8 @@ from pathlib import Path
 from .working import WorkingMemory, get_working_memory
 from .episodic import EpisodicMemory, get_episodic_memory
 from .semantic import SemanticMemory, get_semantic_memory
+
+logger = logging.getLogger(__name__)
 
 
 class ProceduralMemory:
@@ -37,7 +40,7 @@ class ProceduralMemory:
                     data = json.load(f)
                     self.procedures = data.get('procedures', {})
             except Exception as e:
-                log.warning(f"[MEMORY] Failed to load procedures, using empty: {e}")
+                logger.warning(f"[MEMORY] Failed to load procedures, using empty: {e}")
                 self.procedures = {}
     
     def _save(self) -> None:

@@ -361,16 +361,23 @@ class ToolGuard:
     
     def _validate_press_key(self, params: Dict[str, Any]) -> Tuple[bool, str]:
         """Validate key press."""
+        import re
+        
         keys = params.get('keys', [])
         if not keys:
             return False, "No keys specified"
         
+        # Normalize: handle both string "ctrl+alt+del" and list ["ctrl","alt","del"]
+        if isinstance(keys, str):
+            keys_list = [k.strip().lower() for k in re.split(r'[+,\s]+', keys) if k.strip()]
+        else:
+            keys_list = [k.lower() for k in keys]
+        
         # Block dangerous key combinations
         dangerous_combos = [['alt', 'f4'], ['ctrl', 'alt', 'del'], ['win', 'l']]
-        keys_lower = [k.lower() for k in keys]
         
         for combo in dangerous_combos:
-            if all(k in keys_lower for k in combo):
+            if all(k in keys_list for k in combo):
                 return False, f"Dangerous key combination: {'+'.join(combo)}"
         
         return True, ""
