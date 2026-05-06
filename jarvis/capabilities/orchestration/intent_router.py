@@ -131,17 +131,20 @@ class IntentRouter:
         # Construct prompt for the reasoning model
         prompt = self._build_classification_prompt(user_input, context)
         
-        # TODO: Replace with actual model call
-        # response = self.reasoning_model.generate(prompt)
-        # return self._parse_model_response(response)
-        
-        # Placeholder - will be replaced by actual model inference
-        logger.debug("Using model-based classification (placeholder)")
-        return IntentResult(
-            intent="general_query",
-            confidence=0.9,
-            parameters={"raw_input": user_input}
-        )
+        # Use Gemma 3 27B for classification (faster, optimized for this task)
+        try:
+            from jarvis.models import get_vision_model
+            classifier = get_vision_model()
+            
+            response = classifier.generate_json(prompt)
+            return self._parse_model_response_dict(response)
+        except Exception as e:
+            logger.warning(f"Model classification failed, falling back: {e}")
+            return IntentResult(
+                intent="general_query",
+                confidence=0.5,
+                parameters={"raw_input": user_input}
+            )
     
     def _classify_rule_based(self, user_input: str, context: Optional[dict]) -> IntentResult:
         """
@@ -239,7 +242,7 @@ Respond with JSON: {{"intent": "<intent_name>", "confidence": <0-1>, "parameters
         return prompt
     
     def _parse_model_response(self, response: str) -> IntentResult:
-        """Parse model response into IntentResult."""
+        """Parse model response string into IntentResult."""
         import json
         try:
             # Extract JSON from response
@@ -256,6 +259,18 @@ Respond with JSON: {{"intent": "<intent_name>", "confidence": <0-1>, "parameters
             logger.warning(f"Failed to parse model response: {e}")
         
         return IntentResult(intent="general_query", confidence=0.5)
+    
+    def _parse_model_response_dict(self, response_dict: dict) -> IntentResult:
+        """Parse model response dictionary into IntentResult."""
+        try:
+            return IntentResult(
+                intent=response_dict.get('intent', 'general_query'),
+                confidence=response_dict.get('confidence', 0.5),
+                parameters=response_dict.get('parameters', {})
+            )
+        except Exception as e:
+            logger.warning(f"Failed to parse model response dict: {e}")
+            return IntentResult(intent="general_query", confidence=0.5)
     
     def register_intent_mapping(self, intent: str, capability: str):
         """Register mapping between intent and capability."""

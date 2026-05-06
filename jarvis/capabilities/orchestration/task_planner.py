@@ -140,12 +140,16 @@ class TaskPlanner:
         """
         prompt = self._build_planning_prompt(goal, context)
         
-        # TODO: Replace with actual model call
-        # response = self.reasoning_model.generate(prompt)
-        # return self._parse_model_plan(response, goal)
-        
-        logger.debug("Using model-based planning (placeholder)")
-        return self._plan_heuristic(goal, context)
+        # Use GPT-OSS 120B for complex planning (better reasoning)
+        try:
+            from jarvis.models import get_reasoning_model
+            planner = get_reasoning_model()
+            
+            response = planner.generate_json(prompt)
+            return self._parse_model_plan_dict(response, goal)
+        except Exception as e:
+            logger.warning(f"Model planning failed, falling back to heuristic: {e}")
+            return self._plan_heuristic(goal, context)
     
     def _plan_heuristic(self, goal: str, context: Optional[dict]) -> TaskPlan:
         """
@@ -299,7 +303,7 @@ Respond with JSON array of steps:
         return prompt
     
     def _parse_model_plan(self, response: str, goal: str) -> TaskPlan:
-        """Parse model response into TaskPlan."""
+        """Parse model response string into TaskPlan."""
         import json
         try:
             # Extract JSON from response
@@ -325,6 +329,33 @@ Respond with JSON array of steps:
                 )
         except Exception as e:
             logger.warning(f"Failed to parse model plan: {e}")
+        
+        return self._plan_heuristic(goal, None)
+    
+    def _parse_model_plan_dict(self, response_dict: dict, goal: str) -> TaskPlan:
+        """Parse model response dictionary into TaskPlan."""
+        import json
+        try:
+            # Handle both direct list and dict with 'steps' key
+            steps_data = response_dict if isinstance(response_dict, list) else response_dict.get('steps', [])
+            
+            steps = []
+            for step_data in steps_data:
+                steps.append(TaskStep(
+                    step_id=step_data.get('step_id', len(steps) + 1),
+                    description=step_data.get('description', ''),
+                    capability=step_data.get('capability', 'reasoning_engine'),
+                    parameters=step_data.get('parameters', {}),
+                    dependencies=step_data.get('dependencies', [])
+                ))
+            
+            return TaskPlan(
+                goal=goal,
+                steps=steps,
+                estimated_duration=len(steps) * 5.0
+            )
+        except Exception as e:
+            logger.warning(f"Failed to parse model plan dict: {e}")
         
         return self._plan_heuristic(goal, None)
     
