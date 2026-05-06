@@ -255,12 +255,56 @@ class WindowManager:
     
     def _execute_windows(self, action: str, title: Optional[str], 
                          app: Optional[str], **kwargs) -> dict:
-        """Execute on Windows using pywinauto or similar."""
-        # Placeholder - would use pywinauto in production
-        return {
-            "success": True,
-            "output": {"action": action, "platform": "windows", "status": "simulated"}
-        }
+        """Execute on Windows using pywinauto."""
+        try:
+            from pywinauto import Application, Desktop
+            
+            desktop = Desktop(backend="win32")
+            
+            # Find window by title or app name
+            window = None
+            search_criteria = title if title else app
+            if not search_criteria:
+                return {"success": False, "error": "No window_title or app_name provided"}
+            
+            # Try to find the window
+            for w in desktop.windows():
+                win_text = w.window_text()
+                if search_criteria.lower() in win_text.lower():
+                    window = w
+                    break
+            
+            if not window:
+                return {"success": False, "error": f"Window not found: {search_criteria}"}
+            
+            if action == "minimize":
+                window.minimize()
+                return {"success": True, "output": {"action": "minimize", "window": search_criteria}}
+            
+            elif action == "maximize":
+                window.maximize()
+                return {"success": True, "output": {"action": "maximize", "window": search_criteria}}
+            
+            elif action == "focus" or action == "activate":
+                window.set_focus()
+                return {"success": True, "output": {"action": "focus", "window": search_criteria}}
+            
+            elif action == "close":
+                window.close()
+                return {"success": True, "output": {"action": "close", "window": search_criteria}}
+            
+            elif action == "resize":
+                width = kwargs.get("width", 800)
+                height = kwargs.get("height", 600)
+                window.move_window(width=width, height=height)
+                return {"success": True, "output": {"action": "resize", "window": search_criteria, "width": width, "height": height}}
+            
+            else:
+                return {"success": False, "error": f"Unknown action: {action}"}
+                
+        except Exception as e:
+            logger.error(f"Window manager error: {e}")
+            return {"success": False, "error": str(e)}
     
     def _execute_macos(self, action: str, title: Optional[str],
                        app: Optional[str], **kwargs) -> dict:
@@ -468,27 +512,43 @@ class ShutdownRestartControl:
         
         try:
             if action == "shutdown":
-                cmd = "shutdown -h now" if platform.system() != "Windows" else "shutdown /s /t 0"
+                cmd = "shutdown /s /t 0" if platform.system() == "Windows" else "shutdown -h now"
             elif action == "restart":
-                cmd = "shutdown -r now" if platform.system() != "Windows" else "shutdown /r /t 0"
+                cmd = "shutdown /r /t 0" if platform.system() == "Windows" else "shutdown -r now"
             elif action == "sleep":
-                # Platform-specific sleep command
-                cmd = "pm-suspend" if platform.system() == "Linux" else "rundll32.exe powrprof.dll,SetSuspendState"
+                if platform.system() == "Windows":
+                    cmd = "rundll32.exe powrprof.dll,SetSuspendState"
+                elif platform.system() == "Linux":
+                    cmd = "pm-suspend"
+                else:
+                    cmd = "pm-suspend"  # macOS would use different command
+            elif action == "hibernate":
+                if platform.system() == "Windows":
+                    cmd = "shutdown /h"
+                else:
+                    return {"success": False, "error": "Hibernate not supported on this platform"}
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
             
             if delay > 0:
                 import time
+                logger.info(f"Waiting {delay} seconds before executing {action}")
                 time.sleep(delay)
             
-            # In production, would actually execute
-            # For safety, we just simulate
+            # Actually execute the power command
+            logger.warning(f"Executing power command: {cmd}")
+            subprocess.run(cmd, shell=True, check=True)
+            
             return {
                 "success": True,
-                "output": {"action": action, "delay": delay, "simulated": True}
+                "output": {"action": action, "delay": delay, "executed": True, "command": cmd}
             }
             
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Power command failed: {e}")
+            return {"success": False, "error": f"Command failed: {str(e)}"}
         except Exception as e:
+            logger.error(f"Power control error: {e}")
             return {"success": False, "error": str(e)}
 
 
