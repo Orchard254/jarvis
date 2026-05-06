@@ -1,6 +1,10 @@
 ```
 # Dependencies
 venv/
+ENV/
+env/
+.venv/
+.env/
 
 # Python cache
 __pycache__/
