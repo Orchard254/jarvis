@@ -306,6 +306,109 @@ class ToolRegistry:
     def initialized(self) -> bool:
         """Check if registry is initialized."""
         return self._initialized
+    
+    @classmethod
+    def get_instance(cls, config: Optional[Dict] = None) -> 'ToolRegistry':
+        """Get or create the global ToolRegistry singleton instance."""
+        global _global_registry
+        if _global_registry is None:
+            _global_registry = cls(config)
+        return _global_registry
+    
+    def load_all_tools(self) -> int:
+        """
+        Load all tools/capabilities into the registry.
+        
+        Returns:
+            Number of tools loaded
+        """
+        if not self._capability_registry._initialized:
+            # Initialize capability registry if not already done
+            self._capability_registry.initialize()
+        
+        # Refresh our internal tools dict from capabilities
+        self._tools.clear()
+        
+        # Get all capabilities and wrap them
+        caps = self._capability_registry.list_capabilities()
+        for cap in caps:
+            if cap.get("registered"):
+                name = cap["name"]
+                # Create wrapper for each capability
+                from jarvis.tools import create_legacy_tool_wrapper
+                try:
+                    wrapper = create_legacy_tool_wrapper(name, self._capability_registry)
+                    self._tools[name] = wrapper
+                except Exception as e:
+                    logger.warning(f"Failed to wrap capability {name}: {e}")
+        
+        # Also add legacy name aliases (pointing to same underlying capability wrappers)
+        legacy_aliases = {
+            "open_app": "window_manager",
+            "close_app": "window_manager",
+            "get_time": "system_info",
+            "lock_pc": "shutdown_restart_control",
+            "take_screenshot": "screen_capture",
+            "capture_screen": "screen_capture",
+            "search_web": "web_search",
+            "google_search": "web_search",
+            "read_file": "file_reader",
+            "write_file": "file_writer",
+            "create_file": "file_writer",
+            "delete_file": "file_writer",
+            "list_files": "file_search",
+            "find_file": "file_search",
+        }
+        
+        for alias_name, real_cap_name in legacy_aliases.items():
+            if real_cap_name in self._tools:
+                # Create an alias that points to the same wrapper
+                self._tools[alias_name] = self._tools[real_cap_name]
+        
+        logger.info(f"Loaded {len(self._tools)} tools (including {len(legacy_aliases)} legacy aliases)")
+        return len(self._tools)
+    
+    def get_all_tools(self) -> Dict[str, SimpleBaseTool]:
+        """
+        Get dictionary of all available tools.
+        
+        Returns:
+            Dict mapping tool names to tool instances
+        """
+        # Ensure tools are loaded
+        if not self._tools and self._capability_registry._initialized:
+            self.load_all_tools()
+        
+        return self._tools.copy()
+    
+    def find_similar_tools(self, query: str, limit: int = 5) -> List[str]:
+        """
+        Find tools similar to a query string (fuzzy matching).
+        
+        Args:
+            query: Tool name or description to search for
+            limit: Maximum number of results
+            
+        Returns:
+            List of similar tool names
+        """
+        import difflib
+        
+        all_names = self.get_tool_names()
+        
+        # Try exact substring match first
+        matches = [name for name in all_names if query.lower() in name.lower()]
+        
+        if not matches:
+            # Fuzzy match using difflib
+            matches = difflib.get_close_matches(query.lower(), all_names, n=limit, cutoff=0.4)
+        
+        return matches[:limit]
+    
+    @property
+    def tools(self) -> Dict[str, SimpleBaseTool]:
+        """Property accessor for tools dictionary (backward compatibility)."""
+        return self.get_all_tools()
 
 
 # Global registry instance for backward compatibility
