@@ -1,21 +1,17 @@
 ```
-# Python compiled files
-*.pyc
-__pycache__/
-
-# Virtual environment
+# Dependencies
 venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
 # Logs
 *.log
 
-# Temp files
-*.tmp
-temp_tts.mp3
+# Data sessions (based on pattern in jarvis_data/episodes/)
+jarvis_data/episodes/session_*.json
 
-# Dependencies in venv
-venv/lib/python3.12/site-packages/
-
-# Data files that might be generated
-jarvis_data/
 ```

@@ -651,7 +651,7 @@ class Orchestrator:
             return result
             
         except Exception as e:
-            logger.error(f"Error processing command: {e}", exc_info=True)
+            logger.exception(f"Error processing command: {e}")
             error_response = "I encountered an error processing your request."
             self._speak(error_response)
             
@@ -733,7 +733,7 @@ class Orchestrator:
             }
             
         except Exception as e:
-            logger.error(f"Chat handling error: {e}", exc_info=True)
+            logger.exception(f"Chat handling error: {e}")
             return {
                 'success': False,
                 'response': "I'm not sure I understand. Could you rephrase that?",
@@ -963,7 +963,7 @@ class Orchestrator:
                     }
                     
             except Exception as e:
-                logger.error(f"LLM iteration error: {e}", exc_info=True)
+                logger.exception(f"LLM iteration error: {e}")
                 messages.append({"role": "user", "content": f"Error occurred: {str(e)}. Please try again."})
         
         # Max iterations reached
@@ -1227,7 +1227,7 @@ RULES:
                 return str(result)
                 
         except Exception as e:
-            logger.error(f"Tool execution error: {e}", exc_info=True)
+            logger.exception(f"Tool execution error: {e}")
             return f"Error executing {tool_name}: {str(e)}"
     
     def _normalize_tool_arguments(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1402,7 +1402,7 @@ RULES:
             }
             
         except Exception as e:
-            logger.error(f"[EXEC] Execution error: {e}", exc_info=True)
+            logger.exception(f"[EXEC] Execution error: {e}")
             duration_ms = int((time_module.time() - start_time) * 1000)
             
             self.audit_log.log_action(
@@ -1453,7 +1453,7 @@ RULES:
                         response_text = "Hello! How can I assist you today?"
                     elif parsed.get('goal'):
                         response_text = parsed.get('goal', response_text)
-                except:
+                except Exception:
                     pass  # Keep the original response if parsing fails
             
             # Speak response
@@ -1466,7 +1466,7 @@ RULES:
                 'actions': []
             }
         except Exception as e:
-            logger.error(f"Chat request failed: {e}", exc_info=True)
+            logger.exception(f"Chat request failed: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -1574,7 +1574,7 @@ RULES:
                 }
                 
         except Exception as e:
-            logger.error(f"ReAct fallback error: {e}", exc_info=True)
+            logger.exception(f"ReAct fallback error: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -2689,7 +2689,7 @@ RULES:
                 logger.info("EOF received")
                 break
             except Exception as e:
-                logger.error(f"Interaction loop error: {e}", exc_info=True)
+                logger.exception(f"Interaction loop error: {e}")
                 print(f"\nError: {e}")
     
     def _handle_show_memory(self):
