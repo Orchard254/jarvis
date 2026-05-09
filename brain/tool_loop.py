@@ -46,10 +46,28 @@ def run(
 
     tool_log = []
     valid_tools = set()
+    failed_attempts_summary = []  # Track failed attempts for LLM context
 
     for iteration in range(1, cap + 1):
         if len(json.dumps(messages)) > (MAX_CONTEXT_TOKENS * 4):
             messages = prune_history(messages)
+
+        # ── Inject failed attempts summary at start of each iteration ───────────
+        # This ensures the LLM always sees what has failed before making decisions.
+        # We inject it fresh each iteration so pruning doesn't lose this critical context.
+        if failed_attempts_summary:
+            # Remove any previous summary injection to avoid duplicates
+            messages = [m for m in messages if not m.get("content", "").startswith("Previous failed attempts")]
+            
+            summary_lines = ["Previous failed attempts (do NOT repeat these exact approaches):"]
+            for i, attempt in enumerate(failed_attempts_summary[-5:], 1):  # Last 5 failures
+                summary_lines.append(
+                    f"  {i}. {attempt['tool']}(args={attempt['args']}) → {attempt['error']}"
+                )
+            summary_lines.append("")
+            summary_lines.append("Analyze why these failed and choose a DIFFERENT approach.")
+            summary_text = "\n".join(summary_lines)
+            messages.append({"role": "system", "content": summary_text})
 
         print("\r\U0001f914 Thinking...", end="", flush=True)
 
@@ -241,6 +259,30 @@ def run(
                     "outcome. Do NOT repeat the same approach. Try a different "
                     "tool, a different path, or ask the user for clarification."
                 )
+            
+            # ── Pre-execution state snapshot for failed tools ─────────────────
+            # When a tool fails, include a snapshot of current PC state to help
+            # the LLM diagnose what went wrong and choose a better approach.
+            if not result.get("success") and name != "read_pc_state":
+                try:
+                    from tools.read_pc_state import read_pc_state as _rps
+                    state_snapshot = _rps()
+                    if state_snapshot.get("success"):
+                        verification["state_snapshot"] = {
+                            "focused_window": state_snapshot.get("focused_window"),
+                            "open_windows_count": len(state_snapshot.get("windows", [])),
+                            "running_processes_count": len(state_snapshot.get("processes", [])),
+                        }
+                except Exception:
+                    pass  # State snapshot unavailable — continue without it
+                
+                # Track this failure for summary injection in next iteration
+                failed_attempts_summary.append({
+                    "tool": name,
+                    "args": args,
+                    "error": result.get("error", "unknown error")[:150],
+                    "iteration": iteration,
+                })
 
             tool_results.append(
                 {

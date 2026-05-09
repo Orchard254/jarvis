@@ -153,7 +153,10 @@ if _candidates:
         raise SystemExit(0)
 
 print("ERROR: Could not find or launch", repr(APP_NAME))
-print("Hint: use query_pc_index to get the full path, then re-run with that path.")
+print("Available options:")
+print("  1. Check spelling and try again")
+print("  2. Search Start Menu manually for the exact app name")
+print("  3. Provide the full path to the executable")
 """
 
 # ── Install-app script template (PowerShell / winget) ─────────────────────────
@@ -472,12 +475,38 @@ def _execute_with_subprocess(code: str, language: str = "python") -> dict:
         logger.error(f"Subprocess execution failed: {e}")
         stderr = str(e).encode("utf-8", errors="replace")
 
-    return {
+    # Add actionable error context when execution fails
+    result = {
         "stdout": stdout.decode("utf-8", errors="replace")[:4096],
         "stderr": stderr.decode("utf-8", errors="replace")[:2048],
         "returncode": returncode,
         "success": returncode == 0,
     }
+    
+    # If failed, provide structured guidance without biasing toward specific tools
+    if not result["success"]:
+        error_lower = result["stderr"].lower()
+        suggestions = [
+            "Check if the code has syntax errors",
+            "Verify file paths exist before accessing them", 
+            "Ensure required permissions are available",
+            "Try a simpler approach or break into smaller steps"
+        ]
+        
+        # Add context-specific hints based on error type
+        if "file not found" in error_lower or "no such file" in error_lower:
+            suggestions.insert(0, "Use query_pc_index to locate files/apps if path is unknown")
+        elif "permission" in error_lower or "access is denied" in error_lower:
+            suggestions.insert(0, "Run as administrator or choose a different location")
+        elif "module" in error_lower and ("not found" in error_lower or "import" in error_lower):
+            suggestions.insert(0, "Install missing module via pip or use alternative approach")
+        
+        result["error_context"] = {
+            "type": "execution_failure",
+            "suggestions": suggestions
+        }
+    
+    return result
 
 
 def _execute_with_job_object(code: str, language: str = "python") -> dict:
