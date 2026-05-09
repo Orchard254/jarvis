@@ -46,10 +46,28 @@ def run(
 
     tool_log = []
     valid_tools = set()
+    failed_attempts_summary = []  # Track failed attempts for LLM context
 
     for iteration in range(1, cap + 1):
         if len(json.dumps(messages)) > (MAX_CONTEXT_TOKENS * 4):
             messages = prune_history(messages)
+
+        # ── Inject failed attempts summary at start of each iteration ───────────
+        # This ensures the LLM always sees what has failed before making decisions.
+        # We inject it fresh each iteration so pruning doesn't lose this critical context.
+        if failed_attempts_summary:
+            # Remove any previous summary injection to avoid duplicates
+            messages = [m for m in messages if not m.get("content", "").startswith("Previous failed attempts")]
+            
+            summary_lines = ["Previous failed attempts (do NOT repeat these exact approaches):"]
+            for i, attempt in enumerate(failed_attempts_summary[-5:], 1):  # Last 5 failures
+                summary_lines.append(
+                    f"  {i}. {attempt['tool']}(args={attempt['args']}) → {attempt['error']}"
+                )
+            summary_lines.append("")
+            summary_lines.append("Analyze why these failed and choose a DIFFERENT approach.")
+            summary_text = "\n".join(summary_lines)
+            messages.append({"role": "system", "content": summary_text})
 
         print("\r\U0001f914 Thinking...", end="", flush=True)
 
@@ -257,6 +275,14 @@ def run(
                         }
                 except Exception:
                     pass  # State snapshot unavailable — continue without it
+                
+                # Track this failure for summary injection in next iteration
+                failed_attempts_summary.append({
+                    "tool": name,
+                    "args": args,
+                    "error": result.get("error", "unknown error")[:150],
+                    "iteration": iteration,
+                })
 
             tool_results.append(
                 {
