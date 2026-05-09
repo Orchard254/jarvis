@@ -153,7 +153,10 @@ if _candidates:
         raise SystemExit(0)
 
 print("ERROR: Could not find or launch", repr(APP_NAME))
-print("Hint: use query_pc_index to get the full path, then re-run with that path.")
+print("Available options:")
+print("  1. Check spelling and try again")
+print("  2. Use query_pc_index(type='app', query='...') to search installed apps")
+print("  3. Provide the full path to the executable")
 """
 
 # ── Install-app script template (PowerShell / winget) ─────────────────────────

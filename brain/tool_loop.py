@@ -241,6 +241,22 @@ def run(
                     "outcome. Do NOT repeat the same approach. Try a different "
                     "tool, a different path, or ask the user for clarification."
                 )
+            
+            # ── Pre-execution state snapshot for failed tools ─────────────────
+            # When a tool fails, include a snapshot of current PC state to help
+            # the LLM diagnose what went wrong and choose a better approach.
+            if not result.get("success") and name != "read_pc_state":
+                try:
+                    from tools.read_pc_state import read_pc_state as _rps
+                    state_snapshot = _rps()
+                    if state_snapshot.get("success"):
+                        verification["state_snapshot"] = {
+                            "focused_window": state_snapshot.get("focused_window"),
+                            "open_windows_count": len(state_snapshot.get("windows", [])),
+                            "running_processes_count": len(state_snapshot.get("processes", [])),
+                        }
+                except Exception:
+                    pass  # State snapshot unavailable — continue without it
 
             tool_results.append(
                 {

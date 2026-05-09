@@ -57,6 +57,10 @@ TOOL_REGISTRY = {
     "ask_user": ask_user,
     "listen": listen,
     "watch_screen": watch_screen,
+    # ── Phase-3 tools: now fully registered ───────────────────────────────────
+    "network_check": network_check,
+    "time_calendar": time_calendar,
+    "send_message": send_message,
 }
 
 TOOL_SCHEMAS = [
