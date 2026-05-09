@@ -106,9 +106,12 @@ def _resolve_piper() -> str | None:
       1. Cached result from a previous successful call.
       2. Exact path from settings (PIPER_BINARY / PIPER_EXE env var).
       3. ~/piper/<binary>
-      4. C:/Program Files/piper/<binary>
+      4. Platform-specific program directory (Windows: Program Files, Linux/macOS: /opt)
+      5. PATH lookup via shutil.which
     """
     global _piper_path
+    import shutil
+    import platform
 
     if _piper_path and Path(_piper_path).exists():
         return _piper_path
@@ -116,8 +119,20 @@ def _resolve_piper() -> str | None:
     candidates = [
         PIPER_BINARY,
         str(Path.home() / "piper" / PIPER_BINARY),
-        str(Path("C:/Program Files/piper") / PIPER_BINARY),
     ]
+    
+    # Add platform-specific program directory
+    system = platform.system()
+    if system == "Windows":
+        candidates.append(str(Path("C:/Program Files/piper") / PIPER_BINARY))
+    elif system in ("Linux", "Darwin"):
+        candidates.append(str(Path("/opt/piper") / PIPER_BINARY.replace(".exe", "")))
+    
+    # Try PATH lookup as final fallback
+    piper_name = PIPER_BINARY.replace(".exe", "") if system != "Windows" else PIPER_BINARY
+    which_path = shutil.which(piper_name)
+    if which_path:
+        candidates.append(which_path)
 
     for candidate in candidates:
         if Path(candidate).exists():
