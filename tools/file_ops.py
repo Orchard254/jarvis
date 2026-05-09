@@ -16,10 +16,12 @@ def _get_blocked_paths() -> list:
 
         return BLOCKED_PATHS
     except ImportError:
+        # Fallback defaults using environment variables for portability
+        system_root = os.environ.get("SystemRoot", "C:/Windows")
         return [
-            "C:/Windows/System32",
-            "C:/Windows/SysWOW64",
-            "C:/Windows/Boot",
+            f"{system_root}/System32",
+            f"{system_root}/SysWOW64",
+            f"{system_root}/Boot",
         ]
 
 

@@ -20,7 +20,7 @@ def control_input(type: str, data: dict = None, window_title: str = None) -> dic
         try:
             import json
             data = json.loads(data)
-        except:
+        except Exception:
             # If it's not JSON, maybe it's a simple string like "win+d"
             # for a hotkey, but our schema expects a dict.
             # We'll try to recover for hotkeys specifically.

@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Directories scanned when shell association fails (ordered by likelihood)
 _SEARCH_ROOTS: list[Path] = [
-    Path(os.environ.get("USERPROFILE", "C:/Users/Public")) / "Desktop",
-    Path(os.environ.get("PUBLIC", "C:/Users/Public")) / "Desktop",
-    Path("C:/ProgramData/Microsoft/Windows/Start Menu/Programs"),
+    Path(os.environ.get("USERPROFILE", "")) / "Desktop",
+    Path(os.environ.get("PUBLIC", "")) / "Desktop",
+    Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
     Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
     Path("C:/Program Files"),
     Path("C:/Program Files (x86)"),
@@ -124,7 +124,7 @@ def open_app(name: str) -> dict:
     name : str
         Either a bare app name ("notepad", "ultraviewr"),
         or a full/partial filesystem path
-        ("C:/Users/me/Desktop/UltraViewr.exe").
+        (e.g., "%USERPROFILE%/Desktop/UltraViewr.exe").
     """
     name = name.strip()
 

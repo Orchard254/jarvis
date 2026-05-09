@@ -35,17 +35,17 @@ def scan_registry():
                         exe = None
                         try:
                             exe = winreg.QueryValueEx(subkey, "InstallLocation")[0]
-                        except:
+                        except Exception:
                             pass
                         ver = None
                         try:
                             ver = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
-                        except:
+                        except Exception:
                             pass
                         pub = None
                         try:
                             pub = winreg.QueryValueEx(subkey, "Publisher")[0]
-                        except:
+                        except Exception:
                             pass
                         apps.append(
                             {
@@ -89,7 +89,7 @@ def scan_start_menu():
     apps = []
     for base in [
         Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
-        Path("C:/ProgramData/Microsoft/Windows/Start Menu/Programs"),
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
     ]:
         if not base.exists():
             continue
