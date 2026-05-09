@@ -106,7 +106,7 @@ def get_taskbar_windows() -> list[dict]:
                 pass
             try:
                 title = win32gui.GetWindowText(hwnd)
-            except:
+            except Exception:
                 return 1
             if not title.strip():
                 return 1

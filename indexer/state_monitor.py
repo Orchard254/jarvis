@@ -104,7 +104,7 @@ def capture_state() -> dict:
                 pass  # Continue if style check fails
             try:
                 title = win32gui.GetWindowText(hwnd)
-            except:
+            except Exception:
                 return 1
             if not title.strip():
                 return 1

@@ -119,7 +119,7 @@ if _try_launch(APP_NAME):
 needle = APP_NAME.lower().replace(" ", "").replace("-", "").replace("_", "")
 _roots = [
     Path.home() / "Desktop",
-    Path(os.environ.get("PUBLIC", "C:/Users/Public")) / "Desktop",
+    Path(os.environ.get("PUBLIC", "")) / "Desktop",
 ]
 for _base_key, _sub in [
     ("APPDATA",     "Microsoft/Windows/Start Menu/Programs"),
@@ -454,7 +454,7 @@ def _execute_with_subprocess(code: str, language: str = "python") -> dict:
             finally:
                 try:
                     os.unlink(tmp_path)
-                except:
+                except Exception:
                     pass
         elif language == "powershell":
             proc = subprocess.Popen(
