@@ -291,10 +291,24 @@ class Orchestrator:
                         # original_intent stays clean for skill label use below.
                         err = fast_result.get("stderr", stdout or "unknown error")[:300]
                         logger.info(f"Fast-path failed ({err[:80]}), handing off to LLM")
+                        
+                        # Analyze error type to provide appropriate guidance
+                        error_lower = err.lower()
+                        if "file not found" in error_lower or "no such file" in error_lower:
+                            guidance = "The error suggests a file/path issue. Consider using query_pc_index to locate the correct path, or verify the path exists."
+                        elif "permission" in error_lower or "access is denied" in error_lower:
+                            guidance = "The error indicates a permission issue. Try running with elevated privileges or choose a different location."
+                        elif "syntax" in error_lower or "invalid syntax" in error_lower:
+                            guidance = "The error indicates a syntax problem. Review the code for Python syntax errors."
+                        elif "module" in error_lower and "not found" in error_lower:
+                            guidance = "The error indicates a missing module. Install it via pip or use an alternative approach."
+                        else:
+                            guidance = "Review the error above and adjust your approach accordingly."
+                        
                         clean_input = (
                             f"{original_intent}\n"
                             f"[Pre-built script ran but failed: {err}. "
-                            f"Please resolve the path via query_pc_index and retry.]"
+                            f"{guidance}]"
                         )
 
                 memory_context = ""
