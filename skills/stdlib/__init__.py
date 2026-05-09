@@ -11,7 +11,7 @@ Instead, it writes Python in execute_code and imports what it needs:
     results = search_web("best Python libraries 2025")
 
     from skills.stdlib.filesystem import read_file, write_file
-    content = read_file("C:/Users/me/notes.txt")
+    content = read_file("~/notes.txt")  # Cross-platform home directory
 
     from skills.stdlib.messaging import send_email, notify
     send_email(to="me@gmail.com", subject="Done", body="Task finished.")

@@ -80,9 +80,23 @@ def _hw() -> dict:
         import psutil
 
         ram = psutil.virtual_memory()
-        try:
-            disk = shutil.disk_usage("C:/")
-        except Exception:
+        
+        # Cross-platform disk usage detection
+        system = platform.system()
+        if system == "Windows":
+            # On Windows, try the system drive or first available drive
+            import string
+            disk_path = "C:\\"
+            # Fallback to first available drive if C: doesn't exist
+            if not os.path.exists(disk_path):
+                for drive in string.ascii_uppercase:
+                    test_path = f"{drive}:\\"
+                    if os.path.exists(test_path):
+                        disk_path = test_path
+                        break
+            disk = shutil.disk_usage(disk_path)
+        else:
+            # Unix-like systems (Linux, macOS)
             disk = shutil.disk_usage("/")
 
         cpu_p = psutil.cpu_count(logical=False) or 1
