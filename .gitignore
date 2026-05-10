@@ -1,28 +1,27 @@
-```
+```gitignore
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+env/
 venv/
 .venv/
-.env
-.env.local
-.env.*
+.ENV
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Build artifacts
-dist/
-build/
-*.egg-info/
-
-# Logs
-*.log
-
-# Coverage
+# Testing
 .coverage
-htmlcov/
 coverage/
+htmlcov/
+.nyc_output/
+istanbul.out
+.mypy_cache/
+.pytest_cache/
+.tox/
 
 # IDE
 .vscode/
@@ -34,4 +33,58 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+.Trashes
+*.nib
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env*
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.o
+*.obj
+target/
+.gradle/
+node_modules/
+package-lock.json
+yarn.lock
+
+# Compression
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
