@@ -283,8 +283,12 @@ Explain what was wrong and how you fixed it.
         code_lower = code.lower()
         for pattern in self.DANGEROUS_PATTERNS:
             import re
-            if re.search(pattern, code_lower):
-                warnings.append(f"Dangerous pattern detected: {pattern}")
+            try:
+                if re.search(re.escape(pattern), code_lower):
+                    warnings.append(f"Dangerous pattern detected: {pattern}")
+            except re.error:
+                # Skip invalid regex patterns
+                continue
         
         # Check imports
         try:
