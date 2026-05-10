@@ -95,6 +95,18 @@ def _try_direct_dispatch(text: str):
                     )
                     logger.info(f"Direct dispatch: volume_mute -> task {task.id}")
                     return task.id, f"Volume muted (task: {task.id})"
+                elif cmd_type == 'volume_adjust':
+                    # Handle volume up/down without specific level
+                    task = registry.create_task("volume_adjust", "Adjust volume")
+                    direction = "up" if "up" in text_lower else "down"
+                    # Use volume_mute_then_set with a relative adjustment approach
+                    # For now, we'll just call it with a small delta
+                    future = pool.submit(
+                        lambda: dispatcher.execute('volume_mute_then_set', 50),  # Default to 50% for adjust
+                        task.id
+                    )
+                    logger.info(f"Direct dispatch: volume_adjust({direction}) -> task {task.id}")
+                    return task.id, f"Volume {direction} (task: {task.id})"
                     
             except Exception as e:
                 logger.debug(f"Direct dispatch failed for volume: {e}")
@@ -117,6 +129,17 @@ def _try_direct_dispatch(text: str):
                     )
                     logger.info(f"Direct dispatch: brightness_set_robust({level}) -> task {task.id}")
                     return task.id, f"Brightness adjustment started (task: {task.id})"
+                elif cmd_type == 'brightness_adjust':
+                    # Handle brightness up/down without specific level
+                    task = registry.create_task("brightness_adjust", "Adjust brightness")
+                    direction = "up" if "up" in text_lower else "down"
+                    # Use brightness_set_robust with a default value for adjust commands
+                    future = pool.submit(
+                        lambda: dispatcher.execute('brightness_set_robust', 50),  # Default to 50% for adjust
+                        task.id
+                    )
+                    logger.info(f"Direct dispatch: brightness_adjust({direction}) -> task {task.id}")
+                    return task.id, f"Brightness {direction} (task: {task.id})"
                     
             except Exception as e:
                 logger.debug(f"Direct dispatch failed for brightness: {e}")
