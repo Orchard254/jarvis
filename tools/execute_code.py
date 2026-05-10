@@ -11,6 +11,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Windows-only constant for hiding console windows
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = subprocess.CREATE_NEW_PROCESS_GROUP  # Fallback that works on all platforms
+    try:
+        CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    except AttributeError:
+        pass
+else:
+    CREATE_NO_WINDOW = 0
+
 from safety.tool_guard import check_imports, get_safe_env
 from settings import EXECUTE_CODE_TIMEOUT
 
@@ -447,7 +457,7 @@ def _execute_with_subprocess(code: str, language: str = "python") -> dict:
                     stderr=subprocess.PIPE,
                     cwd=str(Path.home()),
                     env=get_safe_env(),
-                    creationflags=subprocess.CREATE_NO_WINDOW
+                    creationflags=CREATE_NO_WINDOW
                     if sys.platform == "win32"
                     else 0,
                 )
@@ -464,7 +474,7 @@ def _execute_with_subprocess(code: str, language: str = "python") -> dict:
                 ["powershell", "-NonInteractive", "-Command", code],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
             _kill_tree_on_timeout(proc, EXECUTE_CODE_TIMEOUT)
             stdout, stderr = proc.communicate()

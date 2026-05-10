@@ -392,7 +392,7 @@ def start() -> dict:
     _thread.start()
     logger.info(
         f"ambient_monitor: started "
-        f"(interval={MONITOR_INTERVAL}s, cooldown={_COOLDOWN_SECONDS}s)"
+        f"(interval={MONITOR_INTERVAL}s, cooldown={_COOLDOWN_BASE}s)"
     )
     return {"success": True}
 

@@ -18,7 +18,18 @@ import glob
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+# Windows-only constant for hiding console windows
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = subprocess.CREATE_NEW_PROCESS_GROUP  # Fallback that works on all platforms
+    try:
+        CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    except AttributeError:
+        pass
+else:
+    CREATE_NO_WINDOW = 0
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +65,7 @@ def _launch_path(path: str | Path) -> dict:
         subprocess.Popen(
             ["cmd", "/c", "start", "", str(path)],
             shell=False,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         return {"success": True, "opened": str(path)}
     except Exception as e:
@@ -69,7 +80,7 @@ def _shell_start(name: str) -> dict:
             shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         proc.wait(timeout=3)
         # cmd /c start always returns 0 even if the app isn't found, but
