@@ -267,12 +267,12 @@ class Orchestrator:
             try:
                 intent = intent_router_route(clean_input)
                 
-                # Handle direct dispatch fast path
+                # Handle direct dispatch fast path (async execution)
                 if intent.get("routing_source") == "direct_dispatch":
                     task_id = intent.get("task_id")
                     immediate_response = intent.get("immediate_response", "")
                     
-                    # Return immediate acknowledgment
+                    # Return immediate acknowledgment with task ID for tracking
                     self._history.append({"role": "user", "content": user_input})
                     self._history.append({"role": "assistant", "content": immediate_response})
                     return immediate_response

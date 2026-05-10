@@ -59,6 +59,7 @@ def _try_direct_dispatch(text: str):
         (r'mute\s+volume', 'volume_mute'),
         (r'unmute\s+volume', 'volume_unmute'),
         (r'volume\s+to\s+(\d+)', 'volume_set'),
+        (r'set\s+volume\s+to\s+(\d+)', 'volume_set'),
     ]
     
     # Brightness patterns
@@ -66,6 +67,7 @@ def _try_direct_dispatch(text: str):
         (r'(?:set|change|adjust)\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
         (r'brightness\s+(?:up|down)', 'brightness_adjust'),
         (r'set\s+screen\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
+        (r'set\s+brightness\s+to\s+(\d+)', 'brightness_set'),
     ]
     
     # Check volume commands
@@ -80,15 +82,15 @@ def _try_direct_dispatch(text: str):
                 if cmd_type == 'volume_set':
                     task = registry.create_task("volume_set", f"Set volume to {level}%")
                     future = pool.submit(
-                        lambda: dispatcher.execute('volume_set', level),
+                        lambda lvl=level: dispatcher.execute('volume_mute_then_set', lvl),
                         task.id
                     )
-                    logger.info(f"Direct dispatch: volume_set({level}) -> task {task.id}")
+                    logger.info(f"Direct dispatch: volume_mute_then_set({level}) -> task {task.id}")
                     return task.id, f"Volume adjustment started (task: {task.id})"
                 elif cmd_type == 'volume_mute':
                     task = registry.create_task("volume_mute", "Mute volume")
                     future = pool.submit(
-                        lambda: dispatcher.execute('volume_mute'),
+                        lambda: dispatcher.execute('volume_mute_then_set', 0),
                         task.id
                     )
                     logger.info(f"Direct dispatch: volume_mute -> task {task.id}")
@@ -110,7 +112,7 @@ def _try_direct_dispatch(text: str):
                 if cmd_type == 'brightness_set':
                     task = registry.create_task("brightness_set", f"Set brightness to {level}%")
                     future = pool.submit(
-                        lambda: dispatcher.execute('brightness_set_robust', level),
+                        lambda lvl=level: dispatcher.execute('brightness_set_robust', lvl),
                         task.id
                     )
                     logger.info(f"Direct dispatch: brightness_set_robust({level}) -> task {task.id}")
