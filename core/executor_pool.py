@@ -1,7 +1,8 @@
 """
-Async Executor Pool for JARVIS with Phase 2 enhancements.
+Async Executor Pool for JARVIS with Phase 2 & 4 enhancements.
 Manages concurrent task execution using thread pools with monitoring hooks.
 Implements smart retry with backoff, circuit breakers, and checkpointing.
+Integrated with streaming, progress reporting, and observability systems.
 """
 import threading
 import queue
@@ -14,6 +15,9 @@ import os
 
 from core.task_registry import registry, TaskStatus, Task
 from core.recovery import recovery_manager
+from core.streaming_manager import streaming_manager, StreamingResponse
+from core.progress_reporter import progress_registry, ProgressReporter
+from core.observability import observability
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +36,32 @@ class ExecutorPool:
         logger.info(f"ExecutorPool initialized with {max_workers} workers")
 
     def submit(self, func: Callable, task_id: str, 
-               *args, use_retry: bool = True, use_checkpoint: bool = False, **kwargs) -> Future:
+               *args, use_retry: bool = True, use_checkpoint: bool = False,
+               enable_streaming: bool = True, track_progress: bool = True,
+               **kwargs) -> Future:
         """Submit a function for async execution with task tracking and optional retry/checkpoint"""
+        
+        # Initialize Phase 4 components
+        stream = None
+        reporter = None
+        obs_span = None
+        
+        if enable_streaming:
+            stream = streaming_manager.create_stream(task_id=task_id, expose_thoughts=False)
+        
+        if track_progress:
+            reporter = progress_registry.create_reporter(
+                task_id, 
+                task_description=getattr(func, '__name__', 'unknown')
+            )
+            reporter.start()
+        
+        # Start observability tracing
+        obs_span = observability.start_task(
+            task_id, 
+            task_type=getattr(func, '__name__', 'unknown'),
+            metadata={"args_count": len(args), "kwargs_count": len(kwargs)}
+        )
         
         def wrapped_execute():
             attempt = 0
@@ -44,6 +72,14 @@ class ExecutorPool:
                 try:
                     registry.update_status(task_id, TaskStatus.RUNNING, progress=10)
                     
+                    # Emit progress event
+                    if reporter:
+                        reporter.add_step(getattr(func, '__name__', 'step'), details={"attempt": attempt + 1})
+                    
+                    # Emit streaming status
+                    if stream:
+                        stream.send_status("running", {"attempt": attempt + 1})
+                    
                     # Load checkpoint if available
                     if use_checkpoint:
                         checkpoint_data = self._load_checkpoint(task_id)
@@ -51,14 +87,30 @@ class ExecutorPool:
                             logger.info(f"Loaded checkpoint for task {task_id}: {checkpoint_data}")
                             kwargs['_checkpoint'] = checkpoint_data
                     
+                    step_start = time.time()
                     result = func(*args, **kwargs)
+                    step_duration = time.time() - step_start
                     
                     # Record success with recovery manager
                     if hasattr(func, '__name__'):
                         recovery_manager.record_success(func.__name__)
                     
+                    # Record observability metrics
+                    observability.record_step(task_id, getattr(func, '__name__', 'step'), 
+                                             duration=step_duration, success=True)
+                    
                     registry.update_status(task_id, TaskStatus.SUCCESS, 
                                           result=result, progress=100)
+                    
+                    # Complete progress tracking
+                    if reporter:
+                        reporter.complete_step(reporter._steps[-1].step_id if reporter._steps else "step_1")
+                        reporter.add_milestone("task_complete", "Task finished successfully")
+                    
+                    # Complete streaming
+                    if stream:
+                        stream.send_status("completed", {"result": str(result)[:100] if result else None})
+                        stream.complete()
                     
                     # Clear checkpoint on success
                     if use_checkpoint:
@@ -72,6 +124,14 @@ class ExecutorPool:
                     last_error = e
                     attempt += 1
                     
+                    # Record failure in observability
+                    observability.record_step(task_id, getattr(func, '__name__', 'step'),
+                                             success=False)
+                    
+                    # Record failure for contextual help
+                    from core.contextual_help import contextual_help
+                    contextual_help.record_failure(getattr(func, '__name__', 'unknown'))
+                    
                     # Use recovery manager to decide retry
                     if use_retry and attempt < max_attempts:
                         tool_name = getattr(func, '__name__', 'unknown')
@@ -79,6 +139,12 @@ class ExecutorPool:
                         
                         if should_retry:
                             logger.info(f"Task {task_id} failed (attempt {attempt}), retrying in {delay:.2f}s")
+                            
+                            # Emit error via streaming
+                            if stream:
+                                stream.send_error(error_msg, error_type="retryable", recoverable=True)
+                                stream.send_status("retrying", {"delay": delay, "attempt": attempt})
+                            
                             time.sleep(delay)
                             
                             # Save checkpoint before retry
@@ -90,6 +156,19 @@ class ExecutorPool:
                     registry.update_status(task_id, TaskStatus.FAILED, 
                                           error=error_msg)
                     logger.error(f"Task {task_id} failed after {attempt} attempts: {error_msg}")
+                    
+                    # Emit final error via streaming
+                    if stream:
+                        stream.send_error(error_msg, error_type="fatal", recoverable=False)
+                        stream.complete(final_summary=f"Failed after {attempt} attempts")
+                    
+                    # Update progress reporter
+                    if reporter:
+                        if reporter._steps:
+                            reporter.complete_step(reporter._steps[-1].step_id, status="failed")
+                    
+                    # Complete observability span
+                    observability.complete_task(task_id, success=False, result_summary=error_msg)
                     
                     # Save final checkpoint for manual recovery
                     if use_checkpoint:
@@ -103,6 +182,7 @@ class ExecutorPool:
             
             # Should not reach here, but just in case
             registry.update_status(task_id, TaskStatus.FAILED, error=str(last_error))
+            observability.complete_task(task_id, success=False, result_summary=str(last_error))
             raise last_error
 
         future = self._executor.submit(wrapped_execute)
