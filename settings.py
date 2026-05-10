@@ -163,11 +163,65 @@ ALLOWED_IMPORTS = {
     # ── clipboard libraries for UI automation tasks ────────────────────────────
     "pyperclip",    # cross-platform clipboard operations
     "win32clipboard",  # Windows clipboard API
+    # ── additional Windows automation & UI control ─────────────────────────────
+    "win32ui",      # Windows UI automation (device contexts, window capture)
+    "win32pdh",     # Windows performance data (CPU, memory monitoring)
+    "comtypes",     # COM automation (alternative to win32com)
+    "pythoncom",    # Python COM support
+    # ── image processing & screen capture ──────────────────────────────────────
+    "mss",          # fast screen capture
+    "cv2",          # OpenCV for image processing/computer vision
+    "numpy",        # numerical operations (required by cv2, PIL)
+    "imagegrab",    # PIL.ImageGrab for screenshots
+    # ── web automation ─────────────────────────────────────────────────────────
+    "selenium",     # browser automation
+    "webdriver",    # Selenium WebDriver
+    "bs4",          # BeautifulSoup for HTML parsing
+    "lxml",         # fast XML/HTML parser
+    # ── document handling ──────────────────────────────────────────────────────
+    "docx",         # python-docx for Word documents
+    "xlsxwriter",   # Excel file creation
+    "openpyxl",     # Excel file reading/writing
+    "pdf2image",    # PDF to image conversion
+    "PyPDF2",       # PDF manipulation
+    # ── audio processing ───────────────────────────────────────────────────────
+    "wave",         # WAV file handling
+    "audioop",      # audio operations
+    "pyaudio",      # audio recording/playback
+    "speech_recognition",  # STT alternative
+    # ── data serialization ─────────────────────────────────────────────────────
+    "pickle",       # Python object serialization
+    "yaml",         # YAML parsing (pyyaml)
+    "toml",         # TOML parsing
+    "xml",          # XML processing
+    "html",         # HTML utilities
+    # ── compression & archives ─────────────────────────────────────────────────
+    "zipfile",      # ZIP file operations
+    "tarfile",      # TAR file operations
+    "gzip",         # GZIP compression
+    "bz2",          # BZ2 compression
+    # ── networking & protocols ─────────────────────────────────────────────────
+    "ftplib",       # FTP client
+    "poplib",       # POP3 email
+    "imaplib",      # IMAP email
+    "smtplib",      # SMTP email (already listed but good to have here too)
+    "email",        # email utilities (already listed)
+    "socketserver", # network servers
+    "asyncio",      # async I/O
+    "aiohttp",      # async HTTP
+    # ── system introspection & debugging ───────────────────────────────────────
+    "inspect",      # live object inspection
+    "dis",          # disassembler for bytecode
+    "ast",          # Python AST manipulation
+    "profile",      # profiling tools
+    "cProfile",     # deterministic profiler
+    # ── concurrency enhancements ───────────────────────────────────────────────
+    "multiprocessing",  # process-based parallelism
+    "concurrent",       # concurrent.futures
+    "contextlib",       # context manager utilities
     # ── stdlib skills — pre-written, audited modules the LLM can import ───────
     # e.g. from skills.stdlib.web import search_web, fetch_url
     "skills",       # umbrella: skills.stdlib.* submodules
-    "smtplib",      # used internally by skills.stdlib.messaging
-    "email",        # used internally by skills.stdlib.messaging
     "icalendar",    # used internally by skills.stdlib.time_cal
     "win32com",     # used internally by skills.stdlib.time_cal (Outlook backend)
     "zoneinfo",     # used internally by skills.stdlib.time_cal
