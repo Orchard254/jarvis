@@ -34,6 +34,11 @@ _DANGEROUS: list[tuple[str, str]] = [
         r"subprocess.*?(\bformat\b|\brd\s+/s\b|\bshutdown\b)",
         "Subprocess calling destructive command",
     ),
+    # Dangerous dynamic code execution
+    (r"\beval\s*\(", "Dynamic code execution (eval)"),
+    (r"\bexec\s*\(", "Dynamic code execution (exec)"),
+    (r"\b__import__\s*\(", "Dynamic import (potential bypass)"),
+    (r"\bcompile\s*\(", "Dynamic code compilation (compile)"),
 ]
 
 # ── Temp-directory allow-list ─────────────────────────────────────────────────

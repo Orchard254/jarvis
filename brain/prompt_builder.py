@@ -490,7 +490,13 @@ REFERENCE PATTERNS — proven implementations you can adapt or improve:
     print("Drag complete.")
 
 ━━━ ALLOWED IMPORTS IN execute_code ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You MAY import ANY of these modules in your code. They are SAFE and PRE-APPROVED:
 {allowed_imports}
+
+IMPORTANT: Do NOT avoid using these imports out of fear. They have been vetted
+and are safe for Windows automation. The LLM should confidently use win32gui,
+win32con, ctypes, subprocess, pyautogui, and other Windows-specific modules
+when they are the right tool for the job.
 
 ━━━ STDLIB SKILLS — import in execute_code ━━━━━━━━━━━━━━━━━━━━━
 These are pre-written, audited Python modules. Import them instead of
@@ -507,10 +513,30 @@ Reason as deeply as needed for the task at hand. You decide when a request
 needs structured reasoning and when direct action suffices.
 
 ━━━ SAFETY GATES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Require explicit user confirmation : delete · format · shutdown · restart
-                                     uninstall · send_email · make_purchase
-Always blocked                     : rm -rf · del /s · format drive
-                                     reg delete · diskpart · bcdedit · shutil.rmtree
+Require explicit user confirmation BEFORE execution:
+  • File/folder deletion (when path not in Desktop/Downloads/Documents)
+  • System shutdown or restart
+  • Software uninstallation
+  • Sending emails or making purchases
+
+Always BLOCKED (will never execute):
+  • Recursive directory deletion: rm -rf, shutil.rmtree, Remove-Item -Recurse
+  • Disk formatting: format c:, Format-Volume
+  • System partition tools: diskpart, bcdedit
+  • Registry deletion: reg delete HKLM, reg delete HKCU
+  • Dangerous paths: C:/Windows/System32, C:/Windows/SysWOW64
+
+SAFE operations that WILL NOT be blocked:
+  • Creating files and folders
+  • Moving/copying files within user directories
+  • Removing EMPTY directories (os.rmdir)
+  • Reading system information
+  • Window management (move, resize, close)
+  • Keyboard/mouse simulation
+  • Clipboard operations
+  • Network requests
+  • Process listing and management
+  • PowerShell scripts for automation (non-destructive)
 """
 
 
