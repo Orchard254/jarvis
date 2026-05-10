@@ -97,6 +97,14 @@ class Orchestrator:
         self._handle_lock = __import__("threading").Lock()
         init_skills()
 
+        # ── Start Heartbeat Monitor for task tracking ────────────────────────────
+        try:
+            from core.heartbeat_monitor import monitor
+            monitor.start()
+            logger.info("Heartbeat monitor started")
+        except Exception as _hb_exc:
+            logger.warning(f"Heartbeat monitor failed to start: {_hb_exc}")
+
         # ── Load recent conversation history from episodic memory ──────────────
         # Pre-populate _history so the LLM sees prior context across restarts.
         if memory:
@@ -229,6 +237,22 @@ class Orchestrator:
                 ]
                 return f"Active skills: {', '.join(skill_strings)}"
 
+            # Check for task status commands
+            if clean_input.lower().startswith("task status"):
+                from core.task_registry import registry
+                parts = clean_input.split()
+                if len(parts) > 2:
+                    task_id = parts[2]
+                    task = registry.get_task(task_id)
+                    if task:
+                        return f"Task {task_id}: {task.status.value} ({task.progress}%)"
+                    return f"Task {task_id} not found"
+                else:
+                    active = registry.get_active_tasks()
+                    if not active:
+                        return "No active tasks"
+                    return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
+
             # Check for skill match first with clean input
             skill_result = self._check_skill_first(clean_input)
             if skill_result:
@@ -242,6 +266,17 @@ class Orchestrator:
 
             try:
                 intent = intent_router_route(clean_input)
+                
+                # Handle direct dispatch fast path
+                if intent.get("routing_source") == "direct_dispatch":
+                    task_id = intent.get("task_id")
+                    immediate_response = intent.get("immediate_response", "")
+                    
+                    # Return immediate acknowledgment
+                    self._history.append({"role": "user", "content": user_input})
+                    self._history.append({"role": "assistant", "content": immediate_response})
+                    return immediate_response
+                
                 # Capture the routing source so we can feed the outcome back
                 # to the intent learner after execution completes.
                 _routing_source = intent.get("routing_source", "keyword")

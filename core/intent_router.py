@@ -20,7 +20,10 @@ What this module does
    commands seen before.  If found, we return the tools that actually worked
    last time — a zero-LLM-call fast path for repeated identical commands.
 
-2. Everything else → suggested_tools=[] so get_pruned_schemas() sends all
+2. NEW: Direct dispatch for known skill functions - bypasses LLM entirely for
+   standard commands like volume/brightness control, providing instant execution.
+
+3. Everything else → suggested_tools=[] so get_pruned_schemas() sends all
    schemas in the natural TOOL_SELECTION_PRIORITY order (our carefully tuned
    hierarchy: system_settings first, execute_code last).  The main LLM decides.
 
@@ -31,8 +34,93 @@ intent_learner is imported lazily inside the function.
 """
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_number(text: str) -> int:
+    """Extract first number from text"""
+    match = re.search(r'\d+', text)
+    return int(match.group()) if match else 50
+
+
+def _try_direct_dispatch(text: str):
+    """
+    Attempt direct dispatch for known skill patterns.
+    Returns (task_id, result) if dispatched, None otherwise.
+    """
+    text_lower = text.lower().strip()
+    
+    # Volume control patterns
+    volume_patterns = [
+        (r'(?:set|change|adjust)\s+volume\s+(?:to\s+)?(\d+)', 'volume_set'),
+        (r'volume\s+(?:up|down)', 'volume_adjust'),
+        (r'mute\s+volume', 'volume_mute'),
+        (r'unmute\s+volume', 'volume_unmute'),
+        (r'volume\s+to\s+(\d+)', 'volume_set'),
+    ]
+    
+    # Brightness patterns
+    brightness_patterns = [
+        (r'(?:set|change|adjust)\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
+        (r'brightness\s+(?:up|down)', 'brightness_adjust'),
+        (r'set\s+screen\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
+    ]
+    
+    # Check volume commands
+    for pattern, cmd_type in volume_patterns:
+        if re.search(pattern, text_lower):
+            level = _extract_number(text_lower) if 'set' in cmd_type or 'to' in text_lower else None
+            try:
+                from core.direct_dispatcher import dispatcher
+                from core.task_registry import registry, TaskStatus
+                from core.executor_pool import pool
+                
+                if cmd_type == 'volume_set':
+                    task = registry.create_task("volume_set", f"Set volume to {level}%")
+                    future = pool.submit(
+                        lambda: dispatcher.execute('volume_set', level),
+                        task.id
+                    )
+                    logger.info(f"Direct dispatch: volume_set({level}) -> task {task.id}")
+                    return task.id, f"Volume adjustment started (task: {task.id})"
+                elif cmd_type == 'volume_mute':
+                    task = registry.create_task("volume_mute", "Mute volume")
+                    future = pool.submit(
+                        lambda: dispatcher.execute('volume_mute'),
+                        task.id
+                    )
+                    logger.info(f"Direct dispatch: volume_mute -> task {task.id}")
+                    return task.id, f"Volume muted (task: {task.id})"
+                    
+            except Exception as e:
+                logger.debug(f"Direct dispatch failed for volume: {e}")
+                break
+    
+    # Check brightness commands
+    for pattern, cmd_type in brightness_patterns:
+        if re.search(pattern, text_lower):
+            level = _extract_number(text_lower) if 'set' in cmd_type or 'to' in text_lower else None
+            try:
+                from core.direct_dispatcher import dispatcher
+                from core.task_registry import registry, TaskStatus
+                from core.executor_pool import pool
+                
+                if cmd_type == 'brightness_set':
+                    task = registry.create_task("brightness_set", f"Set brightness to {level}%")
+                    future = pool.submit(
+                        lambda: dispatcher.execute('brightness_set_robust', level),
+                        task.id
+                    )
+                    logger.info(f"Direct dispatch: brightness_set_robust({level}) -> task {task.id}")
+                    return task.id, f"Brightness adjustment started (task: {task.id})"
+                    
+            except Exception as e:
+                logger.debug(f"Direct dispatch failed for brightness: {e}")
+                break
+    
+    return None
 
 
 def route(user_input: str) -> dict:
@@ -45,6 +133,28 @@ def route(user_input: str) -> dict:
     confirmed, learned evidence that those tools succeeded for this exact intent.
     """
     text = user_input.strip()
+
+    # ── Tier 0: Direct Dispatch Fast Path ────────────────────────────────────
+    # Instant execution for known skill patterns without LLM involvement
+    direct_result = _try_direct_dispatch(text)
+    if direct_result:
+        task_id, message = direct_result
+        logger.info(
+            "intent_router [DIRECT_DISPATCH]: task=%s input=%r",
+            task_id,
+            text[:80],
+        )
+        return {
+            "raw_input": user_input,
+            "goal": user_input,
+            "primary_tool": "direct_dispatch",
+            "suggested_tools": [],
+            "confidence": 1.0,
+            "requires_confirmation": False,
+            "routing_source": "direct_dispatch",
+            "task_id": task_id,
+            "immediate_response": message,
+        }
 
     # ── Tier 1: learned route cache ──────────────────────────────────────────
     # Instant lookup — no LLM call.  Confidence-gated and stale-aware.
