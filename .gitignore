@@ -1,17 +1,26 @@
 ```
-# Python cache files
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Compiled Python files in specific directories
-agents/*.pyc
-indexer/__pycache__/
-safety/__pycache__/
-skills/__pycache__/
-skills/stdlib/__pycache__/
-tests/__pycache__/
-tools/__pycache__/
-tools/custom/__pycache__/
+# Environment
+.venv/
+venv/
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+target/
 ```

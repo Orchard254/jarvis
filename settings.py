@@ -105,11 +105,11 @@ ITERATION_CAPS = {
 EXECUTE_CODE_TIMEOUT = get_env_int("EXECUTE_CODE_TIMEOUT", 30)
 MAX_RAM_PERCENT = get_env_int("MAX_RAM_PERCENT", 85)
 TOOL_RETRY_LIMITS = {
-    "execute_code": get_env_int("EXECUTE_CODE_RETRIES", 2),
+    "execute_code": get_env_int("EXECUTE_CODE_RETRIES", 3),
     "control_window": get_env_int("CONTROL_WINDOW_RETRIES", 3),
-    "control_input": get_env_int("CONTROL_INPUT_RETRIES", 2),
-    "query_pc_index": get_env_int("QUERY_PC_INDEX_RETRIES", 1),
-    "capture_screen": get_env_int("CAPTURE_SCREEN_RETRIES", 2),
+    "control_input": get_env_int("CONTROL_INPUT_RETRIES", 3),
+    "query_pc_index": get_env_int("QUERY_PC_INDEX_RETRIES", 2),
+    "capture_screen": get_env_int("CAPTURE_SCREEN_RETRIES", 3),
 }
 
 ALLOWED_IMPORTS = {
