@@ -160,6 +160,9 @@ ALLOWED_IMPORTS = {
     "signal",       # process signal handling
     "queue",        # thread-safe queues
     "traceback",    # error introspection in generated scripts
+    # ── clipboard libraries for UI automation tasks ────────────────────────────
+    "pyperclip",    # cross-platform clipboard operations
+    "win32clipboard",  # Windows clipboard API
     # ── stdlib skills — pre-written, audited modules the LLM can import ───────
     # e.g. from skills.stdlib.web import search_web, fetch_url
     "skills",       # umbrella: skills.stdlib.* submodules
