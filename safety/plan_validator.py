@@ -25,11 +25,15 @@ _DANGEROUS: list[tuple[str, str]] = [
     (r"\bsfc\s*/scannow\b", "System file checker (requires elevation)"),
     # Only block shutil.rmtree (recursive), NOT os.rmdir (single empty dir)
     (r"shutil\.rmtree", "Recursive directory removal (shutil.rmtree)"),
+    # Python registry deletion
+    (r"winreg\.DeleteKey", "Windows registry deletion (winreg.DeleteKey)"),
+    (r"winreg\.DeleteValue", "Windows registry value deletion (winreg.DeleteValue)"),
     # PowerShell destructive commands
     (r"\bRemove-Item\b.*-Recurse\b", "PowerShell recursive delete (Remove-Item -Recurse)"),
     (r"\bFormat-Volume\b", "PowerShell format volume (Format-Volume)"),
     (r"\bStop-Computer\b", "PowerShell shutdown (Stop-Computer)"),
     (r"\bRestart-Computer\b", "PowerShell restart (Restart-Computer)"),
+    (r"\bRemove-ItemProperty\b", "PowerShell registry deletion (Remove-ItemProperty)"),
     (
         r"subprocess.*?(\bformat\b|\brd\s+/s\b|\bshutdown\b)",
         "Subprocess calling destructive command",
