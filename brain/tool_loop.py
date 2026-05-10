@@ -17,6 +17,7 @@ from brain import ollama_client
 from brain.context_manager import prune_history
 from brain.prompt_builder import build_system_prompt, get_pruned_schemas
 from brain.response_parser import validate_tool_calls
+from brain.tool_result_cache import get_cache
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def run(
 ) -> dict:
     from tools import TOOL_REGISTRY as _tool_registry
 
+    cache = get_cache()
     cap = ITERATION_CAPS.get(mode, 4)
     messages = [{"role": "system", "content": build_system_prompt()}]
     if memory_context:
@@ -191,15 +193,43 @@ def run(
             args = tc["function"]["arguments"]
             logger.info(f"Loop {iteration}: calling {name}")
 
-            print(f"  \U0001f527 {name}...", end="", flush=True)
-            result = execute_fn(name, args)
-            ok_str = "\u2713" if result.get("success") else "\u2717"
-            print(f"\r  \U0001f527 {name} {ok_str}" + " " * 10, flush=True)
-            tool_log.append(
-                {"tool": name, "args": args, "result": result, "call_id": tc["id"]}
-            )
+            # ── Check cache for read-only tools ────────────────────────────────
+            cached_result = cache.get(name, args)
+            if cached_result is not None:
+                logger.info(f"  ✓ {name} (cached)")
+                result = cached_result
+                # Mark as cached in tool log for transparency
+                tool_log.append(
+                    {"tool": name, "args": args, "result": result, "call_id": tc["id"], "cached": True}
+                )
+                verification = verify_fn(name, result, user_input)
+                # Proceed to add to tool_results below
+            else:
+                print(f"  \U0001f527 {name}...", end="", flush=True)
+                result = execute_fn(name, args)
+                ok_str = "\u2713" if result.get("success") else "\u2717"
+                print(f"\r  \U0001f527 {name} {ok_str}" + " " * 10, flush=True)
+                tool_log.append(
+                    {"tool": name, "args": args, "result": result, "call_id": tc["id"], "cached": False}
+                )
 
-            verification = verify_fn(name, result, user_input)
+                # Cache successful read-only tool results
+                cache.set(name, args, result)
+
+                verification = verify_fn(name, result, user_input)
+
+            # Invalidate cache on write operations
+            from brain.tool_result_cache import ToolResultCache
+            if name in ToolResultCache.WRITE_TOOLS:
+                cache.invalidate_tool(name)
+                # Also invalidate related read caches
+                if name in ("write_file", "file_ops"):
+                    path = args.get("path")
+                    if path:
+                        cache.invalidate_pattern("read_file", path=path)
+                elif name == "execute_code":
+                    # Broad invalidation after code execution
+                    cache.invalidate_pattern("*")
 
             # Recovery cap check — stop if the tool keeps failing
             if recovery is not None and not result.get("success"):
