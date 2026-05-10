@@ -37,12 +37,26 @@ def listen(timeout: float = 5.0) -> str:
         logger.debug("STT muted — system is speaking")
         return ""
     if not _stt_available:
+        logger.debug("STT: SpeechRecognition not available")
         return ""
+    
+    # Check if any microphones are available before attempting to use one
+    if not sr.Microphone.list_microphone_names():
+        logger.warning("STT: No microphones available on this system")
+        return ""
+    
     try:
-        with sr.Microphone(
-            sample_rate=STT_SAMPLE_RATE,
-            device_index=settings.MIC_DEVICE if settings.MIC_DEVICE != -1 else None,
-        ) as source:
+        # Check if microphone can be initialized before entering context
+        try:
+            mic = sr.Microphone(
+                sample_rate=STT_SAMPLE_RATE,
+                device_index=settings.MIC_DEVICE if settings.MIC_DEVICE != -1 else None,
+            )
+        except (OSError, IOError, AttributeError) as e:
+            logger.warning(f"STT: Microphone not available — {e}")
+            return ""
+        
+        with mic as source:
             # Shorten adjustment time to be more responsive
             _recognizer.adjust_for_ambient_noise(source, duration=0.2)
             # Increase sensitivity slightly if needed, but adjust_for_ambient_noise 
@@ -59,9 +73,14 @@ def listen(timeout: float = 5.0) -> str:
         logger.warning("STT: could not understand audio")
     except sr.RequestError as e:
         logger.error(f"STT: Google API error — {e}. Trying local Whisper fallback...")
-        return _whisper_fallback(audio)
+        # Note: audio may not be defined if error occurred before listen()
+        try:
+            return _whisper_fallback(audio)
+        except NameError:
+            logger.warning("STT: Cannot fallback to Whisper — no audio data")
+            return ""
     except Exception as e:
-        logger.error(f"STT: unexpected error — {e}")
+        logger.warning(f"STT: unexpected error — {e}")
     return ""
 
 
@@ -113,11 +132,24 @@ def transcribe_once(timeout: float = 10.0) -> str:
     if not _stt_available:
         logger.warning("transcribe_once: SpeechRecognition not available")
         return ""
+    
+    # Check if any microphones are available before attempting to use one
+    if not sr.Microphone.list_microphone_names():
+        logger.warning("transcribe_once: No microphones available on this system")
+        return ""
+    
     try:
-        with sr.Microphone(
-            sample_rate=STT_SAMPLE_RATE,
-            device_index=settings.MIC_DEVICE if settings.MIC_DEVICE != -1 else None,
-        ) as source:
+        # Check if microphone can be initialized before entering context
+        try:
+            mic = sr.Microphone(
+                sample_rate=STT_SAMPLE_RATE,
+                device_index=settings.MIC_DEVICE if settings.MIC_DEVICE != -1 else None,
+            )
+        except (OSError, IOError, AttributeError) as e:
+            logger.warning(f"transcribe_once: Microphone not available — {e}")
+            return ""
+        
+        with mic as source:
             _recognizer.adjust_for_ambient_noise(source, duration=0.3)
             audio = _recognizer.listen(source, timeout=timeout, phrase_time_limit=15)
 
@@ -136,5 +168,5 @@ def transcribe_once(timeout: float = 10.0) -> str:
         logger.debug("transcribe_once: timeout — no speech detected")
         return ""
     except Exception as exc:
-        logger.error(f"transcribe_once: unexpected error — {exc}")
+        logger.warning(f"transcribe_once: unexpected error — {exc}")
         return ""
