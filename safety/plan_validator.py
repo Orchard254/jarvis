@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 # (pattern, human-readable reason) — checked against the code/command string
 _DANGEROUS: list[tuple[str, str]] = [
+    # Shell command patterns (direct execution)
     (r"\brm\s+-[rRfF]{1,3}\b", "Destructive recursive delete (rm -rf)"),
+    # Python subprocess with rm -rf in any form (list or shell string)
+    (r"subprocess.*?['\"]rm['\"].*?['\"]-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf)"),
     (r"\bdel\s+/[sStTfFqQ]", "Destructive del command"),
     (r"\brd\s+/[sS]", "Recursive directory removal (rd /s)"),
     (r"\bformat\s+[a-zA-Z]:", "Disk format command"),
@@ -20,7 +23,13 @@ _DANGEROUS: list[tuple[str, str]] = [
     (r"\bbcdedit\b", "Boot configuration edit (bcdedit)"),
     (r"\bcipher\s+/[wW]", "Secure wipe (cipher /w)"),
     (r"\bsfc\s*/scannow\b", "System file checker (requires elevation)"),
-    (r"os\.rmdir|shutil\.rmtree", "Recursive directory removal in Python"),
+    # Only block shutil.rmtree (recursive), NOT os.rmdir (single empty dir)
+    (r"shutil\.rmtree", "Recursive directory removal (shutil.rmtree)"),
+    # PowerShell destructive commands
+    (r"\bRemove-Item\b.*-Recurse\b", "PowerShell recursive delete (Remove-Item -Recurse)"),
+    (r"\bFormat-Volume\b", "PowerShell format volume (Format-Volume)"),
+    (r"\bStop-Computer\b", "PowerShell shutdown (Stop-Computer)"),
+    (r"\bRestart-Computer\b", "PowerShell restart (Restart-Computer)"),
     (
         r"subprocess.*?(\bformat\b|\brd\s+/s\b|\bshutdown\b)",
         "Subprocess calling destructive command",
@@ -63,7 +72,8 @@ _TEMP_CONTEXT = re.compile(
 # Patterns in _DANGEROUS whose block can be lifted when temp context is present.
 _TEMP_LIFTABLE = frozenset(
     {
-        "Recursive directory removal in Python",
+        "Recursive directory removal (shutil.rmtree)",
+        "PowerShell recursive delete (Remove-Item -Recurse)",
     }
 )
 
