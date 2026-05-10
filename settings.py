@@ -226,6 +226,56 @@ ALLOWED_IMPORTS = {
     "win32com",     # used internally by skills.stdlib.time_cal (Outlook backend)
     "zoneinfo",     # used internally by skills.stdlib.time_cal
     "tzlocal",      # used internally by skills.stdlib.time_cal
+    # ── additional useful libraries for AI agent tasks ───────────────────────────
+    "pygetwindow",  # window management (get, move, resize windows)
+    "reportlab",    # PDF document creation
+    "exchangelib",  # Microsoft Exchange/Outlook integration
+    "playwright",   # modern browser automation (alternative to Selenium)
+    "spacy",        # NLP and text processing
+    "nltk",         # natural language toolkit
+    "tqdm",         # progress bars for long operations
+    "rich",         # rich terminal output and formatting
+    "colorama",     # cross-platform colored terminal text
+    "dotenv",       # environment variable management
+    "python_pptx",  # PowerPoint presentation creation
+    "fitz",         # PyMuPDF for advanced PDF handling
+    "scipy",        # scientific computing
+    "matplotlib",   # plotting and visualization
+    "skimage",      # scikit-image for advanced image processing
+    "sounddevice",  # audio playback/recording
+    "soundfile",    # audio file I/O
+    "pandas",       # data manipulation and analysis
+    "sqlalchemy",   # database ORM and queries
+    "chardet",      # character encoding detection
+    "dateutil",     # date parsing and manipulation
+    "shlex",        # shell-like syntax parsing
+    "warnings",     # warning control
+    "unittest",     # testing framework
+    "typing",       # type hints
+    "dataclasses",  # data class decorators
+    "enum",         # enumeration support
+    "abc",          # abstract base classes
+    "weakref",      # weak references
+    "types",        # dynamic type creation
+    "pprint",       # pretty-printing
+    "random",       # random number generation
+    "statistics",   # statistical functions
+    "decimal",      # decimal arithmetic
+    "fractions",    # fraction arithmetic
+    "array",        # array module
+    "bisect",       # bisection algorithms
+    "heapq",        # heap queue algorithms
+    "configparser", # configuration file parser
+    "mimetypes",    # MIME type guessing
+    "binascii",     # binary ASCII conversions
+    "hmac",         # HMAC hashing
+    "secrets",      # secure random numbers
+    "unicodedata",  # Unicode database
+    "codecs",       # codec registry and base classes
+    "fnmatch",      # Unix filename pattern matching
+    "linecache",    # random access line caching
+    "locale",       # internationalization services
+    "gettext",      # internationalization via gettext
 }
 
 BLOCKED_PATHS = [
