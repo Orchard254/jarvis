@@ -13,9 +13,12 @@ logger = logging.getLogger(__name__)
 # Known skill modules and their exposed functions
 SKILL_MODULES = {
     "system": "skills.stdlib.system",
-    "files": "skills.stdlib.files",
+    "filesystem": "skills.stdlib.filesystem",
     "web": "skills.stdlib.web",
-    "apps": "skills.stdlib.apps",
+    "ui": "skills.stdlib.ui",
+    "messaging": "skills.stdlib.messaging",
+    "network": "skills.stdlib.network",
+    "time_cal": "skills.stdlib.time_cal",
 }
 
 class DirectDispatcher:
