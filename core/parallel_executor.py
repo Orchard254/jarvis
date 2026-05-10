@@ -4,7 +4,7 @@ Enables simultaneous tool execution with dependency tracking and resource manage
 """
 import asyncio
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
@@ -140,7 +140,7 @@ class ParallelExecutor:
         self, 
         task: TaskNode, 
         tool_registry: Any, 
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> None:
         """Execute a single task."""
         task.status = DependencyStatus.RUNNING
@@ -179,7 +179,7 @@ class ParallelExecutor:
     async def execute_all(
         self, 
         tool_registry: Any, 
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> Dict[str, Any]:
         """
         Execute all added tasks respecting dependencies and concurrency limits.
