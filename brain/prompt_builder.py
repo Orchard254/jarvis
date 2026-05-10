@@ -319,9 +319,8 @@ CANONICAL ICON ARRANGEMENT (auto-arrange + align desktop icons):
         capture_output=True
     )
     # Simpler fallback: F5 to refresh desktop
-    import pyautogui, time
+    import pyautogui
     pyautogui.hotkey("win", "d")
-    time.sleep(0.3)
     pyautogui.press("f5")
     print("Desktop icons refreshed.")
 
@@ -413,17 +412,15 @@ REFERENCE PATTERNS — proven implementations you can adapt or improve:
     print(f"Closed {{len(found)}} window(s) matching '{{target}}'.")
 
   ── CLICK AT COORDINATES (pyautogui) ─────────────────────────────────────────
-    import pyautogui, time
+    import pyautogui
     pyautogui.FAILSAFE = False
     pyautogui.click(x=960, y=540)
-    time.sleep(0.2)
     print("Clicked.")
 
   ── TYPE TEXT — clipboard paste (fastest, unicode-safe) ──────────────────────
-    import pyperclip, pyautogui, time
+    import pyperclip, pyautogui
     pyperclip.copy("text to type here")
     pyautogui.hotkey("ctrl", "v")
-    time.sleep(0.1)
     print("Text entered.")
 
   ── SEND MEDIA KEY (win32api — no focus needed) ──────────────────────────────
@@ -486,11 +483,10 @@ REFERENCE PATTERNS — proven implementations you can adapt or improve:
     print("Scrolled.")
 
   ── DRAG AND DROP ────────────────────────────────────────────────────────────
-    import pyautogui, time
+    import pyautogui
     pyautogui.FAILSAFE = False
     pyautogui.moveTo(src_x, src_y, duration=0.3)
     pyautogui.dragTo(dst_x, dst_y, duration=0.5, button="left")
-    time.sleep(0.2)
     print("Drag complete.")
 
 ━━━ ALLOWED IMPORTS IN execute_code ━━━━━━━━━━━━━━━━━━━━━━━━━━━
