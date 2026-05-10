@@ -27,6 +27,7 @@ hammering the backend.  Reduce for time-sensitive conditions.
 from __future__ import annotations
 
 import logging
+import sys
 import time
 import threading
 from typing import TYPE_CHECKING
@@ -141,7 +142,16 @@ def watch_screen(
             diff = _pixel_diff_ratio(prev_img, curr_img)
             if diff < _PIXEL_DIFF_THRESHOLD:
                 logger.debug(f"watch_screen: pixel diff {diff:.4f} below threshold — skip vision")
-                time.sleep(min(check_interval, max(1, deadline - time.monotonic())))
+                # Non-blocking wait on Windows with message pumping
+                sleep_time = min(check_interval, max(1, deadline - time.monotonic()))
+                if sys.platform == "win32":
+                    import pythoncom
+                    grace_end = time.monotonic() + sleep_time
+                    while time.monotonic() < grace_end:
+                        pythoncom.PumpWaitingMessages()
+                        time.sleep(0.05)
+                else:
+                    time.sleep(sleep_time)
                 continue
         prev_img = curr_img
 
@@ -171,7 +181,15 @@ def watch_screen(
 
         # Sleep until next check (or deadline)
         remaining = deadline - time.monotonic()
-        time.sleep(min(check_interval, max(0, remaining)))
+        sleep_time = min(check_interval, max(0, remaining))
+        if sys.platform == "win32":
+            import pythoncom
+            grace_end = time.monotonic() + sleep_time
+            while time.monotonic() < grace_end:
+                pythoncom.PumpWaitingMessages()
+                time.sleep(0.05)
+        else:
+            time.sleep(sleep_time)
 
     elapsed = round(time.monotonic() - t_start, 1)
     logger.info(f"watch_screen: timed out after {elapsed}s ({checks} checks)")

@@ -55,7 +55,10 @@ def _start_ollama_watcher() -> None:
         import time
         logger.info("health_check: Ollama watcher started — polling every 30s")
         for _ in range(120):  # give up after 60 minutes
-            time.sleep(30)
+            # Use monotonic time for accurate sleep intervals in background thread
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                time.sleep(1)  # Wake every second to allow faster shutdown if needed
             if _check_ollama():
                 print("\n[JARVIS] ✅ Ollama is back online — LLM features restored.\n> ", end="", flush=True)
                 logger.info("health_check: Ollama reconnected — watcher stopped")

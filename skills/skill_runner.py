@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 import time
 from typing import Dict
 
@@ -139,7 +140,15 @@ def run_skill(skill_id: str, intent: str) -> Dict:
 
             if app_name:
                 # Give the OS a moment to spawn the process before probing.
-                time.sleep(_VERIFICATION_GRACE_SECONDS)
+                # Use non-blocking wait on Windows to allow message pumping
+                if sys.platform == "win32":
+                    import pythoncom
+                    deadline = time.monotonic() + _VERIFICATION_GRACE_SECONDS
+                    while time.monotonic() < deadline:
+                        pythoncom.PumpWaitingMessages()
+                        time.sleep(0.05)  # Small sleep to avoid busy-waiting
+                else:
+                    time.sleep(_VERIFICATION_GRACE_SECONDS)
 
                 # Lazy import keeps the verification layer out of module-load
                 # critical path and makes unit-testing easier to mock.
