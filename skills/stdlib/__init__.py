@@ -33,13 +33,13 @@ time_cal    get_time, get_events, create_event, delete_event
 STDLIB_MANIFEST = {
     "filesystem": {
         "module": "skills.stdlib.filesystem",
-        "functions": ["read_file", "write_file", "file_ops"],
-        "summary": "read/write files, list dirs, copy/move/delete, mkdir",
+        "functions": ["read_file", "write_file", "file_ops", "parallel_read"],
+        "summary": "read/write files, list dirs, copy/move/delete, mkdir, parallel file reading",
     },
     "web": {
         "module": "skills.stdlib.web",
-        "functions": ["search_web", "fetch_url"],
-        "summary": "search the web or fetch a URL's text content",
+        "functions": ["search_web", "fetch_url", "parallel_fetch"],
+        "summary": "search the web or fetch a URL's text content, parallel URL fetching",
     },
     "system": {
         "module": "skills.stdlib.system",

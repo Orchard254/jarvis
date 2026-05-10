@@ -122,6 +122,52 @@ def _try_direct_dispatch(text: str):
                 logger.debug(f"Direct dispatch failed for brightness: {e}")
                 break
     
+    # Parallel fetch pattern - "fetch these URLs: url1, url2, ..."
+    parallel_fetch_pattern = r'(?:fetch|get|download)\s+(?:these\s+)?(?:urls?|links?|pages?)\s*(?:[:\-]?\s*)?(.+)'
+    match = re.search(parallel_fetch_pattern, text_lower)
+    if match:
+        urls_text = match.group(1).strip()
+        # Extract URLs from comma-separated or newline-separated list
+        urls = re.findall(r'https?://[^\s,;\n]+', urls_text)
+        if len(urls) >= 2:  # Only use parallel if multiple URLs
+            try:
+                from core.direct_dispatcher import dispatcher
+                from core.task_registry import registry
+                from core.executor_pool import pool
+                
+                task = registry.create_task("parallel_fetch", f"Fetch {len(urls)} URLs")
+                future = pool.submit(
+                    lambda: dispatcher.execute('parallel_fetch', urls),
+                    task.id
+                )
+                logger.info(f"Direct dispatch: parallel_fetch({len(urls)} URLs) -> task {task.id}")
+                return task.id, f"Fetching {len(urls)} URLs in parallel (task: {task.id})"
+            except Exception as e:
+                logger.debug(f"Direct dispatch failed for parallel_fetch: {e}")
+
+    # Parallel file read pattern - "read these files: path1, path2, ..."
+    parallel_read_pattern = r'(?:read|load|open)\s+(?:these\s+)?(?:files?|documents?)\s*(?:[:\-]?\s*)?(.+)'
+    match = re.search(parallel_read_pattern, text_lower)
+    if match:
+        files_text = match.group(1).strip()
+        # Extract file paths (simple heuristic: comma-separated paths)
+        file_paths = [p.strip() for p in files_text.split(',') if p.strip()]
+        if len(file_paths) >= 2:  # Only use parallel if multiple files
+            try:
+                from core.direct_dispatcher import dispatcher
+                from core.task_registry import registry
+                from core.executor_pool import pool
+                
+                task = registry.create_task("parallel_read", f"Read {len(file_paths)} files")
+                future = pool.submit(
+                    lambda: dispatcher.execute('parallel_read', file_paths),
+                    task.id
+                )
+                logger.info(f"Direct dispatch: parallel_read({len(file_paths)} files) -> task {task.id}")
+                return task.id, f"Reading {len(file_paths)} files in parallel (task: {task.id})"
+            except Exception as e:
+                logger.debug(f"Direct dispatch failed for parallel_read: {e}")
+
     return None
 
 
