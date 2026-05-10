@@ -1,6 +1,7 @@
 """Process management tool — list, kill, check running processes."""
 
 import logging
+import sys
 import time
 
 logger = logging.getLogger(__name__)
@@ -121,8 +122,8 @@ def process_manager(
                     "success": False,
                     "error": "action 'wait_for' requires 'name' parameter",
                 }
-            deadline = time.time() + timeout
-            while time.time() < deadline:
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
                 pids = _find_pids_by_name(name, psutil)
                 if pids:
                     return {
@@ -131,7 +132,15 @@ def process_manager(
                         "pid": pids[0],
                         "action": "wait_for",
                     }
-                time.sleep(0.5)
+                # Non-blocking wait on Windows with message pumping
+                if sys.platform == "win32":
+                    import pythoncom
+                    grace_end = time.monotonic() + 0.5
+                    while time.monotonic() < grace_end:
+                        pythoncom.PumpWaitingMessages()
+                        time.sleep(0.05)
+                else:
+                    time.sleep(0.5)
             return {
                 "success": False,
                 "error": f"{name} did not start within {timeout}s",

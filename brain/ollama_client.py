@@ -215,7 +215,10 @@ def chat(
             logger.warning(
                 f"Request failed (attempt {retry_count}/{max_retries}), retrying in {wait_time}s: {e}"
             )
-            time.sleep(wait_time)
+            # Use monotonic time for accurate backoff timing
+            deadline = time.monotonic() + wait_time
+            while time.monotonic() < deadline:
+                time.sleep(min(1, deadline - time.monotonic()))
 
 
 def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
