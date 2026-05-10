@@ -43,8 +43,8 @@ STDLIB_MANIFEST = {
     },
     "system": {
         "module": "skills.stdlib.system",
-        "functions": ["process_manager", "system_settings", "open_app", "install_app"],
-        "summary": "list/kill/start processes, change system settings, open or install apps",
+        "functions": ["process_manager", "system_settings", "open_app", "install_app", "volume_mute_then_set", "brightness_set_robust"],
+        "summary": "list/kill/start processes, change system settings, open or install apps, volume control (mute-then-set), robust brightness control with fallbacks",
     },
     "ui": {
         "module": "skills.stdlib.ui",

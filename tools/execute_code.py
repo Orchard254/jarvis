@@ -13,11 +13,7 @@ from pathlib import Path
 
 # Windows-only constant for hiding console windows
 if sys.platform == "win32":
-    CREATE_NO_WINDOW = subprocess.CREATE_NEW_PROCESS_GROUP  # Fallback that works on all platforms
-    try:
-        CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-    except AttributeError:
-        pass
+    CREATE_NO_WINDOW = 0x00080000  # CREATE_NO_WINDOW constant for hiding console windows
 else:
     CREATE_NO_WINDOW = 0
 
