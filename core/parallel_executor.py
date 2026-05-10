@@ -148,7 +148,9 @@ class ParallelExecutor:
         
         logger.info(f"Executing task {task.task_id}: {task.tool_name}")
         if progress_callback:
-            await progress_callback("start", task)
+            callback_result = progress_callback("start", task)
+            if asyncio.iscoroutine(callback_result):
+                await callback_result
 
         try:
             # Resolve tool from registry
@@ -174,7 +176,9 @@ class ParallelExecutor:
         finally:
             task.completed_at = time.time()
             if progress_callback:
-                await progress_callback("end", task)
+                callback_result = progress_callback("end", task)
+                if asyncio.iscoroutine(callback_result):
+                    await callback_result
 
     async def execute_all(
         self, 
