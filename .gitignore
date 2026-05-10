@@ -1,4 +1,37 @@
 ```
+# Python cache
 __pycache__/
 *.pyc
+
+# Virtual environment
+venv/
+
+# Dependencies cache
+.pip/
+.pip-tools/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
 ```
