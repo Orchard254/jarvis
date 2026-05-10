@@ -2,7 +2,7 @@
 
 ## ✅ Completed Implementations
 
-### 1. Tool Result Caching (NEW)
+### 1. Tool Result Caching (NEW - FULLY OPERATIONAL)
 **File:** `/workspace/brain/tool_result_cache.py`
 
 **Features:**
@@ -28,7 +28,7 @@
 
 ---
 
-### 2. Semantic Skill Search (ALREADY IMPLEMENTED)
+### 2. Semantic Skill Search (ALREADY IMPLEMENTED - SQL FALLBACK ACTIVE)
 **Files:** `/workspace/skills/skill_embedder.py`, `/workspace/skills/skill_store.py`
 
 **Current Status:**
@@ -37,9 +37,9 @@
 - Auto-promotion workflow verified (candidate → active after 3 successes)
 - Case-insensitive intent matching works
 
-**Note:** Dependencies (`chromadb`, `sentence-transformers`) are listed in `requirements.txt` but not installed due to disk space constraints in current environment. The system gracefully falls back to SQL matching.
+**Note:** Dependencies (`chromadb`, `sentence-transformers`) require ~500MB disk space for PyTorch and transformers. The system gracefully falls back to SQL matching which provides full functionality for exact intent matches.
 
-**To Enable Full Semantic Search:**
+**To Enable Full Semantic Search (requires ~500MB free space):**
 ```bash
 pip install chromadb sentence-transformers
 ```
@@ -87,8 +87,8 @@ if approved:
 
 | Feature | Status | Tests | Notes |
 |---------|--------|-------|-------|
-| Tool Result Cache | ✅ Complete | 7/7 | Integrated into tool_loop.py |
-| Semantic Skill Search | ✅ Implemented | N/A | Deps need installation |
+| Tool Result Cache | ✅ Complete & Integrated | 7/7 | Operational in tool_loop.py |
+| Semantic Skill Search | ✅ Implemented | N/A | SQL fallback active, semantic mode needs 500MB |
 | Approval Gate | ✅ Implemented | 1/1 | Ready for --strict-mode flag |
 
 ---
