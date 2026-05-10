@@ -44,6 +44,7 @@ class ExecutorAgent:
         self._name = "ExecutorAgent"
         self._retry_counts: Dict[str, int] = {}
         self._execution_times: Dict[str, List[float]] = {}
+        self._previous_fixes: Dict[str, List[str]] = {}  # Track previous fix attempts per task
     
     def execute_task(self, task_spec: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -78,8 +79,13 @@ class ExecutorAgent:
             "task_id": task_id
         }
         
+        # Initialize tracking for this task
+        if task_id not in self._previous_fixes:
+            self._previous_fixes[task_id] = []
+        
         original_code = task_spec.get("code", "")
         current_code = original_code
+        retry_count = 0
         
         for attempt in range(self.MAX_RETRIES + 1):
             try:
@@ -114,10 +120,21 @@ class ExecutorAgent:
                 
                 # PATCH phase (if we have a coder agent)
                 if self._coder_agent and current_code:
-                    fix_result = self._attempt_self_heal(current_code, error_msg, diagnosis)
+                    # Build context with full failure history
+                    fix_context = {
+                        "diagnosis": diagnosis,
+                        "retry_count": retry_count,
+                        "previous_fixes": self._previous_fixes.get(task_id, [])
+                    }
+                    
+                    fix_result = self._attempt_self_heal(current_code, error_msg, fix_context)
                     if fix_result.get("success") and fix_result.get("fixed_code"):
                         current_code = fix_result["fixed_code"]
                         result["self_heal_attempts"] += 1
+                        
+                        # Record this fix attempt for future context
+                        fix_summary = f"Attempt #{retry_count + 1}: {fix_result.get('diagnosis', 'unknown')} - Changes: {fix_result.get('changes_made', [])}"
+                        self._previous_fixes[task_id].append(fix_summary)
                         
                         # Update task spec with fixed code
                         task_spec = {**task_spec, "code": current_code}
@@ -125,6 +142,10 @@ class ExecutorAgent:
                         logger.info(f"Self-heal patch applied: {fix_result.get('diagnosis', 'unknown')}")
                     else:
                         logger.warning(f"Self-heal failed: {fix_result.get('diagnosis', 'unknown')}")
+                        # Still record the failed attempt
+                        self._previous_fixes[task_id].append(f"Attempt #{retry_count + 1}: FAILED - {fix_result.get('diagnosis', 'unknown')}")
+                
+                retry_count += 1
                 
                 # Exponential backoff before retry
                 delay = min(self.BASE_RETRY_DELAY * (2 ** attempt), self.MAX_RETRY_DELAY)
@@ -142,11 +163,22 @@ class ExecutorAgent:
                 
                 # Try to recover from exceptions too
                 if self._coder_agent and current_code:
-                    fix_result = self._attempt_self_heal(current_code, error_msg, {"type": "exception"})
+                    fix_context = {
+                        "diagnosis": {"type": "exception"},
+                        "retry_count": retry_count,
+                        "previous_fixes": self._previous_fixes.get(task_id, [])
+                    }
+                    fix_result = self._attempt_self_heal(current_code, error_msg, fix_context)
                     if fix_result.get("success") and fix_result.get("fixed_code"):
                         current_code = fix_result["fixed_code"]
                         task_spec = {**task_spec, "code": current_code}
                         result["self_heal_attempts"] += 1
+                        
+                        # Record this fix attempt
+                        fix_summary = f"Attempt #{retry_count + 1} (exception recovery): {fix_result.get('diagnosis', 'unknown')}"
+                        self._previous_fixes[task_id].append(fix_summary)
+                    
+                    retry_count += 1
         
         # Final failure - apply graceful fallback
         if not result["success"]:

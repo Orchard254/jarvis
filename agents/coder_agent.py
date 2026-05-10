@@ -129,7 +129,10 @@ class CoderAgent:
         Args:
             original_code: The code that failed
             error_message: The error message from execution
-            context: Additional context about the failure
+            context: Additional context about the failure including:
+                - diagnosis: Error analysis from ExecutorAgent
+                - retry_count: How many times this has been attempted
+                - previous_fixes: List of previous fix attempts
             
         Returns:
             Dict with 'fixed_code', 'diagnosis', 'success', 'changes_made'
@@ -137,24 +140,42 @@ class CoderAgent:
         if self._shared_context:
             self._shared_context.set_agent_state(self._name, {
                 "action": "fix_code",
-                "error": error_message[:100]
+                "error": error_message[:200],
+                "context": context
             })
+        
+        # Extract additional context
+        diagnosis = (context or {}).get("diagnosis", {})
+        retry_count = (context or {}).get("retry_count", 0)
+        previous_fixes = (context or {}).get("previous_fixes", [])
+        
+        # Build comprehensive error context for the LLM
+        error_context = self._build_error_context(error_message, diagnosis, retry_count, previous_fixes)
         
         try:
             messages = [
                 {"role": "system", "content": build_system_prompt()},
                 {"role": "system", "content": self._get_fixer_instruction()},
                 {"role": "user", "content": f"""
-Original code:
+ORIGINAL CODE THAT FAILED:
 ```python
 {original_code}
 ```
 
-Error encountered:
-{error_message}
+EXECUTION ERROR:
+{error_context}
 
-Please analyze the error and provide corrected code.
-Explain what was wrong and how you fixed it.
+PREVIOUS FIX ATTEMPTS: {len(previous_fixes)}
+{'Previous attempts and their outcomes:\\n' + chr(10).join(previous_fixes) if previous_fixes else 'This is the first fix attempt.'}
+
+Please analyze the error carefully and provide corrected code.
+Your response MUST include:
+1. A clear DIAGNOSIS explaining what went wrong
+2. Specific CHANGES you are making to fix it
+3. The complete FIXED CODE in a Python code block
+
+IMPORTANT: If previous fixes failed, try a different approach.
+Do not repeat the same fix strategy.
 """}
             ]
             
@@ -162,27 +183,31 @@ Explain what was wrong and how you fixed it.
             content = (result.get("content") or "").strip()
             
             # Extract fixed code
-            fixed_code, diagnosis = self._extract_code(content)
+            fixed_code, diagnosis_text = self._extract_code(content)
             
             # Validate the fix
             validation = self._validate_code(fixed_code)
             
             response = {
                 "fixed_code": fixed_code,
-                "diagnosis": diagnosis or self._diagnose_error(error_message, original_code),
+                "diagnosis": diagnosis_text or self._diagnose_error(error_message, original_code),
                 "success": validation["is_valid"],
                 "changes_made": self._describe_changes(original_code, fixed_code),
-                "warnings": validation.get("warnings", [])
+                "warnings": validation.get("warnings", []),
+                "retry_context": {
+                    "retry_count": retry_count,
+                    "previous_attempts": len(previous_fixes)
+                }
             }
             
             if self._shared_context:
                 self._shared_context.record_execution(
                     self._name, "fix_code",
-                    {"diagnosis": response["diagnosis"], "valid": validation["is_valid"]},
+                    {"diagnosis": response["diagnosis"], "valid": validation["is_valid"], "retry": retry_count},
                     success=validation["is_valid"]
                 )
             
-            logger.info(f"CoderAgent fix attempt: {response['diagnosis'][:50]}...")
+            logger.info(f"CoderAgent fix attempt #{retry_count + 1}: {response['diagnosis'][:50]}...")
             return response
             
         except Exception as e:
@@ -192,8 +217,29 @@ Explain what was wrong and how you fixed it.
                 "diagnosis": f"Could not analyze error: {str(e)}",
                 "success": False,
                 "changes_made": [],
-                "warnings": []
+                "warnings": [],
+                "retry_context": {"retry_count": retry_count, "error": str(e)}
             }
+    
+    def _build_error_context(self, error_message: str, diagnosis: Dict, 
+                              retry_count: int, previous_fixes: List[str]) -> str:
+        """Build comprehensive error context for the LLM."""
+        context_parts = [f"Error: {error_message}"]
+        
+        if diagnosis:
+            error_type = diagnosis.get("type", "unknown")
+            severity = diagnosis.get("severity", "medium")
+            suggested = diagnosis.get("suggested_action", "retry_with_fix")
+            context_parts.append(f"\nError Type: {error_type}")
+            context_parts.append(f"\nSeverity: {severity}")
+            context_parts.append(f"\nSuggested Action: {suggested}")
+        
+        if retry_count > 0:
+            context_parts.append(f"\n\n*** RETRY ATTEMPT #{retry_count + 1} ***")
+            context_parts.append(f"\nPrevious {len(previous_fixes)} fix attempts have failed.")
+            context_parts.append("\nThe LLM should try a DIFFERENT approach than previous attempts.")
+        
+        return "\n".join(context_parts)
     
     def _get_coder_instruction(self) -> str:
         return (
