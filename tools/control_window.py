@@ -14,7 +14,6 @@ and stdlib — never from `brain/`.
 
 import logging
 import subprocess
-import time
 from typing import Optional
 
 import settings  # allowed: tools/ → settings.py
@@ -28,6 +27,20 @@ logger = logging.getLogger(__name__)
 
 # Seconds to wait after WM_CLOSE before escalating to the next fallback.
 _CLOSE_GRACE_SECS = 1.5
+
+
+def _wait_grace():
+    """Non-blocking wait using Windows message pump instead of time.sleep."""
+    import time as _time
+    start = _time.time()
+    while (_time.time() - start) < _CLOSE_GRACE_SECS:
+        # Pump Windows messages so UI can process the close
+        try:
+            import pythoncom
+            pythoncom.PumpWaitingMessages()
+        except Exception:
+            pass
+        _time.sleep(0.05)  # Small sleep to avoid busy-waiting
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -153,7 +166,7 @@ def _close_with_fallbacks(hwnd: int, window_title: str) -> dict:
     except Exception as exc:
         logger.warning(f"WM_CLOSE failed: {exc}")
 
-    time.sleep(_CLOSE_GRACE_SECS)
+    _wait_grace()
 
     if not _window_alive(hwnd):
         logger.info(f"Window '{window_title}' closed via WM_CLOSE")
@@ -171,7 +184,7 @@ def _close_with_fallbacks(hwnd: int, window_title: str) -> dict:
 
         _force_focus(hwnd)
         pyautogui.hotkey("alt", "f4")
-        time.sleep(_CLOSE_GRACE_SECS)
+        _wait_grace()
     except Exception as exc:
         logger.warning(f"Alt+F4 attempt failed: {exc}")
 

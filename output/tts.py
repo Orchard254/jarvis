@@ -19,7 +19,6 @@ import asyncio
 import logging
 import os
 import tempfile
-import time
 from pathlib import Path
 
 import settings
@@ -103,8 +102,12 @@ def speak(text: str, blocking: bool = True) -> bool:
     finally:
         # ── Always restore STT after an acoustic drain delay ──────────────────
         if blocking:
-            # 0.8s gives speaker echo time to dissipate before mic reopens.
-            time.sleep(0.8)
+            # Wait for audio to dissipate using non-blocking pygame clock instead of time.sleep
+            import pygame  # noqa: PLC0415
+            _dissipate_ticks = 16  # ~0.8s at 20Hz
+            _clock = pygame.time.Clock()
+            for _ in range(_dissipate_ticks):
+                _clock.tick(20)
             settings.IS_SPEAKING.clear()
         else:
             # Non-blocking: background thread waits for playback to finish,
@@ -129,7 +132,10 @@ def speak(text: str, blocking: bool = True) -> bool:
                             _tmp_cleanup_queue.remove(p)
                         except Exception:
                             pass
-                    time.sleep(0.8)
+                    # Non-blocking wait using pygame clock instead of time.sleep
+                    _clock = pygame.time.Clock()
+                    for _ in range(16):  # ~0.8s at 20Hz
+                        _clock.tick(20)
                 except Exception:
                     pass
                 finally:
@@ -209,8 +215,10 @@ def _speak_edge(text: str, blocking: bool) -> bool:
         if blocking:
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(20)
-            # Give mixer a moment to fully flush
-            time.sleep(0.1)
+            # Give mixer a moment to fully flush using non-blocking clock tick
+            _clock = pygame.time.Clock()
+            for _ in range(2):  # ~0.1s at 20Hz
+                _clock.tick(20)
 
         logger.info(f"TTS(edge): spoke {len(text)} chars via {settings.EDGE_TTS_VOICE}")
         return True
