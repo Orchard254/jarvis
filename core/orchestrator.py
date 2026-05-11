@@ -22,7 +22,6 @@ from skills.skill_runner import run_skill
 from skills.skill_store import get_active_skills, search_by_intent
 from skills.skill_store import init_db as init_skills
 from tools import TOOL_REGISTRY
-from tools.execute_code import get_fallback_script
 from verification.verifier import verify_action
 
 from core.console import cli_input

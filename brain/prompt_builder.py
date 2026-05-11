@@ -374,10 +374,6 @@ UNIFIED LLM TOOL SELECTION:
   → Better handling of ambiguity and complex multi-step tasks
   → Simpler architecture without routing logic or cache invalidation
 
-DIRECT EXECUTION OPTIMIZATION:
-  Simple commands (volume, brightness, app control) still execute instantly
-  via regex pattern matching in get_fallback_script() for sub-100ms response
-
 === CODE QUALITY STANDARDS ======================================
 You are a senior Windows developer. Every generated script must be COMPLETE,
 CORRECT, and DETERMINISTIC. No stubs. No placeholders. No guessing at API names.
