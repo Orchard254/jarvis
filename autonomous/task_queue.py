@@ -5,23 +5,21 @@ States: pending → approved → running → complete | failed | paused
 
 import json
 import logging
-import sqlite3
 import time
 import uuid
 from pathlib import Path
 
 from settings import MEMORY_DB
+from core.thread_db import get_connection
 
 logger = logging.getLogger(__name__)
 
 TASK_STATES = ["pending", "approved", "running", "complete", "failed", "paused"]
 
 
-def _connect() -> sqlite3.Connection:
-    """Open MEMORY_DB with busy_timeout so concurrent scheduler/main-thread writes don't crash."""
-    conn = sqlite3.connect(MEMORY_DB)
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+def _connect():
+    """Get a thread-local connection to MEMORY_DB."""
+    return get_connection(MEMORY_DB, timeout=5.0)
 
 
 def init_db():

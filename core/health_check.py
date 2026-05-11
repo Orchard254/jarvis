@@ -173,13 +173,11 @@ def _check_pc_index_db() -> bool:
     """Verify the PC indexer SQLite DB is writable."""
     try:
         from settings import PC_INDEX_DB
-
-        import sqlite3
+        from core.thread_db import get_connection
 
         Path(PC_INDEX_DB).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(PC_INDEX_DB, timeout=2)
+        conn = get_connection(PC_INDEX_DB, timeout=2.0)
         conn.execute("SELECT 1")
-        conn.close()
         logger.info("Health: PC Index DB OK")
         return True
     except Exception as e:

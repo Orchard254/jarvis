@@ -17,8 +17,9 @@ _writer = IndexWriter()
 _stop_event = threading.Event()
 
 def init_db():
+    from core.thread_db import get_connection
     PC_INDEX_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(PC_INDEX_DB, timeout=DB_BUSY_TIMEOUT)
+    conn = get_connection(PC_INDEX_DB, timeout=DB_BUSY_TIMEOUT)
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT};")
     conn.execute("PRAGMA synchronous=NORMAL;")

@@ -10,13 +10,14 @@ _load_recurring_from_db() to restore any active schedules back into memory.
 
 import logging
 import re
-import sqlite3
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 import settings
 from settings import MEMORY_DB
+from core.thread_db import get_connection
 
 from autonomous.approval_gate import ApprovalGate
 from autonomous.task_queue import create_task, get_pending_tasks, update_task
@@ -38,22 +39,18 @@ def _init_recurring_db() -> None:
     Create the ``recurring_schedules`` table if it doesn't already exist.
     Uses the same MEMORY_DB path as the rest of the autonomous layer.
     """
-    MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(MEMORY_DB)
-    try:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS recurring_schedules (
-                task_id         TEXT PRIMARY KEY,
-                command         TEXT,
-                cron_expression TEXT,
-                next_run        REAL,
-                created_at      REAL,
-                active          INTEGER DEFAULT 1
-            )
-        """)
-        conn.commit()
-    finally:
-        conn.close()
+    conn = get_connection(MEMORY_DB, timeout=5.0)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS recurring_schedules (
+            task_id         TEXT PRIMARY KEY,
+            command         TEXT,
+            cron_expression TEXT,
+            next_run        REAL,
+            created_at      REAL,
+            active          INTEGER DEFAULT 1
+        )
+    """)
+    conn.commit()
 
 
 class Scheduler:
@@ -133,17 +130,14 @@ class Scheduler:
 
         db_updated = False
         try:
-            conn = sqlite3.connect(MEMORY_DB)
-            try:
-                c = conn.cursor()
-                c.execute(
-                    "UPDATE recurring_schedules SET active = 0 WHERE task_id = ?",
-                    (task_id,),
-                )
-                db_updated = c.rowcount > 0
-                conn.commit()
-            finally:
-                conn.close()
+            conn = get_connection(MEMORY_DB, timeout=5.0)
+            c = conn.cursor()
+            c.execute(
+                "UPDATE recurring_schedules SET active = 0 WHERE task_id = ?",
+                (task_id,),
+            )
+            db_updated = c.rowcount > 0
+            conn.commit()
         except Exception as exc:
             logger.warning(
                 f"scheduler: could not deactivate '{task_id[:8]}' in DB: {exc}"
@@ -286,19 +280,16 @@ class Scheduler:
     ) -> None:
         """Insert or replace a recurring schedule row in the DB."""
         try:
-            conn = sqlite3.connect(MEMORY_DB)
-            try:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO recurring_schedules
-                        (task_id, command, cron_expression, next_run, created_at, active)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                    """,
-                    (task_id, command, cron_expression, next_run, time.time()),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+            conn = get_connection(MEMORY_DB, timeout=5.0)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO recurring_schedules
+                    (task_id, command, cron_expression, next_run, created_at, active)
+                VALUES (?, ?, ?, ?, ?, 1)
+                """,
+                (task_id, command, cron_expression, next_run, time.time()),
+            )
+            conn.commit()
             logger.debug(f"scheduler: persisted recurring schedule '{task_id[:8]}'")
         except Exception as exc:
             logger.warning(
@@ -309,15 +300,12 @@ class Scheduler:
     def _update_next_run_db(self, task_id: str, next_run: float) -> None:
         """Update the next_run timestamp for a persisted recurring schedule."""
         try:
-            conn = sqlite3.connect(MEMORY_DB)
-            try:
-                conn.execute(
-                    "UPDATE recurring_schedules SET next_run = ? WHERE task_id = ?",
-                    (next_run, task_id),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+            conn = get_connection(MEMORY_DB, timeout=5.0)
+            conn.execute(
+                "UPDATE recurring_schedules SET next_run = ? WHERE task_id = ?",
+                (next_run, task_id),
+            )
+            conn.commit()
         except Exception as exc:
             logger.warning(
                 f"scheduler: could not update next_run for '{task_id[:8]}': {exc}"
@@ -333,18 +321,15 @@ class Scheduler:
         rather than immediately triggering on every restart.
         """
         try:
-            conn = sqlite3.connect(MEMORY_DB)
+            conn = get_connection(MEMORY_DB, timeout=5.0)
             conn.row_factory = sqlite3.Row
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT task_id, command, cron_expression, next_run
-                    FROM   recurring_schedules
-                    WHERE  active = 1
-                    """
-                ).fetchall()
-            finally:
-                conn.close()
+            rows = conn.execute(
+                """
+                SELECT task_id, command, cron_expression, next_run
+                FROM   recurring_schedules
+                WHERE  active = 1
+                """
+            ).fetchall()
 
             now = time.time()
             loaded = 0

@@ -1,6 +1,5 @@
 import hashlib
 import logging
-import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -13,6 +12,7 @@ from settings import (
     SKILL_RETIRE_FAILURES,
     SKILLS_DB,
 )
+from core.thread_db import get_connection
 
 from skills import skill_embedder
 from skills.skill_embedder import add_skill as embed_skill
@@ -26,11 +26,9 @@ logger = logging.getLogger(__name__)
 # contention (scheduler thread + reflection thread can both hit SKILLS_DB).
 # All functions must use _connect() instead of sqlite3.connect() directly.
 
-def _connect() -> sqlite3.Connection:
-    """Open SKILLS_DB with consistent per-connection settings."""
-    conn = sqlite3.connect(str(SKILLS_DB))
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+def _connect():
+    """Get a thread-local connection to SKILLS_DB."""
+    return get_connection(SKILLS_DB, timeout=5.0)
 
 
 def init_db():
