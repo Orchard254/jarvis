@@ -74,17 +74,14 @@ def memory(
                     "success": False,
                     "error": "action 'forget' requires 'key'",
                 }
-            import sqlite3
             from settings import MEMORY_DB
+            from core.thread_db import get_connection
 
-            conn = sqlite3.connect(MEMORY_DB)
-            try:
-                c = conn.cursor()
-                c.execute("DELETE FROM preferences WHERE key = ?", (key,))
-                deleted = c.rowcount > 0
-                conn.commit()
-            finally:
-                conn.close()
+            conn = get_connection(MEMORY_DB, timeout=5.0)
+            c = conn.cursor()
+            c.execute("DELETE FROM preferences WHERE key = ?", (key,))
+            deleted = c.rowcount > 0
+            conn.commit()
 
             logger.info(f"memory.forget: '{key}' — deleted={deleted}")
             return {
@@ -129,26 +126,23 @@ def memory(
                     "success": False,
                     "error": "action 'search' requires 'query'",
                 }
-            import sqlite3
             from settings import MEMORY_DB
+            from core.thread_db import get_connection
 
-            conn = sqlite3.connect(MEMORY_DB)
+            conn = get_connection(MEMORY_DB, timeout=5.0)
             conn.row_factory = sqlite3.Row
-            try:
-                c = conn.cursor()
-                rows = c.execute(
-                    """
-                    SELECT command_text, tool_name, success, timestamp
-                    FROM episodes
-                    WHERE command_text LIKE ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                    """,
-                    (f"%{query}%", limit),
-                ).fetchall()
-                results = [dict(r) for r in rows]
-            finally:
-                conn.close()
+            c = conn.cursor()
+            rows = c.execute(
+                """
+                SELECT command_text, tool_name, success, timestamp
+                FROM episodes
+                WHERE command_text LIKE ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (f"%{query}%", limit),
+            ).fetchall()
+            results = [dict(r) for r in rows]
 
             logger.info(f"memory.search: '{query}' → {len(results)} results")
             return {

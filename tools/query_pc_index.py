@@ -5,10 +5,10 @@ Read-only interface to PC Index. Never writes.
 
 import json
 import logging
-import sqlite3
 from pathlib import Path
 
 from settings import PC_INDEX_DB
+from core.thread_db import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def query_pc_index(query: str, type: str = None):
     q = f"%{query.lower()}%"
 
     try:
-        conn = sqlite3.connect(f"file:{PC_INDEX_DB}?mode=ro", uri=True)
+        conn = get_connection(PC_INDEX_DB, timeout=2.0)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
     except Exception as e:
@@ -107,8 +107,6 @@ def query_pc_index(query: str, type: str = None):
                         )
     except Exception as e:
         logger.error(f"query_pc_index error: {e}")
-    finally:
-        conn.close()
 
     logger.info(f"query_pc_index('{query}', type={type}) -> {len(results)} results")
     return results
