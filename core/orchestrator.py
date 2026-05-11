@@ -113,15 +113,8 @@ class Orchestrator:
         # The classifier embeds ~150 prototype phrases on first use.  Running this
         # in a daemon thread means the first user command doesn't pay the latency
         # cost — by the time the user speaks, the vectors are ready.
-        def _warmup_classifier():
-            try:
-                from brain.intent_classifier import _classifier  # noqa: PLC0415
-                _classifier._ensure_ready()
-                logger.info("intent_classifier: warmup complete — %s", _classifier.stats())
-            except Exception as _wc_exc:
-                logger.debug("intent_classifier warmup skipped: %s", _wc_exc)
-
-        __import__("threading").Thread(target=_warmup_classifier, daemon=True, name="classifier-warmup").start()
+        # REMOVED: intent_classifier warmup - classifier no longer exists
+        # All tool selection is now handled directly by the main LLM
 
         # ── Load recent conversation history from episodic memory ──────────────
         # Pre-populate _history so the LLM sees prior context across restarts.
@@ -357,24 +350,24 @@ class Orchestrator:
                 parts = []
 
                 # ── Recent command history — single DB call serves both uses ──────
-                    # Fetch limit=5 once; the first 3 are used for the timestamped
-                    # history block, all 5 for the "This session:" summary line.
-                    recent_episodes = self._memory.get_recent_episodes(limit=5)
-                    if recent_episodes:
-                        history_lines = []
-                        for i, cmd in enumerate(recent_episodes[:3], 1):
-                            ts = cmd.get("timestamp", 0)
-                            ago = f"{int(_time.time() - ts)}s ago" if ts else ""
-                            txt = cmd.get("command_text", "")
-                            ok = cmd.get("success")
-                            status = "✓" if ok else ("✗" if ok is False else "?")
-                            if txt:
-                                history_lines.append(f"  {i}. [{ago}] {status} {txt}")
-                        if history_lines:
-                            parts.append(
-                                "Recent commands (use to determine if this is a follow-up):\n"
-                                + "\n".join(history_lines)
-                            )
+                # Fetch limit=5 once; the first 3 are used for the timestamped
+                # history block, all 5 for the "This session:" summary line.
+                recent_episodes = self._memory.get_recent_episodes(limit=5)
+                if recent_episodes:
+                    history_lines = []
+                    for i, cmd in enumerate(recent_episodes[:3], 1):
+                        ts = cmd.get("timestamp", 0)
+                        ago = f"{int(_time.time() - ts)}s ago" if ts else ""
+                        txt = cmd.get("command_text", "")
+                        ok = cmd.get("success")
+                        status = "✓" if ok else ("✗" if ok is False else "?")
+                        if txt:
+                            history_lines.append(f"  {i}. [{ago}] {status} {txt}")
+                    if history_lines:
+                        parts.append(
+                            "Recent commands (use to determine if this is a follow-up):\n"
+                            + "\n".join(history_lines)
+                        )
 
                     # ── User identity: always inject first so it's most prominent ──────
                     user_name = self._memory.get_preference("user_name")
@@ -539,27 +532,9 @@ class Orchestrator:
                             "last_successful_command", original_intent[:100]
                         )
 
-                # ── Record route outcome → intent learner ─────────────────────────────
-                # Feed the actual outcome back to the route cache so it can
-                # build confidence for what works and retire what doesn’t.
-                # Extract which tools were actually called from the tool log.
-                try:
-                    from core.intent_learner import record_route
+                # ── Record route outcome → REMOVED: intent learner no longer exists ──
+                # Tool selection is now handled directly by the main LLM without caching
 
-                    _tools_used = list(
-                        dict.fromkeys(  # deduplicate, preserve order
-                            e["tool"] for e in result.get("tool_calls", []) if "tool" in e
-                        )
-                    )
-                    if _tools_used:  # only record if tools were actually invoked
-                        record_route(
-                            original_intent,
-                            _tools_used,
-                            success=result.get("success", False),
-                            source=_routing_source,
-                        )
-                except Exception as _lr_exc:
-                    logger.debug("intent_learner record skipped: %s", _lr_exc)
 
                 # ── Post-execution reflection ───────────────────────────────────────
                 # Ask the LLM to extract learnable patterns from what just happened.

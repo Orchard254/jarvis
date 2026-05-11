@@ -4,15 +4,8 @@ import pytest, sys, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.intent_router import route
 from core.recovery import RecoveryManager
 from core.orchestrator import Orchestrator
-
-def test_intent_router_structure():
-    intent = route("open notepad")
-    assert "primary_tool" in intent
-    assert "suggested_tools" in intent
-    assert 0.0 <= intent["confidence"] <= 1.0
 
 def test_recovery_classification():
     rm = RecoveryManager()

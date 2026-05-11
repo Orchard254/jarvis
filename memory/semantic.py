@@ -80,7 +80,7 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
     Filters out insights recommending tools not in the suggested list.
 
     Args:
-        suggested_tools: Tools the intent_router recommends for this query
+        suggested_tools: Tools selected by the main LLM for this query
         max_insights: Maximum number of insights to return
 
     Returns:
