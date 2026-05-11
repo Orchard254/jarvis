@@ -289,3 +289,91 @@ def get_fallback_script(intent: str) -> str | None:
     """
     return None
 
+
+def execute_code(code: str, language: str = "python") -> dict:
+    """
+    Execute Python or PowerShell code in a sandboxed subprocess.
+    
+    Args:
+        code: The code to execute
+        language: Either "python" or "powershell" (default: "python")
+    
+    Returns:
+        dict with keys: success, output/error, return_code
+    """
+    from safety.tool_guard import check_imports, get_safe_env
+    
+    if language not in ("python", "powershell"):
+        return {
+            "success": False,
+            "error": f"Unsupported language: {language}. Must be 'python' or 'powershell'."
+        }
+    
+    # Security check for Python code
+    if language == "python":
+        allowed, reason = check_imports(code)
+        if not allowed:
+            return {"success": False, "error": f"Security check failed: {reason}"}
+    
+    # Create a temporary file for the code
+    import tempfile
+    import subprocess
+    import sys
+    
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".py" if language == "python" else ".ps1",
+            delete=False
+        ) as f:
+            f.write(code)
+            temp_path = f.name
+        
+        # Build the command
+        if language == "python":
+            cmd = [sys.executable, temp_path]
+        else:  # powershell
+            cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", temp_path]
+        
+        # Execute with timeout
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=EXECUTE_CODE_TIMEOUT,
+            env=get_safe_env(),
+            creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        )
+        
+        # Clean up temp file
+        import os
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+        
+        if result.returncode == 0:
+            return {
+                "success": True,
+                "output": result.stdout,
+                "return_code": result.returncode
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.stderr or f"Process exited with code {result.returncode}",
+                "output": result.stdout,
+                "return_code": result.returncode
+            }
+    
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "error": f"Code execution timed out after {EXECUTE_CODE_TIMEOUT} seconds"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
