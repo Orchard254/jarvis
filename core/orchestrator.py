@@ -278,73 +278,12 @@ class Orchestrator:
             # Direct to tool loop - let main LLM decide everything
             # No intent routing layer - modern LLMs handle simple, complex, and ambiguous commands
             original_intent = clean_input
-            _routing_source = "direct"  # Simplified tracking
 
-            # ── Fast-path: pre-built fallback script ────────────────────
-            # If get_fallback_script returns a script for this intent, run it
-            # directly — no LLM call, no iteration loop, instant execution.
-            # On success: save as candidate skill and return immediately.
-            # On failure: fall through to the LLM loop with the error as context.
-            #
-            # IMPORTANT: preserve the original intent BEFORE injecting the error
-            # context into clean_input.  skill save_candidate() must always use
-            # the clean label so the skill store isn't polluted with error strings.
-            original_intent = clean_input
+            # Fast-path scripts disabled: Modern LLMs handle all commands well
+            # with tool calling. The 278-line get_fallback_script() implementation
+            # was removed as the complexity wasn't justified for the marginal gain.
 
-            fast_script = get_fallback_script(original_intent)
-            if fast_script:
-                logger.info(f"Fast-path script available for '{clean_input[:60]}'")
-                fast_result = self._execute_wrapper(
-                    "execute_code", {"code": fast_script, "language": "python"}
-                )
-                stdout = fast_result.get("stdout", "").strip()
-                if (
-                    fast_result.get("success")
-                    and stdout
-                    and not stdout.startswith("ERROR:")
-                    and "ERROR:" not in stdout
-                ):
-                    logger.info("Fast-path succeeded — skipping LLM loop")
-                    if self._memory:
-                        self._memory.write_episodic(
-                            "response",
-                            command_text=user_input,
-                            tool_name="execute_code",
-                            success=True,
-                        )
-                    from skills.skill_store import save_candidate
-
-                    save_candidate(original_intent, fast_script, "python")
-                    self._history.append({"role": "user", "content": user_input})
-                    self._history.append({"role": "assistant", "content": stdout})
-                    self._recovery.reset()
-                    return stdout
-                else:
-                    # Inject the failure as context for the LLM loop so it knows
-                    # what was already tried.  clean_input is modified here —
-                    # original_intent stays clean for skill label use below.
-                    err = fast_result.get("stderr", stdout or "unknown error")[:300]
-                    logger.info(f"Fast-path failed ({err[:80]}), handing off to LLM")
-                    
-                    # Analyze error type to provide appropriate guidance
-                    error_lower = err.lower()
-                    if "file not found" in error_lower or "no such file" in error_lower:
-                        guidance = "The error suggests a file/path issue. Consider using query_pc_index to locate the correct path, or verify the path exists."
-                    elif "permission" in error_lower or "access is denied" in error_lower:
-                        guidance = "The error indicates a permission issue. Try running with elevated privileges or choose a different location."
-                    elif "syntax" in error_lower or "invalid syntax" in error_lower:
-                        guidance = "The error indicates a syntax problem. Review the code for Python syntax errors."
-                    elif "module" in error_lower and "not found" in error_lower:
-                        guidance = "The error indicates a missing module. Install it via pip or use an alternative approach."
-                    else:
-                        guidance = "Review the error above and adjust your approach accordingly."
-                    
-                    clean_input = (
-                        f"{original_intent}\n"
-                        f"[Pre-built script ran but failed: {err}. "
-                        f"{guidance}]"
-                    )
-
+            # ── Main LLM Tool-Calling Loop ────────────────────────────────
             memory_context = ""
             if self._memory:
                 parts = []
@@ -501,9 +440,7 @@ class Orchestrator:
                     )
 
                 # If successful, check for execute_code and save as candidate skill
-                # Skip for social/chat intents — saving "hello" → volume code
-                # pollutes the skill store and causes wrong auto-execution later.
-                if result.get("success") and _routing_source != "social_chat":
+                if result.get("success"):
                     tool_log = result.get("tool_calls", [])
                     for entry in tool_log:
                         if entry.get("tool") == "execute_code":

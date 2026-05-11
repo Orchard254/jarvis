@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Performance Profiling Script for JARVIS Intent System
-Identifies bottlenecks in intent routing and classification
+Performance Profiling Script for JARVIS System
+Identifies bottlenecks in tool execution and LLM response
 """
 
 import cProfile
@@ -13,46 +13,6 @@ from pathlib import Path
 
 # Add workspace to path
 sys.path.insert(0, '/workspace')
-
-def profile_intent_classifier():
-    """Profile the semantic intent classifier with various inputs"""
-    from brain.intent_classifier import SemanticIntentClassifier
-    
-    classifier = SemanticIntentClassifier()
-    
-    # Test cases representing different scenarios
-    test_queries = [
-        "set volume to 50",
-        "what is the weather today",
-        "turn on the lights",
-        "play some music",
-        "set brightness to maximum",
-        "tell me a joke",
-        "search for python tutorials",
-        "open chrome browser",
-        "what time is it",
-        "calculate 25 * 17"
-    ]
-    
-    print("\n=== Profiling Intent Classifier ===")
-    
-    profiler = cProfile.Profile()
-    profiler.enable()
-    
-    # Run multiple iterations to get meaningful stats
-    for _ in range(10):
-        for query in test_queries:
-            result = classifier.classify(query)
-    
-    profiler.disable()
-    
-    # Print stats
-    s = io.StringIO()
-    stats = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
-    stats.print_stats(20)
-    print(s.getvalue())
-    
-    return s.getvalue()
 
 def profile_embedding_generation():
     """Profile embedding generation (often a bottleneck)"""
@@ -102,13 +62,7 @@ def run_comprehensive_profile():
     
     results = {}
     
-    try:
-        results['classifier'] = profile_intent_classifier()
-    except Exception as e:
-        results['classifier'] = f"Error profiling classifier: {e}"
-        print(f"Warning: {e}")
-    
-    # Router profiling removed - intent router no longer exists
+    # Router/classifier profiling removed - intent router no longer exists
     
     try:
         results['embeddings'] = profile_embedding_generation()
