@@ -20,15 +20,16 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual Environment
 venv/
+ENV/
 
-# IDE
-.vscode/
-.idea/
+# Performance profiling
+PROFILING_ANALYSIS.md
+performance_profile_report.txt
 
-# OS
-.DS_Store
-Thumbs.db
+# Database
+memory.db
 ```
