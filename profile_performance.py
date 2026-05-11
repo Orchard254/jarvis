@@ -54,46 +54,6 @@ def profile_intent_classifier():
     
     return s.getvalue()
 
-def profile_intent_router():
-    """Profile the intent router with various inputs"""
-    from core.intent_router import route
-    
-    test_queries = [
-        "set volume to 50",
-        "what is the weather today",
-        "turn on the lights in the kitchen",
-        "play some jazz music",
-        "set brightness to 80 percent",
-        "tell me something funny",
-        "search for machine learning courses",
-        "open firefox",
-        "what's the current time",
-        "compute 123 + 456"
-    ]
-    
-    print("\n=== Profiling Intent Router ===")
-    
-    profiler = cProfile.Profile()
-    profiler.enable()
-    
-    # Run multiple iterations
-    for _ in range(10):
-        for query in test_queries:
-            try:
-                result = route(query)
-            except Exception as e:
-                pass  # Ignore errors, just measure performance
-    
-    profiler.disable()
-    
-    # Print stats
-    s = io.StringIO()
-    stats = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
-    stats.print_stats(20)
-    print(s.getvalue())
-    
-    return s.getvalue()
-
 def profile_embedding_generation():
     """Profile embedding generation (often a bottleneck)"""
     try:
@@ -126,32 +86,11 @@ def profile_embedding_generation():
     return s.getvalue()
 
 def profile_cache_operations():
-    """Profile cache lookup operations"""
-    from core import intent_learner
-    
-    # Pre-populate some learned intents
-    for i in range(50):
-        intent_learner.record_route(f"test query {i}", [{"tool": f"tool_{i}", "action": "test"}], success=True)
-    
-    test_queries = [f"test query {i}" for i in range(20)]
-    
-    print("\n=== Profiling Cache Operations ===")
-    
-    profiler = cProfile.Profile()
-    profiler.enable()
-    
-    for _ in range(10):
-        for query in test_queries:
-            intent_learner.lookup_route(query)
-    
-    profiler.disable()
-    
-    s = io.StringIO()
-    stats = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
-    stats.print_stats(15)
-    print(s.getvalue())
-    
-    return s.getvalue()
+    """Profile cache lookup operations - REMOVED: intent learner no longer exists"""
+    print("\n=== Cache Operations Profiling Removed ===")
+    print("Intent learning/cache system has been removed.")
+    print("All tool selection is now handled directly by the main LLM.")
+    return "Cache operations profiling removed"
 
 def run_comprehensive_profile():
     """Run all profiling tests and generate report"""
@@ -169,11 +108,7 @@ def run_comprehensive_profile():
         results['classifier'] = f"Error profiling classifier: {e}"
         print(f"Warning: {e}")
     
-    try:
-        results['router'] = profile_intent_router()
-    except Exception as e:
-        results['router'] = f"Error profiling router: {e}"
-        print(f"Warning: {e}")
+    # Router profiling removed - intent router no longer exists
     
     try:
         results['embeddings'] = profile_embedding_generation()
@@ -213,8 +148,6 @@ def run_comprehensive_profile():
     
     # Analyze results for common bottlenecks
     classifier_output = str(results.get('classifier', ''))
-    router_output = str(results.get('router', ''))
-    cache_output = str(results.get('cache', ''))
     
     if 'cosine' in classifier_output.lower() or 'dot' in classifier_output.lower():
         bottlenecks.append("• Embedding similarity calculations are expensive - consider approximate nearest neighbor search")
@@ -222,8 +155,7 @@ def run_comprehensive_profile():
     if 'classify' in classifier_output.lower() and 'cumulative' in classifier_output.lower():
         bottlenecks.append("• Classification loop runs through all tools - early exit on high confidence already implemented ✓")
     
-    if 'lookup_route' in cache_output or 'record_route' in cache_output:
-        bottlenecks.append("• Database operations in cache lookups - batch operations already optimized ✓")
+    # Cache/router bottlenecks removed - intent system no longer exists
     
     bottlenecks.append("• Consider async processing for non-critical path operations")
     bottlenecks.append("• Implement batch processing for multiple similar queries")

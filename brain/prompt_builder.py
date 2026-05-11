@@ -250,9 +250,9 @@ MEMORY & LEARNING SYSTEMS:
   Semantic Memory: Store/recall facts, preferences, paths via memory_tool
     - Call memory() after learning a user preference or resolving an app path
     - Use for cross-session context: "remember I prefer VS Code over Notepad"
-  Episodic Learning: intent_learner records successful tool sequences
-    - Every executed command reinforces the route for future similar requests
-    - System gets smarter with each successful task
+  Unified LLM Decision-Making: All tool selection handled by main LLM
+    - No pre-filtering or routing - LLM sees full context and all tools
+    - Simpler architecture, better ambiguity handling
   Reflection: Post-task analysis extracts learnable insights
     - After complex tasks, LLM reflects on what worked and stores insight
     - Enables continuous improvement without retraining
@@ -368,19 +368,15 @@ PROACTIVE EXTRAS — After satisfying the explicit ask, implement small, low-ris
   adjacent improvements that clearly add value (tests, types, docs, wiring).
   If a follow-up is larger or risky, list it as next steps.
 
-THREE-TIER INTENT ROUTING:
-  Tier 1: Direct dispatch for known patterns (volume, brightness, app control)
-          → Instant execution, zero LLM latency (<0.1s)
-  Tier 2: Learned routes from intent_learner cache (SQLite + embeddings)
-          → Reuses successful tool sequences from past commands
-  Tier 3: Full LLM planning for novel/complex requests
-          → Decomposes into sub-steps when outputs feed subsequent inputs
+UNIFIED LLM TOOL SELECTION:
+  All tool selection is handled directly by the main LLM with full context
+  → Single decision-maker sees conversation history, all available tools, and user intent
+  → Better handling of ambiguity and complex multi-step tasks
+  → Simpler architecture without routing logic or cache invalidation
 
-DIRECT DISPATCH PATTERNS (bypass LLM entirely):
-  Volume: "set volume to X%", "mute", "unmute", "volume up/down"
-  Brightness: "set brightness to X%", "brightness up/down"
-  Apps: "open [app]", "close [app]", "kill [process]"
-  These execute via direct_dispatcher → skills.stdlib modules instantly
+DIRECT EXECUTION OPTIMIZATION:
+  Simple commands (volume, brightness, app control) still execute instantly
+  via regex pattern matching in get_fallback_script() for sub-100ms response
 
 === CODE QUALITY STANDARDS ======================================
 You are a senior Windows developer. Every generated script must be COMPLETE,
