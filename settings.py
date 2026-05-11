@@ -178,6 +178,9 @@ ALLOWED_IMPORTS = {
     "webdriver",    # Selenium WebDriver
     "bs4",          # BeautifulSoup for HTML parsing
     "lxml",         # fast XML/HTML parser
+    # ── Windows audio API ──────────────────────────────────────────────────────
+    "pycaw",        # Windows Core Audio API (precise volume/device control)
+    "pycaw.pycaw",  # pycaw main module (AudioUtilities, IAudioEndpointVolume)
     # ── document handling ──────────────────────────────────────────────────────
     "docx",         # python-docx for Word documents
     "xlsxwriter",   # Excel file creation

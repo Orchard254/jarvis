@@ -17,7 +17,7 @@ from autonomous.approval_gate import ApprovalGate
 from autonomous.scheduler import Scheduler
 from brain.tool_loop import run as tool_loop_run
 from safety import executor as safety
-from settings import ENABLE_PLANNING, ENABLE_REFLECTION, ITERATION_CAPS
+from settings import ENABLE_PLANNING, ENABLE_REFLECTION, ITERATION_CAPS, TOOL_LOOP_HISTORY_MESSAGES
 from skills.skill_runner import run_skill
 from skills.skill_store import get_active_skills, search_by_intent
 from skills.skill_store import init_db as init_skills
@@ -97,6 +97,11 @@ class Orchestrator:
         self._handle_lock = __import__("threading").Lock()
         init_skills()
 
+        # Cache whether tool_loop_run accepts a 'recovery' kwarg so we don't
+        # call inspect.signature() on every handle() invocation.
+        _tl_sig = inspect.signature(tool_loop_run)
+        self._tool_loop_accepts_recovery: bool = "recovery" in _tl_sig.parameters
+
         # ── Start Heartbeat Monitor for task tracking ────────────────────────────
         try:
             from core.heartbeat_monitor import monitor
@@ -104,6 +109,20 @@ class Orchestrator:
             logger.info("Heartbeat monitor started")
         except Exception as _hb_exc:
             logger.warning(f"Heartbeat monitor failed to start: {_hb_exc}")
+
+        # ── Warm up the semantic intent classifier in the background ─────────────
+        # The classifier embeds ~150 prototype phrases on first use.  Running this
+        # in a daemon thread means the first user command doesn't pay the latency
+        # cost — by the time the user speaks, the vectors are ready.
+        def _warmup_classifier():
+            try:
+                from brain.intent_classifier import _classifier  # noqa: PLC0415
+                _classifier._ensure_ready()
+                logger.info("intent_classifier: warmup complete — %s", _classifier.stats())
+            except Exception as _wc_exc:
+                logger.debug("intent_classifier warmup skipped: %s", _wc_exc)
+
+        __import__("threading").Thread(target=_warmup_classifier, daemon=True, name="classifier-warmup").start()
 
         # ── Load recent conversation history from episodic memory ──────────────
         # Pre-populate _history so the LLM sees prior context across restarts.
@@ -277,6 +296,52 @@ class Orchestrator:
                     self._history.append({"role": "assistant", "content": immediate_response})
                     return immediate_response
                 
+                # Handle social/chat-only input — skip tool loop entirely
+                # The LLM router classified this as needing no tools, so we make
+                # a chat-only call (no tool schemas) to prevent the model from
+                # erroneously calling execute_code for greetings/small talk.
+                if intent.get("routing_source") == "social_chat":
+                    try:
+                        from brain import ollama_client
+                        from brain.prompt_builder import build_system_prompt
+
+                        chat_messages = [
+                            {"role": "system", "content": build_system_prompt()},
+                        ]
+                        if self._memory:
+                            user_name = self._memory.get_preference("user_name")
+                            if user_name:
+                                chat_messages.append(
+                                    {"role": "system", "content": f"The user's name is {user_name}."}
+                                )
+                        chat_messages.extend(self._history[-TOOL_LOOP_HISTORY_MESSAGES:])
+                        chat_messages.append({"role": "user", "content": clean_input})
+
+                        chat_result = ollama_client.chat(
+                            messages=chat_messages,
+                            tools=[],
+                            temperature=0.3,
+                        )
+                        response = chat_result.get("content", "Hello!").strip()
+
+                        # Log to episodic memory
+                        if self._memory:
+                            self._memory.write_episodic(
+                                "response",
+                                command_text=user_input,
+                                tool_name="chat",
+                                success=True,
+                                tool_result={"response": response[:500]},
+                            )
+
+                        self._history.append({"role": "user", "content": user_input})
+                        self._history.append({"role": "assistant", "content": response})
+                        self._recovery.reset()
+                        return response
+                    except Exception as _chat_exc:
+                        logger.warning(f"Chat-only call failed, falling back: {_chat_exc}")
+                        # Fall through to normal tool loop as last resort
+                
                 # Capture the routing source so we can feed the outcome back
                 # to the intent learner after execution completes.
                 _routing_source = intent.get("routing_source", "keyword")
@@ -350,14 +415,13 @@ class Orchestrator:
                 if self._memory:
                     parts = []
 
-                    # ── Recent command history (raw context for LLM reasoning) ──────
-                    # Provide the LLM with recent commands, timestamps, and outcomes
-                    # so it can autonomously decide if this is a continuation, new task,
-                    # or unrelated request. No hardcoded rules — let the model reason.
-                    recent_cmds = self._memory.get_recent_episodes(limit=3)
-                    if recent_cmds:
+                    # ── Recent command history — single DB call serves both uses ──────
+                    # Fetch limit=5 once; the first 3 are used for the timestamped
+                    # history block, all 5 for the "This session:" summary line.
+                    recent_episodes = self._memory.get_recent_episodes(limit=5)
+                    if recent_episodes:
                         history_lines = []
-                        for i, cmd in enumerate(recent_cmds, 1):
+                        for i, cmd in enumerate(recent_episodes[:3], 1):
                             ts = cmd.get("timestamp", 0)
                             ago = f"{int(_time.time() - ts)}s ago" if ts else ""
                             txt = cmd.get("command_text", "")
@@ -372,9 +436,6 @@ class Orchestrator:
                             )
 
                     # ── User identity: always inject first so it's most prominent ──────
-                    # When the user has told JARVIS their name (or any other identity
-                    # fact), make sure it's at the top of context so the LLM never
-                    # needs to search the PC for information it already knows.
                     user_name = self._memory.get_preference("user_name")
                     if user_name:
                         parts.append(f"The user's name is {user_name}.")
@@ -389,12 +450,11 @@ class Orchestrator:
                     if cross_session:
                         parts.append(cross_session)
 
-                    # Recent commands from this session (last 3)
-                    recent = self._memory.get_recent_episodes(limit=5)
-                    recent_cmds = [
-                        e.get("command_text", "") for e in recent if e.get("command_text")
-                    ]
-                    recent_str = "; ".join(recent_cmds[-3:]) if recent_cmds else ""
+                    # Session summary — reuse the episodes already fetched above
+                    recent_cmds_text = [
+                        e.get("command_text", "") for e in recent_episodes if e.get("command_text")
+                    ] if recent_episodes else []
+                    recent_str = "; ".join(recent_cmds_text[-3:]) if recent_cmds_text else ""
                     if recent_str:
                         parts.append(f"This session: {recent_str}")
 
@@ -421,13 +481,24 @@ class Orchestrator:
                 # For complex multi-step requests, ask the LLM to generate a plan
                 # before entering the tool loop. Inject the plan into memory_context
                 # so the tool loop LLM has explicit step guidance.
+                # Hard timeout: if the planning LLM call takes >20s, skip the plan
+                # and proceed immediately. The tool loop handles the task fine without
+                # a plan — a 3-minute freeze while "planning" is far worse than no plan.
                 if ENABLE_PLANNING:
                     try:
                         from brain.planner import plan as brain_plan
+                        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeout
 
-                        plan_steps = brain_plan(
-                            clean_input, list(self._history), memory_context
-                        )
+                        with ThreadPoolExecutor(max_workers=1) as _plan_pool:
+                            _plan_future = _plan_pool.submit(
+                                brain_plan, clean_input, list(self._history), memory_context
+                            )
+                            try:
+                                plan_steps = _plan_future.result(timeout=20)
+                            except _FutureTimeout:
+                                logger.debug("Planning timed out (>20s) — skipping plan")
+                                plan_steps = None
+
                         if plan_steps:
                             plan_str = "Execution plan:\n" + "\n".join(
                                 f"  {i + 1}. {step}" for i, step in enumerate(plan_steps)
@@ -441,9 +512,8 @@ class Orchestrator:
                         logger.debug(f"Planning skipped: {_plan_exc}")
 
                 # Conditionally pass recovery if tool_loop supports it (forward-compat)
-                _tl_sig = inspect.signature(tool_loop_run)
                 _tl_kwargs: dict = {}
-                if "recovery" in _tl_sig.parameters:
+                if self._tool_loop_accepts_recovery:
                     _tl_kwargs["recovery"] = self._recovery
                 result = tool_loop_run(
                     user_input=clean_input,
@@ -498,7 +568,9 @@ class Orchestrator:
                     )
 
                 # If successful, check for execute_code and save as candidate skill
-                if result.get("success"):
+                # Skip for social/chat intents — saving "hello" → volume code
+                # pollutes the skill store and causes wrong auto-execution later.
+                if result.get("success") and _routing_source != "social_chat":
                     tool_log = result.get("tool_calls", [])
                     for entry in tool_log:
                         if entry.get("tool") == "execute_code":
@@ -551,20 +623,29 @@ class Orchestrator:
 
                 # ── Post-execution reflection ───────────────────────────────────────
                 # Ask the LLM to extract learnable patterns from what just happened.
-                # Writes insights to semantic memory. Non-blocking — failures are
-                # silently logged.
+                # Runs in a daemon thread so it NEVER blocks the CLI response.
+                # The comment above claiming "non-blocking" was aspirational — the
+                # original code ran synchronously inside the handle lock, causing
+                # up to 180s of apparent freeze after every command.
                 if ENABLE_REFLECTION and self._memory:
-                    try:
-                        from brain.reflection import reflect as brain_reflect
+                    _reflect_args = (
+                        user_input,
+                        result.get("tool_calls", []),
+                        result.get("success", False),
+                        self._memory,
+                    )
 
-                        brain_reflect(
-                            user_input,
-                            result.get("tool_calls", []),
-                            result.get("success", False),
-                            self._memory,
-                        )
-                    except Exception as _ref_exc:
-                        logger.debug(f"Reflection skipped: {_ref_exc}")
+                    def _run_reflection(args=_reflect_args):
+                        try:
+                            from brain.reflection import reflect as brain_reflect
+                            brain_reflect(*args)
+                        except Exception as _ref_exc:
+                            logger.debug(f"Reflection skipped: {_ref_exc}")
+
+                    import threading as _threading
+                    _threading.Thread(
+                        target=_run_reflection, daemon=True, name="reflection"
+                    ).start()
 
                 # Update conversation history (keep last 20 turns = 40 entries)
                 self._history.append({"role": "user", "content": user_input})

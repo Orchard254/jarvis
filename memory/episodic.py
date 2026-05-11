@@ -14,9 +14,24 @@ from settings import MEMORY_DB
 logger = logging.getLogger(__name__)
 
 
+def _connect() -> sqlite3.Connection:
+    """Open a connection with WAL mode and a generous busy timeout.
+
+    WAL allows readers and writers to proceed concurrently — critical because
+    the scheduler thread and main thread both write to this DB at the same time.
+    Without WAL the default exclusive lock means one thread immediately raises
+    'database is locked' while the other holds the write lock.
+    busy_timeout=5000 makes SQLite retry for up to 5 s before giving up.
+    """
+    conn = sqlite3.connect(MEMORY_DB, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
 def init_db():
     MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
@@ -49,7 +64,7 @@ def write(
     success: bool = None,
     user_feedback: str = None,
 ):
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         c.execute(
@@ -76,7 +91,7 @@ def write(
 
 
 def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -100,7 +115,7 @@ def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
 
 
 def get_recent(limit: int = 20) -> list[dict]:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -114,7 +129,7 @@ def get_recent(limit: int = 20) -> list[dict]:
 
 def get_successful_commands(limit: int = 20) -> list[dict]:
     """Cross-session query: recent successful command events across all sessions."""
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -142,7 +157,7 @@ def get_successful_commands(limit: int = 20) -> list[dict]:
 def prune_old(days: int = 90):
     """Delete episodes older than N days; also trim the table to at most 10000 rows."""
     cutoff = time.time() - days * 86400
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         c.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
@@ -167,7 +182,7 @@ def prune_old(days: int = 90):
 
 def get_command_frequency(limit: int = 20) -> list[dict]:
     """Return the most frequently issued commands across all sessions."""
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         rows = c.execute(

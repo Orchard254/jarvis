@@ -297,9 +297,12 @@ class RecoveryManager:
         return summary
 
     def reset(self):
+        # Clear per-turn retry counters and consecutive-failure streak.
+        # Do NOT clear _failure_log or _failure_patterns — those accumulate
+        # cross-turn pattern data that circuit breakers and get_failure_summary()
+        # depend on. Clearing them on every success erases learned diagnostics.
         self._consecutive_failures = 0
         self._tool_attempts.clear()
-        self._failure_log.clear()
 
     def get_circuit_breaker_status(self, tool_name: Optional[str] = None) -> dict:
         if tool_name:

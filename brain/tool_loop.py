@@ -213,6 +213,11 @@ def run(
                     {"tool": name, "args": args, "result": result, "call_id": tc["id"], "cached": False}
                 )
 
+                # Inform recovery manager of outcome so circuit breakers stay accurate
+                if recovery is not None:
+                    if result.get("success"):
+                        recovery.record_success(name)
+
                 # Cache successful read-only tool results
                 cache.set(name, args, result)
 
@@ -228,13 +233,19 @@ def run(
                     if path:
                         cache.invalidate_pattern("read_file", path=path)
                 elif name == "execute_code":
-                    # Broad invalidation after code execution
-                    cache.invalidate_pattern("*")
+                    # execute_code can mutate any file or system state, so the
+                    # entire cache must be cleared. invalidate_pattern("*") was
+                    # a no-op — it only removes entries whose tool_name == "*",
+                    # which is never set. cache.clear() is the correct call.
+                    cache.clear()
 
             # Recovery cap check — stop if the tool keeps failing
             if recovery is not None and not result.get("success"):
                 error_msg = result.get("error", "unknown error")
-                should_continue = recovery.should_retry(name, error_msg)
+                # should_retry returns (bool, float) — unpack both values.
+                # Treating the tuple directly as a bool is always True (non-empty
+                # tuple), which silently disabled the recovery cap entirely.
+                should_continue, _backoff_delay = recovery.should_retry(name, error_msg)
                 if not should_continue:
                     logger.warning(
                         f"tool_loop: recovery cap hit for {name} — stopping loop"

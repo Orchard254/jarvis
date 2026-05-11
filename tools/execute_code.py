@@ -341,13 +341,15 @@ print(f"Free: {disk.free//1e9:.1f}GB")
         if app_names:
             if len(app_names) == 1:
                 return _LAUNCH_APP_SCRIPT % repr(app_names[0])
-            # Multi-app: generate a script that launches each one
-            lines = ["import os", "from pathlib import Path", ""]
+            # Multi-app: generate one fully-substituted block per app.
+            # BUG FIX: previously appended _LAUNCH_APP_SCRIPT.strip() without
+            # applying "% repr(an)", leaving a literal "%s" in the generated
+            # code and causing a SyntaxError that blocked execution and forced
+            # an unnecessary (and sometimes failing) LLM fallback call.
+            parts = []
             for an in app_names:
-                lines.append(f"APP_NAME = {repr(an)}")
-                lines.append(_LAUNCH_APP_SCRIPT.strip())
-                lines.append("")
-            return "\n".join(lines)
+                parts.append(_LAUNCH_APP_SCRIPT % repr(an))
+            return "\n".join(parts)
 
     # ── Install app (search first, never auto-install) ─────────────────
     _install_m = re.match(

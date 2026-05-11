@@ -324,6 +324,18 @@ def record_route(
         finally:
             conn.close()
 
+        # ── Reinforce the semantic classifier with this real-world phrasing ──
+        # The classifier already knows general patterns from its prototype bank.
+        # Every time a user command succeeds or fails, we update its live vectors
+        # so it adapts to *this* user's vocabulary over sessions.
+        try:
+            from brain.intent_classifier import _classifier  # noqa: PLC0415
+
+            if tools:
+                _classifier.reinforce(intent, tools[0], success=success)
+        except Exception:
+            pass  # classifier is optional — never block route recording
+
         return route_id
 
     except Exception as exc:

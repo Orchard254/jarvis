@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 _hw_cache: dict = {}
 _hw_ts: float = 0.0
 _HW_TTL = 60.0
+_hw_lock = __import__("threading").Lock()
 
 # Ordered preference for prose guidance. Tools not listed here are appended
 # after (still documented in the catalog). Names must match registry keys.
@@ -72,8 +73,9 @@ _TOOL_SELECTION_PRIORITY: list[tuple[str, str]] = [
 def _hw() -> dict:
     """Return live hardware stats, refreshing every 60 s."""
     global _hw_cache, _hw_ts
-    if _hw_cache and (_time.time() - _hw_ts) < _HW_TTL:
-        return _hw_cache
+    with _hw_lock:
+        if _hw_cache and (_time.time() - _hw_ts) < _HW_TTL:
+            return _hw_cache
 
     hw: dict = {}
     try:
@@ -129,8 +131,9 @@ def _hw() -> dict:
             "disk_warn": False,
         }
 
-    _hw_cache = hw
-    _hw_ts = _time.time()
+    with _hw_lock:
+        _hw_cache = hw
+        _hw_ts = _time.time()
     return hw
 
 
@@ -186,8 +189,10 @@ def build_tool_hierarchy_block() -> str:
 # ── System prompt template ────────────────────────────────────────────────────
 
 _PROMPT = """\
-You are JARVIS — an autonomous Windows AI agent with full, unrestricted desktop control.
-You operate exactly like a skilled sysadmin sitting at the keyboard: you see the screen,
+You are SYNTH — a Powerful autonomous AI agent with full, unrestricted desktop control.
+Follow the user's requirements carefully & to the letter.
+Follow Windows content policies to avoid errors while executing tasks.
+You operate exactly like a skilled sys admin sitting at the keyboard: you see the screen,
 control every input, and execute anything needed without unnecessary confirmation loops.
 Powered by {model} · {ctx_k}K context · temp {temp}
 Time: {now}
@@ -232,98 +237,6 @@ and execute it immediately. Only ask if BOTH options are irreversible.
   "delete files"  (no path given)
       → ASK — deletion is irreversible. "Which files / folder?"
 
-CANONICAL DESKTOP ARRANGEMENT (use when user says "arrange", "tile", "organize windows"):
-    import ctypes, win32gui, win32con, win32process, psutil
-    from math import ceil, sqrt
-
-    # Collect TASKBAR-VISIBLE windows only (matches Windows shell behavior)
-    wins = []
-    def _cb(hwnd, results):
-        if not hwnd:
-            return 1
-        if not win32gui.IsWindowVisible(hwnd):
-            return 1
-        # Top-level only
-        if win32gui.GetParent(hwnd) != 0:
-            return 1
-        # Has actual size
-        try:
-            rect = win32gui.GetWindowRect(hwnd)
-            if (rect[2] - rect[0]) <= 0 or (rect[3] - rect[1]) <= 0:
-                return 1
-        except Exception:
-            return 1
-        # Taskbar visibility filters
-        ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-        style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-        if ex_style & win32con.WS_EX_TOOLWINDOW:  # No taskbar button
-            return 1
-        if not (style & win32con.WS_CAPTION):  # No title bar
-            return 1
-        owner = win32gui.GetWindow(hwnd, win32con.GW_OWNER)
-        if owner and owner != 0:  # Owned window (no taskbar button)
-            return 1
-        # Must have title
-        title = win32gui.GetWindowText(hwnd)
-        if not title.strip():
-            return 1
-        # Skip known system windows
-        if title in ("", "Program Manager", "Windows Input Experience"):
-            return 1
-        results.append(hwnd)
-        return 1
-    win32gui.EnumWindows(_cb, wins)
-
-    # Get screen dimensions
-    sw = ctypes.windll.user32.GetSystemMetrics(0)
-    sh = ctypes.windll.user32.GetSystemMetrics(1)
-
-    # Deduplicate by process so tabbed apps (like modern Notepad)
-    # are treated as one arrangeable application.
-    import win32process
-
-    unique = []
-    seen_pids = set()
-
-    for hwnd in wins:
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        if pid in seen_pids:
-            continue
-        seen_pids.add(pid)
-        unique.append(hwnd)
-
-    n = len(unique)
-
-    if n == 0:
-        print("No windows to arrange.")
-    else:
-        cols = ceil(sqrt(n))
-        rows = ceil(n / cols)
-        w, h = sw // cols, sh // rows
-
-        for i, hwnd in enumerate(unique):
-            x, y = (i % cols) * w, (i // cols) * h
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-            win32gui.MoveWindow(hwnd, x, y, w, h, True)
-
-        print(f"Arranged {{n}} application window(s) in a {{cols}}x{{rows}} grid.")
-
-CANONICAL ICON ARRANGEMENT (auto-arrange + align desktop icons):
-    import subprocess
-    # Right-click → View → Auto arrange icons via shell command
-    subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         "$sh = New-Object -ComObject Shell.Application; "
-         "$desktop = $sh.Namespace(0); "
-         "$desktop.Self.InvokeVerb('view')"],
-        capture_output=True
-    )
-    # Simpler fallback: F5 to refresh desktop
-    import pyautogui
-    pyautogui.hotkey("win", "d")
-    pyautogui.press("f5")
-    print("Desktop icons refreshed.")
-
 
 ACT DECISIVELY. You have the tools, you have the machine, you know what to do.
 Reason about the best approach, then execute. Prefer direct action over probing.
@@ -366,83 +279,6 @@ REQUIREMENTS (non-negotiable):
   ✓ subprocess: always use subprocess.run([...], capture_output=True, text=True)
   ✓ Paths: always absolute — Path.home(), os.environ["APPDATA"], etc.
   ✓ Never use os.system(); never call shell=True unless strictly necessary
-
-REFERENCE PATTERNS — proven implementations you can adapt or improve:
-
-  ── VOLUME SET (pycaw — most reliable) ──────────────────────────────────────
-    from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL
-    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-    volume = cast(interface, POINTER(IAudioEndpointVolume))
-    volume.SetMasterVolumeLevelScalar(0.40, None)   # 0.0 – 1.0
-    print("Volume set to 40%.")
-
-  ── MUTE / UNMUTE (pycaw) ────────────────────────────────────────────────────
-    # (same setup as above, then:)
-    volume.SetMute(1, None)   # 1 = mute, 0 = unmute
-    print("Muted.")
-
-  ── VOLUME fallback (ctypes SendMessage — no pycaw) ─────────────────────────
-    import ctypes
-    WM_APPCOMMAND = 0x0319
-    APPCOMMAND_VOLUME_MUTE = 0x80000
-    hwnd = ctypes.windll.user32.GetForegroundWindow()
-    ctypes.windll.user32.SendMessageW(hwnd, WM_APPCOMMAND, 0, APPCOMMAND_VOLUME_MUTE)
-    print("Toggled mute via SendMessage.")
-
-  ── BRIGHTNESS (WMI — guaranteed on laptops with integrated display) ──────────
-    import wmi
-    c = wmi.WMI(namespace="wmi")
-    methods = c.WmiMonitorBrightnessMethods()[0]
-    methods.WmiSetBrightness(Brightness=30, Timeout=0)
-    print("Brightness set to 30%.")
-
-  ── CLOSE WINDOW BY NAME (win32gui) ──────────────────────────────────────────
-    import win32gui, win32con
-    target = "chrome"
-    found = []
-    def _cb(hwnd, _):
-        if target.lower() in win32gui.GetWindowText(hwnd).lower():
-            found.append(hwnd)
-    win32gui.EnumWindows(_cb, None)
-    for hwnd in found:
-        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
-    print(f"Closed {{len(found)}} window(s) matching '{{target}}'.")
-
-  ── CLICK AT COORDINATES (pyautogui) ─────────────────────────────────────────
-    import pyautogui
-    pyautogui.FAILSAFE = False
-    pyautogui.click(x=960, y=540)
-    print("Clicked.")
-
-  ── TYPE TEXT — clipboard paste (fastest, unicode-safe) ──────────────────────
-    import pyperclip, pyautogui
-    pyperclip.copy("text to type here")
-    pyautogui.hotkey("ctrl", "v")
-    print("Text entered.")
-
-  ── SEND MEDIA KEY (win32api — no focus needed) ──────────────────────────────
-    import win32api, win32con
-    VK = win32con.VK_MEDIA_PLAY_PAUSE   # also: VK_MEDIA_NEXT_TRACK, VK_VOLUME_MUTE
-    win32api.keybd_event(VK, 0, 0, 0)
-    win32api.keybd_event(VK, 0, win32con.KEYEVENTF_KEYUP, 0)
-    print("Media key sent.")
-
-  ── LAUNCH APP ───────────────────────────────────────────────────────────────
-    import os, subprocess
-    try:
-        os.startfile("spotify")
-    except Exception as e:
-        subprocess.Popen(["cmd", "/c", "start", "spotify"], shell=False)
-    print("Launch command sent.")
-
-  ── KILL PROCESS BY NAME ─────────────────────────────────────────────────────
-    import subprocess
-    r = subprocess.run(["taskkill", "/f", "/im", "chrome.exe"],
-                       capture_output=True, text=True)
-    print(r.stdout.strip() or r.stderr.strip())
 
   ── LIST VISIBLE WINDOWS ─────────────────────────────────────────────────────
     import win32gui, win32con

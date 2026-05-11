@@ -15,8 +15,18 @@ from settings import MEMORY_DB
 logger = logging.getLogger(__name__)
 
 
+def _connect() -> sqlite3.Connection:
+    """Open a connection with WAL mode and busy timeout.
+    Matches episodic._connect() — both modules share the same memory.db file.
+    """
+    conn = sqlite3.connect(MEMORY_DB, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
 def init_db():
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS preferences (
@@ -34,7 +44,7 @@ def init_db():
 
 def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
     """Insert or replace a preference (was named 'set', which shadowed the builtin)."""
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         c.execute(
@@ -52,7 +62,7 @@ def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
 
 def fetch(key: str, default=None):
     """Return a preference value by key (was named 'get', which shadowed the builtin)."""
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         row = c.execute(
@@ -66,7 +76,7 @@ def fetch(key: str, default=None):
 
 
 def get_all() -> dict:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         rows = c.execute("SELECT key, value FROM preferences").fetchall()
@@ -124,7 +134,7 @@ def infer_if_consistent(key: str, observed_value, min_occurrences: int = 5):
     """If same value observed repeatedly, auto-set as inferred preference."""
     value_json = json.dumps(observed_value)
     now = time.time()
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         # Ensure the tally table exists (created lazily alongside the main schema)

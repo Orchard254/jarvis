@@ -48,6 +48,15 @@ _SOCIAL_WORDS = frozenset(
     }
 )
 
+# ---------------------------------------------------------------------------
+# Keyword pre-router — catches obvious action commands without an LLM call.
+# BUG FIX: previously "close notepad", "kill chrome", etc. would time out or
+# be misclassified as social_chat by the LLM router.  A fast keyword pass
+# short-circuits the LLM entirely for unambiguous action verbs.
+# ---------------------------------------------------------------------------
+
+
+
 
 def _is_social_only_message(text: str) -> bool:
     words = [w for w in re.findall(r"[a-zA-Z']+", text.lower()) if w.isalpha()]
@@ -115,14 +124,22 @@ def _build_system_prompt() -> str:
         "show desktop → control_input\n"
         "mute volume → system_settings\n"
         "set brightness to 50 → system_settings\n"
-        "close chrome → control_window\n"
+        "close chrome → execute_code\n"
+        "close notepad → execute_code\n"
+        "kill firefox → execute_code\n"
+        "terminate an app → execute_code\n"
+        "quit calculator → execute_code\n"
         "open spotify → execute_code\n"
+        "open notepad and calculator → execute_code\n"
+        "launch notepad → execute_code\n"
         "list open windows → read_pc_state\n"
         "arrange open windows → execute_code\n"
         "search for python tutorials → search_web\n"
         "check wifi → system_settings\n"
         "take a screenshot → capture_screen\n"
         "hello → none\n"
+        "good morning → none\n"
+        "thanks → none\n"
     )
 
 
@@ -170,6 +187,32 @@ def ask_llm_routing(intent: str) -> list[str]:
                 intent[:60],
             )
             return []
+
+        # ── Semantic classifier: understand intent from meaning, not keywords ──
+        # Uses the already-loaded embedding model to compare this input against
+        # a broad prototype bank (15-25 diverse phrasings per tool).
+        # Handles casual/slang/indirect phrasings without any pattern hardcoding.
+        # Adapts over time via reinforce() called from intent_learner.record_route().
+        try:
+            from brain.intent_classifier import _classifier, HIGH_CONF, MED_CONF  # noqa: PLC0415
+
+            sem_tools, sem_conf = _classifier.classify(intent)
+            if sem_conf >= HIGH_CONF:
+                # High confidence — skip the LLM entirely
+                logger.info(
+                    "router_llm: semantic [%.2f] %r -> %s",
+                    sem_conf, intent[:60], sem_tools,
+                )
+                return sem_tools  # may be [] for social, or [tool] for action
+            elif sem_conf >= MED_CONF and sem_tools:
+                # Medium confidence — still call LLM but seed with semantic hint
+                logger.debug(
+                    "router_llm: semantic hint [%.2f] %r -> %s (LLM confirms)",
+                    sem_conf, intent[:60], sem_tools,
+                )
+                # Fall through to LLM with sem_tools as candidate (logged above)
+        except Exception as _sem_exc:
+            logger.debug("router_llm: semantic classifier unavailable (%s)", _sem_exc)
 
         messages = [
             {"role": "system", "content": _build_system_prompt()},

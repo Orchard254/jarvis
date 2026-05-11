@@ -6,6 +6,7 @@ Handles retries, timeouts, and health checks.
 import datetime
 import json
 import logging
+import random
 import time
 
 import requests
@@ -212,13 +213,25 @@ def chat(
                 logger.warning("Falling back to mock LLM")
                 return _mock_chat(messages, tools)
             wait_time = 2 ** (retry_count - 1)
-            logger.warning(
-                f"Request failed (attempt {retry_count}/{max_retries}), retrying in {wait_time}s: {e}"
-            )
-            # Use monotonic time for accurate backoff timing
-            deadline = time.monotonic() + wait_time
+            # BUG FIX: add ±25% jitter to prevent thundering-herd retries
+            # when multiple agent threads hit a transient 500 simultaneously.
+            jitter = random.uniform(-0.25 * wait_time, 0.25 * wait_time)
+            wait_total = max(0.1, wait_time + jitter)
+            # Log payload size on server errors to aid future diagnosis
+            if "500" in str(e) or "Server Error" in str(e):
+                payload_kb = len(json.dumps(payload)) / 1024
+                logger.warning(
+                    f"Request failed (attempt {retry_count}/{max_retries}), "
+                    f"retrying in {wait_total:.1f}s (payload={payload_kb:.1f}KB): {e}"
+                )
+            else:
+                logger.warning(
+                    f"Request failed (attempt {retry_count}/{max_retries}), "
+                    f"retrying in {wait_total:.1f}s: {e}"
+                )
+            deadline = time.monotonic() + wait_total
             while time.monotonic() < deadline:
-                time.sleep(min(1, deadline - time.monotonic()))
+                time.sleep(min(0.1, deadline - time.monotonic()))
 
 
 def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:

@@ -93,14 +93,11 @@ class ToolResultCache:
         self._cache: dict[str, CacheEntry] = {}
         self._max_entries = max_entries
         self._default_ttl = default_ttl
-        self._lock = None  # Lazy init for threading lock
+        import threading as _threading
+        self._lock = _threading.RLock()  # Eager init — lazy was a TOCTOU race
 
     def _get_lock(self):
-        """Lazy initialize threading lock."""
-        if self._lock is None:
-            import threading
-            self._lock = threading.RLock()
-        return self._lock
+        return self._lock  # Always initialized in __init__ — no lazy init needed
 
     def _make_key(self, tool_name: str, args: dict) -> str:
         """
@@ -301,13 +298,16 @@ class ToolResultCache:
 
 # Global cache instance for use across modules
 _global_cache: Optional[ToolResultCache] = None
+_cache_lock = __import__("threading").Lock()
 
 
 def get_cache() -> ToolResultCache:
-    """Get or create the global tool result cache."""
+    """Get or create the global tool result cache (thread-safe singleton)."""
     global _global_cache
     if _global_cache is None:
-        _global_cache = ToolResultCache()
+        with _cache_lock:
+            if _global_cache is None:  # double-checked locking
+                _global_cache = ToolResultCache()
     return _global_cache
 
 

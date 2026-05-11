@@ -17,9 +17,16 @@ logger = logging.getLogger(__name__)
 TASK_STATES = ["pending", "approved", "running", "complete", "failed", "paused"]
 
 
+def _connect() -> sqlite3.Connection:
+    """Open MEMORY_DB with busy_timeout so concurrent scheduler/main-thread writes don't crash."""
+    conn = sqlite3.connect(MEMORY_DB)
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
 def init_db():
     MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS autonomous_tasks (
@@ -49,7 +56,7 @@ def create_task(
     command: str, confidence_required: float = 0.85, scheduled_for: float = 0
 ) -> str:
     task_id = str(uuid.uuid4())
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         c.execute(
@@ -69,7 +76,7 @@ def create_task(
 
 
 def get_pending_tasks() -> list[dict]:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -96,7 +103,7 @@ def update_task(
 ):
     if status not in TASK_STATES:
         raise ValueError(f"Invalid status: {status}")
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         updates = ["status = ?"]
@@ -128,7 +135,7 @@ def update_task(
 
 
 def get_task(task_id: str) -> dict | None:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -148,7 +155,7 @@ def get_task(task_id: str) -> dict | None:
 
 
 def get_all_tasks(since: float = None) -> list[dict]:
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         c = conn.cursor()
@@ -176,7 +183,7 @@ def get_all_tasks(since: float = None) -> list[dict]:
 
 def delete_completed_tasks(older_than_days: int = 7):
     """Clean up old completed/failed tasks to prevent DB bloat."""
-    conn = sqlite3.connect(MEMORY_DB)
+    conn = _connect()
     try:
         c = conn.cursor()
         cutoff = time.time() - (older_than_days * 86400)

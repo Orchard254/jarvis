@@ -20,12 +20,24 @@ from skills.skill_embedder import delete_skill as delete_embedding
 
 logger = logging.getLogger(__name__)
 
+# ── SQLite connection helper ───────────────────────────────────────────────────
+# busy_timeout is a PER-CONNECTION setting. Setting it only in init_db() means
+# every other function opens a bare connection that raises immediately on lock
+# contention (scheduler thread + reflection thread can both hit SKILLS_DB).
+# All functions must use _connect() instead of sqlite3.connect() directly.
+
+def _connect() -> sqlite3.Connection:
+    """Open SKILLS_DB with consistent per-connection settings."""
+    conn = sqlite3.connect(str(SKILLS_DB))
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
 
 def init_db():
     if not ENABLE_SKILLS:
         return
     SKILLS_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("""
@@ -69,7 +81,7 @@ def save_candidate(intent_label: str, code: str, language: str = "python") -> st
     if not ENABLE_SKILLS:
         return ""
     code_hash = hashlib.sha256(code.encode()).hexdigest()[:16]
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         existing = conn.execute(
             """
@@ -110,7 +122,7 @@ def promote_skill(skill_id: str, conn=None):
         return
     should_close = False
     if conn is None:
-        conn = sqlite3.connect(str(SKILLS_DB))
+        conn = _connect()
         should_close = True
     try:
         row = conn.execute(
@@ -137,7 +149,7 @@ def promote_skill(skill_id: str, conn=None):
 def record_run(skill_id: str, success: bool):
     if not ENABLE_SKILLS:
         return
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         row = conn.execute(
             """
@@ -195,7 +207,7 @@ def record_run(skill_id: str, success: bool):
 def get_skill(skill_id: str) -> Optional[dict]:
     if not ENABLE_SKILLS:
         return None
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         row = conn.execute(
             "SELECT * FROM skills WHERE skill_id = ?", (skill_id,)
@@ -222,7 +234,7 @@ def get_candidate_by_intent(intent: str) -> Optional[dict]:
     """
     if not ENABLE_SKILLS:
         return None
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     conn.row_factory = sqlite3.Row
     try:
         row = conn.execute(
@@ -258,7 +270,7 @@ def search_by_intent(intent: str) -> Optional[dict]:
             candidates.append({**skill, "similarity": match["similarity"]})
 
     if not candidates:
-        conn = sqlite3.connect(str(SKILLS_DB))
+        conn = _connect()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         exact = c.execute(
@@ -307,7 +319,7 @@ def search_by_intent(intent: str) -> Optional[dict]:
 def get_active_skills(limit: int = 100) -> list[dict]:
     if not ENABLE_SKILLS:
         return []
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         rows = conn.execute(
             "SELECT * FROM skills WHERE status = 'active' LIMIT ?", (limit,)
@@ -326,7 +338,7 @@ def get_active_skills(limit: int = 100) -> list[dict]:
 def prune_candidates():
     if not ENABLE_SKILLS:
         return
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         count = conn.execute(
             "SELECT COUNT(*) FROM skills WHERE status = 'candidate'"
@@ -356,7 +368,7 @@ def prune_candidates():
 def auto_retire_stale(days_limit=30):
     if not ENABLE_SKILLS:
         return
-    conn = sqlite3.connect(str(SKILLS_DB))
+    conn = _connect()
     try:
         cutoff_date = datetime.now() - timedelta(days=days_limit)
         rows = conn.execute("""

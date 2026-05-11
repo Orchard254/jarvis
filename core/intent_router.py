@@ -55,31 +55,32 @@ def _try_direct_dispatch(text: str):
     # Volume control patterns
     volume_patterns = [
         (r'(?:set|change|adjust)\s+volume\s+(?:to\s+)?(\d+)', 'volume_set'),
-        (r'volume\s+(?:up|down)', 'volume_adjust'),
+        (r'volume\s+(up|down)', 'volume_adjust'),
         (r'mute\s+volume', 'volume_mute'),
         (r'unmute\s+volume', 'volume_unmute'),
         (r'volume\s+to\s+(\d+)', 'volume_set'),
         (r'set\s+volume\s+to\s+(\d+)', 'volume_set'),
     ]
-    
+
     # Brightness patterns
     brightness_patterns = [
         (r'(?:set|change|adjust)\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
-        (r'brightness\s+(?:up|down)', 'brightness_adjust'),
+        (r'brightness\s+(up|down)', 'brightness_adjust'),
         (r'set\s+screen\s+brightness\s+(?:to\s+)?(\d+)', 'brightness_set'),
         (r'set\s+brightness\s+to\s+(\d+)', 'brightness_set'),
     ]
-    
+
     # Check volume commands
     for pattern, cmd_type in volume_patterns:
-        if re.search(pattern, text_lower):
-            level = _extract_number(text_lower) if 'set' in cmd_type or 'to' in text_lower else None
+        m = re.search(pattern, text_lower)
+        if m:
+            level = int(m.group(1)) if m.lastindex and m.group(1).isdigit() else None
             try:
                 from core.direct_dispatcher import dispatcher
                 from core.task_registry import registry, TaskStatus
                 from core.executor_pool import pool
-                
-                if cmd_type == 'volume_set':
+
+                if cmd_type == 'volume_set' and level is not None:
                     task = registry.create_task("volume_set", f"Set volume to {level}%")
                     future = pool.submit(
                         lambda lvl=level: dispatcher.execute('volume_mute_then_set', lvl),
@@ -96,32 +97,51 @@ def _try_direct_dispatch(text: str):
                     logger.info(f"Direct dispatch: volume_mute -> task {task.id}")
                     return task.id, f"Volume muted (task: {task.id})"
                 elif cmd_type == 'volume_adjust':
-                    # Handle volume up/down without specific level
-                    task = registry.create_task("volume_adjust", "Adjust volume")
-                    direction = "up" if "up" in text_lower else "down"
-                    # Use volume_mute_then_set with a relative adjustment approach
-                    # For now, we'll just call it with a small delta
-                    future = pool.submit(
-                        lambda: dispatcher.execute('volume_mute_then_set', 50),  # Default to 50% for adjust
-                        task.id
-                    )
+                    # Use pycaw to read current volume, then apply a ±10% step.
+                    # Falls back to keypress if pycaw is unavailable.
+                    direction = m.group(1) if m.lastindex else ("up" if "up" in text_lower else "down")
+
+                    def _adjust_volume(dir_=direction):
+                        step = 10
+                        try:
+                            from ctypes import cast, POINTER
+                            from comtypes import CLSCTX_ALL
+                            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                            devices = AudioUtilities.GetSpeakers()
+                            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                            vol = cast(interface, POINTER(IAudioEndpointVolume))
+                            current = round(vol.GetMasterVolumeLevelScalar() * 100)
+                            target = max(0, min(100, current + (step if dir_ == "up" else -step)))
+                            vol.SetMasterVolumeLevelScalar(target / 100.0, None)
+                            return {"success": True, "value": target, "method": "pycaw"}
+                        except Exception:
+                            import pyautogui, time
+                            key = "volumeup" if dir_ == "up" else "volumedown"
+                            for _ in range(5):
+                                pyautogui.press(key)
+                                time.sleep(0.05)
+                            return {"success": True, "method": "keypress"}
+
+                    task = registry.create_task("volume_adjust", f"Volume {direction}")
+                    pool.submit(_adjust_volume, task.id)
                     logger.info(f"Direct dispatch: volume_adjust({direction}) -> task {task.id}")
                     return task.id, f"Volume {direction} (task: {task.id})"
-                    
+
             except Exception as e:
                 logger.debug(f"Direct dispatch failed for volume: {e}")
                 break
-    
+
     # Check brightness commands
     for pattern, cmd_type in brightness_patterns:
-        if re.search(pattern, text_lower):
-            level = _extract_number(text_lower) if 'set' in cmd_type or 'to' in text_lower else None
+        m = re.search(pattern, text_lower)
+        if m:
+            level = int(m.group(1)) if m.lastindex and m.group(1).isdigit() else None
             try:
                 from core.direct_dispatcher import dispatcher
                 from core.task_registry import registry, TaskStatus
                 from core.executor_pool import pool
-                
-                if cmd_type == 'brightness_set':
+
+                if cmd_type == 'brightness_set' and level is not None:
                     task = registry.create_task("brightness_set", f"Set brightness to {level}%")
                     future = pool.submit(
                         lambda lvl=level: dispatcher.execute('brightness_set_robust', lvl),
@@ -130,17 +150,31 @@ def _try_direct_dispatch(text: str):
                     logger.info(f"Direct dispatch: brightness_set_robust({level}) -> task {task.id}")
                     return task.id, f"Brightness adjustment started (task: {task.id})"
                 elif cmd_type == 'brightness_adjust':
-                    # Handle brightness up/down without specific level
-                    task = registry.create_task("brightness_adjust", "Adjust brightness")
-                    direction = "up" if "up" in text_lower else "down"
-                    # Use brightness_set_robust with a default value for adjust commands
-                    future = pool.submit(
-                        lambda: dispatcher.execute('brightness_set_robust', 50),  # Default to 50% for adjust
-                        task.id
-                    )
+                    # Read current brightness with screen_brightness_control, apply ±10% step.
+                    direction = m.group(1) if m.lastindex else ("up" if "up" in text_lower else "down")
+
+                    def _adjust_brightness(dir_=direction):
+                        step = 10
+                        try:
+                            import screen_brightness_control as sbc
+                            current = sbc.get_brightness()
+                            if isinstance(current, list):
+                                current = current[0]
+                            target = max(0, min(100, int(current) + (step if dir_ == "up" else -step)))
+                            sbc.set_brightness(target)
+                            return {"success": True, "value": target, "method": "sbc"}
+                        except Exception:
+                            import pyautogui, time
+                            key = "brightnessup" if dir_ == "up" else "brightnessdown"
+                            for _ in range(5):
+                                pyautogui.press(key)
+                                time.sleep(0.05)
+                            return {"success": True, "method": "keypress"}
+
+                    task = registry.create_task("brightness_adjust", f"Brightness {direction}")
+                    pool.submit(_adjust_brightness, task.id)
                     logger.info(f"Direct dispatch: brightness_adjust({direction}) -> task {task.id}")
                     return task.id, f"Brightness {direction} (task: {task.id})"
-                    
             except Exception as e:
                 logger.debug(f"Direct dispatch failed for brightness: {e}")
                 break
@@ -251,6 +285,55 @@ def route(user_input: str) -> dict:
             }
     except Exception as _e:
         logger.debug("intent_router: learned lookup failed (%s) — continuing", _e)
+
+    # ── Tier 1.5: LLM routing — let the model decide if tools are needed ────
+    # Cheap single call (compact prompt, plain-text reply, temp=0).
+    # Returns [] for social/chat inputs ("hello → none" is in its prompt),
+    # or a list of tool names for action inputs.
+    # On failure (LLM down / timeout) falls through to Tier 2.
+    try:
+        from brain.router_llm import ask_llm_routing
+
+        llm_tools = ask_llm_routing(text)
+        if llm_tools is None or not isinstance(llm_tools, list):
+            # Unrecoverable error — fall through
+            pass
+        elif len(llm_tools) == 0:
+            # LLM says: no tools needed — pure chat / social intent.
+            # Signal social_chat so the orchestrator skips the tool loop
+            # and makes a chat-only LLM call (no tool schemas exposed).
+            logger.info(
+                "intent_router [LLM_ROUTER → social_chat]: input=%r",
+                text[:80],
+            )
+            return {
+                "raw_input": user_input,
+                "goal": user_input,
+                "primary_tool": "",
+                "suggested_tools": [],
+                "confidence": 1.0,
+                "requires_confirmation": False,
+                "routing_source": "social_chat",
+            }
+        else:
+            # LLM identified specific tools — use them as suggested_tools
+            # so get_pruned_schemas() prioritises them over the default order.
+            logger.info(
+                "intent_router [LLM_ROUTER → tools]: tools=%s input=%r",
+                llm_tools,
+                text[:80],
+            )
+            return {
+                "raw_input": user_input,
+                "goal": user_input,
+                "primary_tool": llm_tools[0],
+                "suggested_tools": llm_tools,
+                "confidence": 0.85,
+                "requires_confirmation": False,
+                "routing_source": "llm_router",
+            }
+    except Exception as _e:
+        logger.debug("intent_router: LLM routing failed (%s) — continuing", _e)
 
     # ── Tier 2: direct to main LLM ───────────────────────────────────────────
     # suggested_tools=[] → get_pruned_schemas returns all schemas in the
