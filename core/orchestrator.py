@@ -224,100 +224,100 @@ class Orchestrator:
     def handle(self, user_input: str) -> str:
         logger.info(f"Orchestrator.handle: '{user_input}'")
         with self._handle_lock:
+            try:
+                # Strip any leading numbering like "1. " from user input
+                clean_input = re.sub(r"^\d+\.\s*", "", user_input).strip()
 
-            # Strip any leading numbering like "1. " from user input
-            clean_input = re.sub(r"^\d+\.\s*", "", user_input).strip()
+                # ── Extract and persist user preferences from this turn ─────────────────
+                # Done BEFORE writing to episodic so the preference is available
+                # immediately if the LLM needs it in the same turn.
+                self._extract_preferences(clean_input)
 
-            # ── Extract and persist user preferences from this turn ─────────────────
-            # Done BEFORE writing to episodic so the preference is available
-            # immediately if the LLM needs it in the same turn.
-            self._extract_preferences(clean_input)
+                # Log user input to memory
+                if self._memory:
+                    self._memory.write_episodic("command", command_text=user_input)
 
-            # Log user input to memory
-            if self._memory:
-                self._memory.write_episodic("command", command_text=user_input)
+                # Check for skill status command first
+                if clean_input.lower() == "skills status":
+                    active_skills = get_active_skills()
+                    if not active_skills:
+                        return "No active skills yet."
+                    skill_strings = [
+                        f"{s['skill_id']} ({s['intent_label']})" for s in active_skills
+                    ]
+                    return f"Active skills: {', '.join(skill_strings)}"
 
-            # Check for skill status command first
-            if clean_input.lower() == "skills status":
-                active_skills = get_active_skills()
-                if not active_skills:
-                    return "No active skills yet."
-                skill_strings = [
-                    f"{s['skill_id']} ({s['intent_label']})" for s in active_skills
-                ]
-                return f"Active skills: {', '.join(skill_strings)}"
+                # Check for task status commands
+                if clean_input.lower().startswith("task status"):
+                    from core.task_registry import registry
+                    parts = clean_input.split()
+                    if len(parts) > 2:
+                        task_id = parts[2]
+                        task = registry.get_task(task_id)
+                        if task:
+                            return f"Task {task_id}: {task.status.value} ({task.progress}%)"
+                        return f"Task {task_id} not found"
+                    else:
+                        active = registry.get_active_tasks()
+                        if not active:
+                            return "No active tasks"
+                        return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
 
-            # Check for task status commands
-            if clean_input.lower().startswith("task status"):
-                from core.task_registry import registry
-                parts = clean_input.split()
-                if len(parts) > 2:
-                    task_id = parts[2]
-                    task = registry.get_task(task_id)
-                    if task:
-                        return f"Task {task_id}: {task.status.value} ({task.progress}%)"
-                    return f"Task {task_id} not found"
-                else:
-                    active = registry.get_active_tasks()
-                    if not active:
-                        return "No active tasks"
-                    return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
+                # Check for skill match first with clean input
+                skill_result = self._check_skill_first(clean_input)
+                if skill_result:
+                    # Update history for skill execution
+                    skill_response = skill_result.get(
+                        "response", "✅ Skill executed successfully"
+                    )
+                    self._history.append({"role": "user", "content": user_input})
+                    self._history.append({"role": "assistant", "content": skill_response})
+                    return skill_response
 
-            # Check for skill match first with clean input
-            skill_result = self._check_skill_first(clean_input)
-            if skill_result:
-                # Update history for skill execution
-                skill_response = skill_result.get(
-                    "response", "✅ Skill executed successfully"
-                )
-                self._history.append({"role": "user", "content": user_input})
-                self._history.append({"role": "assistant", "content": skill_response})
-                return skill_response
+                # Direct to tool loop - let main LLM decide everything
+                # No intent routing layer - modern LLMs handle simple, complex, and ambiguous commands
+                original_intent = clean_input
 
-            # Direct to tool loop - let main LLM decide everything
-            # No intent routing layer - modern LLMs handle simple, complex, and ambiguous commands
-            original_intent = clean_input
+                # Fast-path scripts disabled: Modern LLMs handle all commands well
+                # with tool calling. The 278-line get_fallback_script() implementation
+                # was removed as the complexity wasn't justified for the marginal gain.
 
-            # Fast-path scripts disabled: Modern LLMs handle all commands well
-            # with tool calling. The 278-line get_fallback_script() implementation
-            # was removed as the complexity wasn't justified for the marginal gain.
+                # ── Main LLM Tool-Calling Loop ────────────────────────────────
+                memory_context = ""
+                if self._memory:
+                    parts = []
 
-            # ── Main LLM Tool-Calling Loop ────────────────────────────────
-            memory_context = ""
-            if self._memory:
-                parts = []
+                    # ── Recent command history — single DB call serves both uses ──────
+                    # Fetch limit=5 once; the first 3 are used for the timestamped
+                    # history block, all 5 for the "This session:" summary line.
+                    recent_episodes = self._memory.get_recent_episodes(limit=5)
+                    if recent_episodes:
+                        history_lines = []
+                        for i, cmd in enumerate(recent_episodes[:3], 1):
+                            ts = cmd.get("timestamp", 0)
+                            ago = f"{int(_time.time() - ts)}s ago" if ts else ""
+                            txt = cmd.get("command_text", "")
+                            ok = cmd.get("success")
+                            status = "✓" if ok else ("✗" if ok is False else "?")
+                            if txt:
+                                history_lines.append(f"  {i}. [{ago}] {status} {txt}")
+                        if history_lines:
+                            parts.append(
+                                "Recent commands (use to determine if this is a follow-up):\n"
+                                + "\n".join(history_lines)
+                            )
 
-                # ── Recent command history — single DB call serves both uses ──────
-                # Fetch limit=5 once; the first 3 are used for the timestamped
-                # history block, all 5 for the "This session:" summary line.
-                recent_episodes = self._memory.get_recent_episodes(limit=5)
-                if recent_episodes:
-                    history_lines = []
-                    for i, cmd in enumerate(recent_episodes[:3], 1):
-                        ts = cmd.get("timestamp", 0)
-                        ago = f"{int(_time.time() - ts)}s ago" if ts else ""
-                        txt = cmd.get("command_text", "")
-                        ok = cmd.get("success")
-                        status = "✓" if ok else ("✗" if ok is False else "?")
-                        if txt:
-                            history_lines.append(f"  {i}. [{ago}] {status} {txt}")
-                    if history_lines:
-                        parts.append(
-                            "Recent commands (use to determine if this is a follow-up):\n"
-                            + "\n".join(history_lines)
-                        )
+                        # ── User identity: always inject first so it's most prominent ──────
+                        user_name = self._memory.get_preference("user_name")
+                        if user_name:
+                            parts.append(f"The user's name is {user_name}.")
 
-                    # ── User identity: always inject first so it's most prominent ──────
-                    user_name = self._memory.get_preference("user_name")
-                    if user_name:
-                        parts.append(f"The user's name is {user_name}.")
+                        # Semantic preferences + frequent command summary
+                        pref_summary = self._memory.get_context_summary()
+                        if pref_summary:
+                            parts.append(pref_summary)
 
-                    # Semantic preferences + frequent command summary
-                    pref_summary = self._memory.get_context_summary()
-                    if pref_summary:
-                        parts.append(pref_summary)
-
-                    # Cross-session history (survives restarts)
+                        # Cross-session history (survives restarts)
                     cross_session = self._memory.get_cross_session_context(limit=8)
                     if cross_session:
                         parts.append(cross_session)
