@@ -50,6 +50,92 @@ from typing import Optional, Tuple, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# Cached module references to avoid repeated imports (critical optimization)
+# These are populated on first access via helper functions
+_classifier_cache = None
+_ask_llm_routing_cache = None
+_intent_learner_cache = None
+_direct_dispatcher_cache = None
+_task_registry_cache = None
+_executor_pool_cache = None
+
+
+def _get_classifier():
+    """Get cached intent classifier instance."""
+    global _classifier_cache
+    if _classifier_cache is None:
+        from brain.intent_classifier import _classifier
+        _classifier_cache = _classifier
+    return _classifier_cache
+
+
+def _get_llm_routing_func():
+    """Get cached LLM routing function."""
+    global _ask_llm_routing_cache
+    if _ask_llm_routing_cache is None:
+        from brain.router_llm import ask_llm_routing
+        _ask_llm_routing_cache = ask_llm_routing
+    return _ask_llm_routing_cache
+
+
+def _get_intent_learner():
+    """Get cached intent learner module."""
+    global _intent_learner_cache
+    if _intent_learner_cache is None:
+        from core import intent_learner
+        _intent_learner_cache = intent_learner
+    return _intent_learner_cache
+
+
+def _get_dispatcher():
+    """Get cached dispatcher instance."""
+    global _direct_dispatcher_cache
+    if _direct_dispatcher_cache is None:
+        from core.direct_dispatcher import dispatcher
+        _direct_dispatcher_cache = dispatcher
+    return _direct_dispatcher_cache
+
+
+def _get_registry():
+    """Get cached task registry instance."""
+    global _task_registry_cache
+    if _task_registry_cache is None:
+        from core.task_registry import registry
+        _task_registry_cache = registry
+    return _task_registry_cache
+
+
+def _get_pool():
+    """Get cached executor pool instance."""
+    global _executor_pool_cache
+    if _executor_pool_cache is None:
+        from core.executor_pool import pool
+        _executor_pool_cache = pool
+    return _executor_pool_cache
+
+
+def _prewarm_modules():
+    """Pre-load critical modules to avoid cold-start latency on first call.
+    
+    Called once at module load time to eliminate import overhead during routing.
+    Fails silently - modules will be loaded on-demand if pre-warming fails.
+    """
+    try:
+        # Pre-warm all cached imports
+        _get_classifier()
+        _get_llm_routing_func()
+        _get_intent_learner()
+        _get_dispatcher()
+        _get_registry()
+        _get_pool()
+        logger.debug("intent_router: modules pre-warmed successfully")
+    except Exception as e:
+        logger.debug(f"intent_router: pre-warming failed ({e}), will lazy-load on demand")
+
+
+# Pre-warm modules immediately after function definitions
+_prewarm_modules()
+
 # Pre-compiled regex patterns for performance (avoid recompilation on every call)
 _VOLUME_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r'(?:set|change|adjust)\s+volume\s+(?:to\s+)?(\d+)'), 'volume_set'),
