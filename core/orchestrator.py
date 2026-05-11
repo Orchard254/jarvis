@@ -26,7 +26,6 @@ from tools.execute_code import get_fallback_script
 from verification.verifier import verify_action
 
 from core.console import cli_input
-from core.intent_router import route as intent_router_route
 from core.recovery import RecoveryManager
 from core.reporter import report
 
@@ -283,139 +282,81 @@ class Orchestrator:
                 self._history.append({"role": "assistant", "content": skill_response})
                 return skill_response
 
-            try:
-                intent = intent_router_route(clean_input)
-                
-                # Handle direct dispatch fast path (async execution)
-                if intent.get("routing_source") == "direct_dispatch":
-                    task_id = intent.get("task_id")
-                    immediate_response = intent.get("immediate_response", "")
-                    
-                    # Return immediate acknowledgment with task ID for tracking
+            # Direct to tool loop - let main LLM decide everything
+            # No intent routing layer - modern LLMs handle simple, complex, and ambiguous commands
+            original_intent = clean_input
+            _routing_source = "direct"  # Simplified tracking
+
+            # ── Fast-path: pre-built fallback script ────────────────────
+            # If get_fallback_script returns a script for this intent, run it
+            # directly — no LLM call, no iteration loop, instant execution.
+            # On success: save as candidate skill and return immediately.
+            # On failure: fall through to the LLM loop with the error as context.
+            #
+            # IMPORTANT: preserve the original intent BEFORE injecting the error
+            # context into clean_input.  skill save_candidate() must always use
+            # the clean label so the skill store isn't polluted with error strings.
+            original_intent = clean_input
+
+            fast_script = get_fallback_script(original_intent)
+            if fast_script:
+                logger.info(f"Fast-path script available for '{clean_input[:60]}'")
+                fast_result = self._execute_wrapper(
+                    "execute_code", {"code": fast_script, "language": "python"}
+                )
+                stdout = fast_result.get("stdout", "").strip()
+                if (
+                    fast_result.get("success")
+                    and stdout
+                    and not stdout.startswith("ERROR:")
+                    and "ERROR:" not in stdout
+                ):
+                    logger.info("Fast-path succeeded — skipping LLM loop")
+                    if self._memory:
+                        self._memory.write_episodic(
+                            "response",
+                            command_text=user_input,
+                            tool_name="execute_code",
+                            success=True,
+                        )
+                    from skills.skill_store import save_candidate
+
+                    save_candidate(original_intent, fast_script, "python")
                     self._history.append({"role": "user", "content": user_input})
-                    self._history.append({"role": "assistant", "content": immediate_response})
-                    return immediate_response
-                
-                # Handle social/chat-only input — skip tool loop entirely
-                # The LLM router classified this as needing no tools, so we make
-                # a chat-only call (no tool schemas) to prevent the model from
-                # erroneously calling execute_code for greetings/small talk.
-                if intent.get("routing_source") == "social_chat":
-                    try:
-                        from brain import ollama_client
-                        from brain.prompt_builder import build_system_prompt
-
-                        chat_messages = [
-                            {"role": "system", "content": build_system_prompt()},
-                        ]
-                        if self._memory:
-                            user_name = self._memory.get_preference("user_name")
-                            if user_name:
-                                chat_messages.append(
-                                    {"role": "system", "content": f"The user's name is {user_name}."}
-                                )
-                        chat_messages.extend(self._history[-TOOL_LOOP_HISTORY_MESSAGES:])
-                        chat_messages.append({"role": "user", "content": clean_input})
-
-                        chat_result = ollama_client.chat(
-                            messages=chat_messages,
-                            tools=[],
-                            temperature=0.3,
-                        )
-                        response = chat_result.get("content", "Hello!").strip()
-
-                        # Log to episodic memory
-                        if self._memory:
-                            self._memory.write_episodic(
-                                "response",
-                                command_text=user_input,
-                                tool_name="chat",
-                                success=True,
-                                tool_result={"response": response[:500]},
-                            )
-
-                        self._history.append({"role": "user", "content": user_input})
-                        self._history.append({"role": "assistant", "content": response})
-                        self._recovery.reset()
-                        return response
-                    except Exception as _chat_exc:
-                        logger.warning(f"Chat-only call failed, falling back: {_chat_exc}")
-                        # Fall through to normal tool loop as last resort
-                
-                # Capture the routing source so we can feed the outcome back
-                # to the intent learner after execution completes.
-                _routing_source = intent.get("routing_source", "keyword")
-
-                # ── Fast-path: pre-built fallback script ────────────────────
-                # If get_fallback_script returns a script for this intent, run it
-                # directly — no LLM call, no iteration loop, instant execution.
-                # On success: save as candidate skill and return immediately.
-                # On failure: fall through to the LLM loop with the error as context.
-                #
-                # IMPORTANT: preserve the original intent BEFORE injecting the error
-                # context into clean_input.  skill save_candidate() must always use
-                # the clean label so the skill store isn't polluted with error strings.
-                original_intent = clean_input
-
-                fast_script = get_fallback_script(original_intent)
-                if fast_script:
-                    logger.info(f"Fast-path script available for '{clean_input[:60]}'")
-                    fast_result = self._execute_wrapper(
-                        "execute_code", {"code": fast_script, "language": "python"}
-                    )
-                    stdout = fast_result.get("stdout", "").strip()
-                    if (
-                        fast_result.get("success")
-                        and stdout
-                        and not stdout.startswith("ERROR:")
-                        and "ERROR:" not in stdout
-                    ):
-                        logger.info("Fast-path succeeded — skipping LLM loop")
-                        if self._memory:
-                            self._memory.write_episodic(
-                                "response",
-                                command_text=user_input,
-                                tool_name="execute_code",
-                                success=True,
-                            )
-                        from skills.skill_store import save_candidate
-
-                        save_candidate(original_intent, fast_script, "python")
-                        self._history.append({"role": "user", "content": user_input})
-                        self._history.append({"role": "assistant", "content": stdout})
-                        self._recovery.reset()
-                        return stdout
+                    self._history.append({"role": "assistant", "content": stdout})
+                    self._recovery.reset()
+                    return stdout
+                else:
+                    # Inject the failure as context for the LLM loop so it knows
+                    # what was already tried.  clean_input is modified here —
+                    # original_intent stays clean for skill label use below.
+                    err = fast_result.get("stderr", stdout or "unknown error")[:300]
+                    logger.info(f"Fast-path failed ({err[:80]}), handing off to LLM")
+                    
+                    # Analyze error type to provide appropriate guidance
+                    error_lower = err.lower()
+                    if "file not found" in error_lower or "no such file" in error_lower:
+                        guidance = "The error suggests a file/path issue. Consider using query_pc_index to locate the correct path, or verify the path exists."
+                    elif "permission" in error_lower or "access is denied" in error_lower:
+                        guidance = "The error indicates a permission issue. Try running with elevated privileges or choose a different location."
+                    elif "syntax" in error_lower or "invalid syntax" in error_lower:
+                        guidance = "The error indicates a syntax problem. Review the code for Python syntax errors."
+                    elif "module" in error_lower and "not found" in error_lower:
+                        guidance = "The error indicates a missing module. Install it via pip or use an alternative approach."
                     else:
-                        # Inject the failure as context for the LLM loop so it knows
-                        # what was already tried.  clean_input is modified here —
-                        # original_intent stays clean for skill label use below.
-                        err = fast_result.get("stderr", stdout or "unknown error")[:300]
-                        logger.info(f"Fast-path failed ({err[:80]}), handing off to LLM")
-                        
-                        # Analyze error type to provide appropriate guidance
-                        error_lower = err.lower()
-                        if "file not found" in error_lower or "no such file" in error_lower:
-                            guidance = "The error suggests a file/path issue. Consider using query_pc_index to locate the correct path, or verify the path exists."
-                        elif "permission" in error_lower or "access is denied" in error_lower:
-                            guidance = "The error indicates a permission issue. Try running with elevated privileges or choose a different location."
-                        elif "syntax" in error_lower or "invalid syntax" in error_lower:
-                            guidance = "The error indicates a syntax problem. Review the code for Python syntax errors."
-                        elif "module" in error_lower and "not found" in error_lower:
-                            guidance = "The error indicates a missing module. Install it via pip or use an alternative approach."
-                        else:
-                            guidance = "Review the error above and adjust your approach accordingly."
-                        
-                        clean_input = (
-                            f"{original_intent}\n"
-                            f"[Pre-built script ran but failed: {err}. "
-                            f"{guidance}]"
-                        )
+                        guidance = "Review the error above and adjust your approach accordingly."
+                    
+                    clean_input = (
+                        f"{original_intent}\n"
+                        f"[Pre-built script ran but failed: {err}. "
+                        f"{guidance}]"
+                    )
 
-                memory_context = ""
-                if self._memory:
-                    parts = []
+            memory_context = ""
+            if self._memory:
+                parts = []
 
-                    # ── Recent command history — single DB call serves both uses ──────
+                # ── Recent command history — single DB call serves both uses ──────
                     # Fetch limit=5 once; the first 3 are used for the timestamped
                     # history block, all 5 for the "This session:" summary line.
                     recent_episodes = self._memory.get_recent_episodes(limit=5)
@@ -459,12 +400,11 @@ class Orchestrator:
                         parts.append(f"This session: {recent_str}")
 
                     # Get reflection insights (learned from previous tasks)
-                    # Filter to insights that correlate with the router's suggested tools
                     try:
                         from memory.semantic import get_relevant_insights
 
                         insights = get_relevant_insights(
-                            intent.get("suggested_tools", []),
+                            [],
                             max_insights=3
                         )
                         if insights:
@@ -521,7 +461,7 @@ class Orchestrator:
                     execute_fn=self._execute_wrapper,
                     verify_fn=self._verify_wrapper,
                     mode=self._mode,
-                    tools=intent.get("suggested_tools", []),
+                    tools=[],  # No pre-filtering - let main LLM decide all tools
                     memory_context=memory_context,
                     **_tl_kwargs,
                 )
