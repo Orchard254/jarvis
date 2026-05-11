@@ -1,6 +1,7 @@
 """
 Episodic memory: session history. What happened, when, result.
 SQLite backend. Append-only. Queryable by session_id or time range.
+Optimized with connection pooling for reduced latency.
 """
 
 import json
@@ -10,30 +11,15 @@ import time
 from pathlib import Path
 
 from settings import MEMORY_DB
+from memory.db_pool import get_episodic_connection
 
 logger = logging.getLogger(__name__)
 
 
-def _connect() -> sqlite3.Connection:
-    """Open a connection with WAL mode and a generous busy timeout.
-
-    WAL allows readers and writers to proceed concurrently — critical because
-    the scheduler thread and main thread both write to this DB at the same time.
-    Without WAL the default exclusive lock means one thread immediately raises
-    'database is locked' while the other holds the write lock.
-    busy_timeout=5000 makes SQLite retry for up to 5 s before giving up.
-    """
-    conn = sqlite3.connect(MEMORY_DB, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
-
-
 def init_db():
+    """Initialize episodic memory schema using pooled connection."""
     MEMORY_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = _connect()
-    c = conn.cursor()
-    c.execute("""
+    schema = """
         CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT NOT NULL,
@@ -46,11 +32,19 @@ def init_db():
             success INTEGER,               -- 1 or 0
             user_feedback TEXT             -- 'correction', 'approval', null
         )
-    """)
-    c.execute("CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_episodes_time ON episodes(timestamp)")
-    conn.commit()
-    conn.close()
+    """
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_episodes_time ON episodes(timestamp)",
+    ]
+    
+    with get_episodic_connection() as conn:
+        c = conn.cursor()
+        c.execute(schema)
+        for idx in indexes:
+            c.execute(idx)
+        conn.commit()
+    
     logger.info("Episodic memory DB initialized")
 
 
@@ -64,8 +58,8 @@ def write(
     success: bool = None,
     user_feedback: str = None,
 ):
-    conn = _connect()
-    try:
+    """Write an episode to memory using pooled connection."""
+    with get_episodic_connection() as conn:
         c = conn.cursor()
         c.execute(
             """
@@ -86,14 +80,12 @@ def write(
             ),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
-    conn = _connect()
-    conn.row_factory = sqlite3.Row
-    try:
+    """Get session events using pooled connection."""
+    with get_episodic_connection() as conn:
+        conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
             """
@@ -101,8 +93,7 @@ def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
         """,
             (session_id, limit),
         ).fetchall()
-    finally:
-        conn.close()
+    
     events = []
     for r in rows:
         event = dict(r)
@@ -115,23 +106,21 @@ def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
 
 
 def get_recent(limit: int = 20) -> list[dict]:
-    conn = _connect()
-    conn.row_factory = sqlite3.Row
-    try:
+    """Get recent events using pooled connection."""
+    with get_episodic_connection() as conn:
+        conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
             "SELECT * FROM episodes ORDER BY timestamp DESC LIMIT ?", (limit,)
         ).fetchall()
-    finally:
-        conn.close()
+    
     return [dict(r) for r in reversed(rows)]
 
 
 def get_successful_commands(limit: int = 20) -> list[dict]:
     """Cross-session query: recent successful command events across all sessions."""
-    conn = _connect()
-    conn.row_factory = sqlite3.Row
-    try:
+    with get_episodic_connection() as conn:
+        conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
             """
@@ -141,8 +130,7 @@ def get_successful_commands(limit: int = 20) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    finally:
-        conn.close()
+    
     events = []
     for r in rows:
         event = dict(r)
@@ -157,8 +145,7 @@ def get_successful_commands(limit: int = 20) -> list[dict]:
 def prune_old(days: int = 90):
     """Delete episodes older than N days; also trim the table to at most 10000 rows."""
     cutoff = time.time() - days * 86400
-    conn = _connect()
-    try:
+    with get_episodic_connection() as conn:
         c = conn.cursor()
         c.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
         deleted_time = c.rowcount
@@ -172,8 +159,7 @@ def prune_old(days: int = 90):
         )
         deleted_cap = c.rowcount
         conn.commit()
-    finally:
-        conn.close()
+    
     logger.info(
         f"episodic.prune_old(days={days}): removed {deleted_time} time-expired rows, "
         f"{deleted_cap} rows over 10000-row cap"
@@ -182,8 +168,7 @@ def prune_old(days: int = 90):
 
 def get_command_frequency(limit: int = 20) -> list[dict]:
     """Return the most frequently issued commands across all sessions."""
-    conn = _connect()
-    try:
+    with get_episodic_connection() as conn:
         c = conn.cursor()
         rows = c.execute(
             """
@@ -195,6 +180,5 @@ def get_command_frequency(limit: int = 20) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    finally:
-        conn.close()
+    
     return [{"command_text": row[0], "count": row[1]} for row in rows]

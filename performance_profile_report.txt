@@ -1,0 +1,104 @@
+================================================================================
+JARVIS PERFORMANCE PROFILING REPORT
+================================================================================
+Timestamp: 2026-05-11 04:32:34
+
+
+========================================
+CLASSIFIER
+========================================
+         74667 function calls (74322 primitive calls) in 0.178 seconds
+
+   Ordered by: cumulative time
+   List reduced from 431 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      100    0.000    0.000    0.178    0.002 /workspace/brain/intent_classifier.py:385(classify)
+      100    0.037    0.000    0.178    0.002 /workspace/brain/intent_classifier.py:310(_ensure_ready)
+  268/266    0.000    0.000    0.119    0.000 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+     21/2    0.000    0.000    0.119    0.060 <frozen importlib._bootstrap>:1349(_find_and_load)
+     21/2    0.000    0.000    0.119    0.059 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+     48/3    0.002    0.000    0.119    0.040 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+        1    0.000    0.000    0.119    0.119 {built-in method builtins.__import__}
+     20/2    0.000    0.000    0.119    0.059 <frozen importlib._bootstrap>:911(_load_unlocked)
+     14/2    0.000    0.000    0.119    0.059 <frozen importlib._bootstrap_external>:993(exec_module)
+     14/2    0.000    0.000    0.108    0.054 {built-in method builtins.exec}
+        1    0.000    0.000    0.108    0.108 /workspace/skills/skill_embedder.py:1(<module>)
+        1    0.000    0.000    0.107    0.107 /workspace/settings.py:1(<module>)
+        1    0.000    0.000    0.067    0.067 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:383(load_dotenv)
+        1    0.000    0.000    0.067    0.067 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:97(set_as_environment_variables)
+        2    0.000    0.000    0.066    0.033 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:75(dict)
+        1    0.000    0.000    0.066    0.066 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:289(resolve_variables)
+       91    0.000    0.000    0.051    0.001 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:91(parse)
+      246    0.000    0.000    0.051    0.000 /workspace/venv/lib/python3.12/site-packages/dotenv/main.py:32(with_warn_for_invalid_lines)
+      246    0.000    0.000    0.051    0.000 /workspace/venv/lib/python3.12/site-packages/dotenv/parser.py:179(parse_stream)
+      245    0.002    0.000    0.050    0.000 /workspace/venv/lib/python3.12/site-packages/dotenv/parser.py:142(parse_binding)
+
+
+
+
+========================================
+ROUTER
+========================================
+         190513 function calls (187648 primitive calls) in 1.387 seconds
+
+   Ordered by: cumulative time
+   List reduced from 312 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      100    0.003    0.000    1.414    0.014 /workspace/core/intent_router.py:358(route)
+  540/120    0.005    0.000    1.197    0.010 <frozen importlib._bootstrap>:1349(_find_and_load)
+  540/120    0.003    0.000    1.173    0.010 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+  520/120    0.002    0.000    1.113    0.009 <frozen importlib._bootstrap>:911(_load_unlocked)
+  520/120    0.002    0.000    1.108    0.009 <frozen importlib._bootstrap_external>:993(exec_module)
+ 1060/240    0.001    0.000    1.080    0.004 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+  520/120    0.005    0.000    1.079    0.009 {built-in method builtins.exec}
+      100    0.006    0.000    0.966    0.010 /workspace/brain/router_llm.py:150(ask_llm_routing)
+      520    0.006    0.000    0.393    0.001 <frozen importlib._bootstrap_external>:1066(get_code)
+      520    0.061    0.000    0.296    0.001 <frozen importlib._bootstrap_external>:755(_compile_bytecode)
+      120    0.001    0.000    0.258    0.002 /usr/local/lib/python3.12/subprocess.py:807(__init__)
+      120    0.004    0.000    0.250    0.002 /usr/local/lib/python3.12/subprocess.py:1791(_execute_child)
+      100    0.001    0.000    0.241    0.002 /workspace/core/intent_router.py:171(_try_direct_dispatch)
+      520    0.234    0.000    0.234    0.000 {built-in method marshal.loads}
+      520    0.005    0.000    0.200    0.000 <frozen importlib._bootstrap>:1240(_find_spec)
+      120    0.190    0.002    0.190    0.002 {built-in method _posixsubprocess.fork_exec}
+      520    0.001    0.000    0.169    0.000 <frozen importlib._bootstrap_external>:1524(find_spec)
+      520    0.003    0.000    0.168    0.000 <frozen importlib._bootstrap_external>:1495(_get_spec)
+       20    0.000    0.000    0.165    0.008 {built-in method builtins.__import__}
+     1480    0.061    0.000    0.164    0.000 <frozen importlib._bootstrap_external>:1597(find_spec)
+
+
+
+
+========================================
+EMBEDDINGS
+========================================
+NumPy not available
+
+========================================
+CACHE
+========================================
+         13607 function calls in 0.354 seconds
+
+   Ordered by: cumulative time
+   List reduced from 40 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      200    0.005    0.000    0.354    0.002 /workspace/core/intent_learner.py:138(lookup_route)
+      400    0.153    0.000    0.153    0.000 {method 'execute' of 'sqlite3.Connection' objects}
+      200    0.001    0.000    0.118    0.001 /workspace/core/intent_learner.py:99(_touch_route)
+      400    0.081    0.000    0.081    0.000 {method 'close' of 'sqlite3.Connection' objects}
+      400    0.027    0.000    0.061    0.000 {built-in method _sqlite3.connect}
+      400    0.001    0.000    0.033    0.000 /usr/local/lib/python3.12/functools.py:521(decorating_function)
+      400    0.029    0.000    0.032    0.000 /usr/local/lib/python3.12/functools.py:35(update_wrapper)
+      200    0.001    0.000    0.017    0.000 /usr/local/lib/python3.12/json/__init__.py:299(loads)
+      200    0.001    0.000    0.016    0.000 /workspace/core/intent_learner.py:55(_normalize)
+      200    0.014    0.000    0.016    0.000 /usr/local/lib/python3.12/json/decoder.py:333(decode)
+      400    0.011    0.000    0.015    0.000 /usr/local/lib/python3.12/re/__init__.py:179(sub)
+      200    0.000    0.000    0.011    0.000 /usr/local/lib/python3.12/logging/__init__.py:1529(info)
+      200    0.011    0.000    0.011    0.000 /usr/local/lib/python3.12/logging/__init__.py:1790(isEnabledFor)
+      200    0.009    0.000    0.009    0.000 {method 'commit' of 'sqlite3.Connection' objects}
+      400    0.003    0.000    0.003    0.000 {method 'sub' of 're.Pattern' objects}
+
+
+

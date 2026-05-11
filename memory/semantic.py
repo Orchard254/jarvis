@@ -2,6 +2,7 @@
 Semantic memory: stable facts about user and environment.
 Preferences, frequently used apps, working patterns.
 SQLite key-value store with confidence scoring.
+Optimized with connection pooling for reduced latency.
 """
 
 import json
@@ -11,24 +12,14 @@ import time
 from pathlib import Path
 
 from settings import MEMORY_DB
+from memory.db_pool import get_semantic_connection
 
 logger = logging.getLogger(__name__)
 
 
-def _connect() -> sqlite3.Connection:
-    """Open a connection with WAL mode and busy timeout.
-    Matches episodic._connect() — both modules share the same memory.db file.
-    """
-    conn = sqlite3.connect(MEMORY_DB, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
-
-
 def init_db():
-    conn = _connect()
-    c = conn.cursor()
-    c.execute("""
+    """Initialize semantic memory schema using pooled connection."""
+    schema = """
         CREATE TABLE IF NOT EXISTS preferences (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,          -- JSON value
@@ -36,16 +27,19 @@ def init_db():
             source TEXT DEFAULT 'explicit', -- 'explicit' | 'inferred' | 'corrected'
             updated_at REAL NOT NULL
         )
-    """)
-    conn.commit()
-    conn.close()
+    """
+    
+    with get_semantic_connection() as conn:
+        c = conn.cursor()
+        c.execute(schema)
+        conn.commit()
+    
     logger.info("Semantic memory DB initialized")
 
 
 def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
     """Insert or replace a preference (was named 'set', which shadowed the builtin)."""
-    conn = _connect()
-    try:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         c.execute(
             """
@@ -55,33 +49,28 @@ def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
             (key, json.dumps(value), confidence, source, time.time()),
         )
         conn.commit()
-    finally:
-        conn.close()
+    
     logger.info(f"semantic.upsert('{key}') = {value} (conf={confidence}, src={source})")
 
 
 def fetch(key: str, default=None):
     """Return a preference value by key (was named 'get', which shadowed the builtin)."""
-    conn = _connect()
-    try:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         row = c.execute(
             "SELECT value FROM preferences WHERE key = ?", (key,)
         ).fetchone()
-    finally:
-        conn.close()
+    
     if row:
         return json.loads(row[0])
     return default
 
 
 def get_all() -> dict:
-    conn = _connect()
-    try:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         rows = c.execute("SELECT key, value FROM preferences").fetchall()
-    finally:
-        conn.close()
+    
     return {k: json.loads(v) for k, v in rows}
 
 
@@ -134,8 +123,8 @@ def infer_if_consistent(key: str, observed_value, min_occurrences: int = 5):
     """If same value observed repeatedly, auto-set as inferred preference."""
     value_json = json.dumps(observed_value)
     now = time.time()
-    conn = _connect()
-    try:
+    
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         # Ensure the tally table exists (created lazily alongside the main schema)
         c.execute("""
@@ -171,8 +160,7 @@ def infer_if_consistent(key: str, observed_value, min_occurrences: int = 5):
         ).fetchone()
         count = row[0] if row else 0
         conn.commit()
-    finally:
-        conn.close()
+    
     if count >= min_occurrences:
         upsert(key, observed_value, confidence=0.7, source="inferred")
         logger.info(
