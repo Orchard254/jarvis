@@ -16,8 +16,7 @@ def test_db_initializes():
 
 def test_state_monitor_captures_valid_structure():
     state = state_monitor.capture_state()
-    assert "windows" in state and isinstance(state["windows"], list)
-    assert "processes" in state and isinstance(state["processes"], list)
+    assert "processes_json" in state and isinstance(state["processes_json"], str)
     assert "focused_app" in state
 
 def test_app_scanner_pushes_records():

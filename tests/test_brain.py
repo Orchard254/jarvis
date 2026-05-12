@@ -30,14 +30,14 @@ def test_response_parser_blocks_unknown():
 
 def test_tool_loop_executes_callbacks(monkeypatch):
     call_count = 0
-    def mock_chat(messages, tools=None, temperature=0.2, model=None, max_retries=2):
+    def mock_chat(messages, tools=None, temperature=0.2, model=None, max_retries=2, **kwargs):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
             return {"content": "", "tool_calls": [{"id": "1", "function": {"name": "read_pc_state", "arguments": {}}}], "model": "test", "done": True}
         return {"content": "Done.", "tool_calls": None, "model": "test", "done": True}
 
-    def mock_chat_stream(messages, tools=None, model=None, temperature=0.2, print_chunks=True):
+    def mock_chat_stream(messages, tools=None, model=None, temperature=0.2, print_chunks=True, **kwargs):
         return mock_chat(messages, tools=tools, temperature=temperature, model=model)
 
     monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat_stream)
@@ -52,7 +52,7 @@ def test_tool_loop_executes_callbacks(monkeypatch):
         verified.append(name)
         return {"status": "CONFIRMED", "summary": "ok"}
 
-    result = run("test", [], mock_exec, mock_verify, mode="interactive_cloud")
+    result = run("test", [], mock_exec, mock_verify, mode="interactive_cloud", valid_tool_names={"read_pc_state"})
     assert call_count == 2
     assert "read_pc_state" in executed
     assert result["success"] is True

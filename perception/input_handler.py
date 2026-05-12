@@ -23,7 +23,7 @@ class InputHandler:
         wake_word.set_wake_callback(self._on_wake)
         logger.info("InputHandler initialized")
 
-    def _on_wake(self):
+    def _on_wake(self, wake_word: str = ""):
         """Called when wake word detected."""
         # Re-entrant guard: if already in the STT → route pipeline, drop trigger.
         if self._wake_busy.is_set():
@@ -63,7 +63,7 @@ class InputHandler:
 
         formatted = format_for_tts(text)
         if formatted:
-            speak(formatted)
+            speak(formatted, blocking=False)
         print(f"\nJARVIS: {text}")
 
     def start_listening(self):

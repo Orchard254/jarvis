@@ -15,6 +15,7 @@ tool works even before a MemoryManager session has been initialised.
 """
 
 import logging
+import sqlite3
 
 logger = logging.getLogger(__name__)
 

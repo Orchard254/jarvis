@@ -14,7 +14,6 @@ import json
 import os
 
 from core.task_registry import registry, TaskStatus, Task
-from core.recovery import recovery_manager
 from core.streaming_manager import streaming_manager, StreamingResponse
 from core.progress_reporter import progress_registry, ProgressReporter
 from core.observability import observability
@@ -91,10 +90,6 @@ class ExecutorPool:
                     result = func(*args, **kwargs)
                     step_duration = time.time() - step_start
                     
-                    # Record success with recovery manager
-                    if hasattr(func, '__name__'):
-                        recovery_manager.record_success(func.__name__)
-                    
                     # Record observability metrics
                     observability.record_step(task_id, getattr(func, '__name__', 'step'), 
                                              duration=step_duration, success=True)
@@ -132,25 +127,17 @@ class ExecutorPool:
                     from core.contextual_help import contextual_help
                     contextual_help.record_failure(getattr(func, '__name__', 'unknown'))
                     
-                    # Use recovery manager to decide retry
+                    # Simple retry with linear backoff
                     if use_retry and attempt < max_attempts:
-                        tool_name = getattr(func, '__name__', 'unknown')
-                        should_retry, delay = recovery_manager.should_retry(tool_name, error_msg)
-                        
-                        if should_retry:
-                            logger.info(f"Task {task_id} failed (attempt {attempt}), retrying in {delay:.2f}s")
-                            
-                            # Emit error via streaming
-                            if stream:
-                                stream.send_error(error_msg, error_type="retryable", recoverable=True)
-                                stream.send_status("retrying", {"delay": delay, "attempt": attempt})
-                            
-                            time.sleep(delay)
-                            
-                            # Save checkpoint before retry
-                            if use_checkpoint:
-                                self._save_checkpoint(task_id, {"attempt": attempt, "last_error": error_msg})
-                            continue
+                        delay = min(1.0 * attempt, 30.0)
+                        logger.info(f"Task {task_id} failed (attempt {attempt}), retrying in {delay:.2f}s")
+                        if stream:
+                            stream.send_error(error_msg, error_type="retryable", recoverable=True)
+                            stream.send_status("retrying", {"delay": delay, "attempt": attempt})
+                        time.sleep(delay)
+                        if use_checkpoint:
+                            self._save_checkpoint(task_id, {"attempt": attempt, "last_error": error_msg})
+                        continue
                     
                     # Max retries exceeded or retry not allowed
                     registry.update_status(task_id, TaskStatus.FAILED, 
@@ -302,8 +289,6 @@ class ExecutorPool:
         return {
             "task_id": task_id,
             "has_checkpoint": self._load_checkpoint(task_id) is not None,
-            "circuit_breaker": recovery_manager.get_circuit_breaker_status(),
-            "failure_summary": recovery_manager.get_failure_summary()
         }
 
 # Global instance

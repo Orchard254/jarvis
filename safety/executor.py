@@ -22,7 +22,7 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
     if tool_name == "execute_code":
         from safety.tool_guard import check_imports
 
-        allowed, reason = check_imports(args.get("code", ""))
+        allowed, reason = check_imports(args.get("code", ""), language)
         if not allowed:
             audit_log.log_blocked(tool_name, args, reason)
             return {"success": False, "blocked": True, "error": reason}

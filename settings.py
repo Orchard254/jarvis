@@ -108,7 +108,6 @@ TOOL_RETRY_LIMITS = {
     "execute_code": get_env_int("EXECUTE_CODE_RETRIES", 3),
     "control_window": get_env_int("CONTROL_WINDOW_RETRIES", 3),
     "control_input": get_env_int("CONTROL_INPUT_RETRIES", 3),
-    "query_pc_index": get_env_int("QUERY_PC_INDEX_RETRIES", 2),
     "capture_screen": get_env_int("CAPTURE_SCREEN_RETRIES", 3),
 }
 
@@ -117,6 +116,9 @@ ALLOWED_IMPORTS = {
     "pathlib",
     "shutil",
     "glob",
+    "tools",
+    "pkgutil",
+    "webbrowser",
     "tempfile",
     "json",
     "csv",
@@ -279,6 +281,15 @@ ALLOWED_IMPORTS = {
     "linecache",    # random access line caching
     "locale",       # internationalization services
     "gettext",      # internationalization via gettext
+    # ── modules the LLM commonly generates but were missing ────────────────────
+    "numbers",      # numeric abstract base classes
+    "win32event",   # Windows event objects
+    "win32service", # Windows service control
+    "win32file",    # Windows file operations
+    "win32pipe",    # Windows named pipes
+    "win32security",# Windows security descriptors / ACLs
+    "win32net",     # Windows network management
+    "win32print",   # Windows printer management
 }
 
 BLOCKED_PATHS = [
@@ -316,12 +327,6 @@ REGISTRY_UNINSTALL_PATHS = [
 # ── Skill Store Lifecycle ──────────────────────────────
 SKILL_MATCH_THRESHOLD = get_env_float("SKILL_MATCH_THRESHOLD", 0.75)
 SKILL_CANDIDATE_CAP = get_env_int("SKILL_CANDIDATE_CAP", 50)
-SKILL_PROMOTION_RUNS = get_env_int(
-    "SKILL_PROMOTION_RUNS", 3
-)  # raised from 2 — needs 3 consistent successes before promotion
-SKILL_DEMOTE_FAILURES = get_env_int("SKILL_DEMOTE_FAILURES", 2)
-SKILL_RETIRE_FAILURES = get_env_int("SKILL_RETIRE_FAILURES", 5)
-SKILL_PRUNE_DAYS = get_env_int("SKILL_PRUNE_DAYS", 30)
 
 # ── Voice I/O ──────────────────────────────────────────────
 WAKE_WORD = get_env_str("WAKE_WORD", "hey_jarvis")
@@ -341,12 +346,9 @@ DESKTOP_TOAST_ENABLED = get_env_bool("DESKTOP_TOAST_ENABLED", False)
 
 # ── Edge TTS (primary) ────────────────────────────────────
 # Full voice list: `python -m edge_tts --list-voices`
-EDGE_TTS_VOICE = get_env_str("EDGE_TTS_VOICE", "en-US-GuyNeural")
-# Rate offset  : "+10%" faster | "-10%" slower  (range: -50% .. +100%)
+EDGE_TTS_VOICE = get_env_str("EDGE_TTS_VOICE", "en-US-JennyNeural")
 EDGE_TTS_RATE = get_env_str("EDGE_TTS_RATE", "+0%")
-# Volume offset: "+0%" nominal  (range: -100% .. +100%)
 EDGE_TTS_VOLUME = get_env_str("EDGE_TTS_VOLUME", "+0%")
-# Pitch offset : "+0Hz" nominal (range: -200Hz .. +200Hz)
 EDGE_TTS_PITCH = get_env_str("EDGE_TTS_PITCH", "+0Hz")
 # Max seconds to wait for the TTS network call
 EDGE_TTS_TIMEOUT = get_env_int("EDGE_TTS_TIMEOUT", 15)
@@ -579,24 +581,10 @@ _TOOL_SCHEMAS_TOMBSTONE = [  # kept for grep-ability; not imported by anything
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "open_app",
-            "description": "Open an application by name (e.g., notepad, calc).",
-            "parameters": {
-                "type": "object",
-                "properties": {"name": {"type": "string"}},
-                "required": ["name"],
-            },
-        },
-    },
 ]
 
 # ── Advanced Features ──────────────────────────────────
 ENABLE_SKILLS = get_env_bool("ENABLE_SKILLS", True)
-ENABLE_PLANNING = get_env_bool("ENABLE_PLANNING", True)
-ENABLE_REFLECTION = get_env_bool("ENABLE_REFLECTION", True)
 
 # ── Outbound Messaging (send_message tool) ─────────────
 SMTP_HOST     = get_env_str("SMTP_HOST", "smtp.gmail.com")

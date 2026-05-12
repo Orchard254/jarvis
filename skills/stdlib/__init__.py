@@ -20,13 +20,13 @@ All functions return a dict with at minimum {"success": bool}.
 
 Modules
 -------
-filesystem  read_file, write_file, file_ops
-web         search_web, fetch_url
-system      process_manager, system_settings, open_app, install_app
-ui          clipboard, control_input, control_window
+filesystem  read_file, write_file, file_ops, parallel_read
+web         search_web, fetch_url, parallel_fetch
+system      process_manager, system_settings, install_app, volume_mute_then_set, brightness_set_robust
 messaging   send_email, send_telegram, notify
-network     network_check
-time_cal    get_time, get_events, create_event, delete_event
+
+Other tools (control_window, clipboard, network_check, time_calendar) are
+available as direct tool calls or by importing from tools.* inside execute_code.
 """
 
 # Manifest — used by prompt_builder to inject docs into the system prompt.
@@ -43,27 +43,12 @@ STDLIB_MANIFEST = {
     },
     "system": {
         "module": "skills.stdlib.system",
-        "functions": ["process_manager", "system_settings", "open_app", "install_app", "volume_mute_then_set", "brightness_set_robust"],
-        "summary": "list/kill/start processes, change system settings, open or install apps, volume control (mute-then-set), robust brightness control with fallbacks",
-    },
-    "ui": {
-        "module": "skills.stdlib.ui",
-        "functions": ["clipboard", "control_input", "control_window"],
-        "summary": "clipboard read/write, keyboard/mouse input, window resize/move/close",
+        "functions": ["process_manager", "system_settings", "install_app", "volume_mute_then_set", "brightness_set_robust"],
+        "summary": "list/kill/start processes, change system settings, install apps, volume control (mute-then-set), robust brightness control with fallbacks",
     },
     "messaging": {
         "module": "skills.stdlib.messaging",
         "functions": ["send_email", "send_telegram", "notify"],
         "summary": "send email (SMTP), Telegram message, or desktop toast notification",
-    },
-    "network": {
-        "module": "skills.stdlib.network",
-        "functions": ["network_check"],
-        "summary": "ping, DNS lookup, download speed test, list connections/interfaces",
-    },
-    "time_cal": {
-        "module": "skills.stdlib.time_cal",
-        "functions": ["get_time", "get_events", "create_event", "delete_event"],
-        "summary": "current date/time/timezone, Outlook/ICS calendar CRUD",
     },
 }

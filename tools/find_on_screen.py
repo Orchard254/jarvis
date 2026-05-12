@@ -71,16 +71,12 @@ def find_on_screen(
             "messages": [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                        },
-                    ],
+                    "content": prompt,
+                    "images": [image_b64],
                 }
             ],
             "stream": False,
+            "temperature": 0.1,
         }
 
         headers = {"Content-Type": "application/json"}

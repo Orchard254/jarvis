@@ -32,7 +32,8 @@ def browser(
     """
     Control a web browser using Playwright.
     Actions: launch, navigate, click, type, read_page, screenshot,
-             close, back, forward, get_url, scroll, wait_for
+             close, close_tab, get_tabs, switch_tab, new_tab, back,
+             forward, get_url, scroll, wait_for
     """
     global _playwright, _browser, _page
 
@@ -68,6 +69,36 @@ def browser(
             _require_page()
             _page.click(selector, timeout=timeout)
             return {"success": True, "action": "click", "selector": selector}
+
+        elif action == "new_tab":
+            _require_page()
+            new_page = _browser.contexts[0].new_page()
+            _page = new_page
+            if url:
+                _page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+            return {"success": True, "action": "new_tab", "url": _page.url}
+
+        elif action == "get_tabs":
+            _require_page()
+            pages = _browser.contexts[0].pages if _browser.contexts else []
+            tabs = [{"title": p.title(), "url": p.url, "index": i} for i, p in enumerate(pages)]
+            return {"success": True, "action": "get_tabs", "tabs": tabs}
+
+        elif action == "switch_tab":
+            _require_page()
+            if selector is None:
+                return {"success": False, "error": "switch_tab requires selector (tab index)"}
+            try:
+                tab_index = int(selector)
+                pages = _browser.contexts[0].pages if _browser.contexts else []
+                if 0 <= tab_index < len(pages):
+                    pages[tab_index].bring_to_front()
+                    _page = pages[tab_index]
+                    return {"success": True, "action": "switch_tab", "tab_index": tab_index}
+                else:
+                    return {"success": False, "error": f"Invalid tab index: {tab_index}"}
+            except ValueError:
+                return {"success": False, "error": f"Invalid tab index format: '{selector}'"}
 
         elif action == "type":
             _require_page()
@@ -113,6 +144,11 @@ def browser(
             _do_close()
             return {"success": True, "action": "close"}
 
+        elif action == "close_tab":
+            _require_page()
+            _page.keyboard.press("Control+w")
+            return {"success": True, "action": "close_tab"}
+
         elif action == "back":
             _require_page()
             _page.go_back()
@@ -148,6 +184,16 @@ def browser(
             _require_page()
             _page.wait_for_selector(selector, timeout=timeout)
             return {"success": True, "action": "wait_for", "selector": selector}
+
+        elif action == "refresh":
+            _require_page()
+            _page.reload()
+            return {
+                "success": True,
+                "url": _page.url,
+                "title": _page.title(),
+                "action": "refresh",
+            }
 
         else:
             return {"success": False, "error": f"Unknown browser action: '{action}'"}
@@ -189,7 +235,9 @@ def _do_launch(timeout: int = 10000):
             logger.warning("browser: existing session is dead — relaunching")
             _do_close()  # clean up stale globals before fresh launch
     _playwright = sync_playwright().__enter__()
-    _browser = _playwright.chromium.launch(headless=False)
+    # Use system default browser instead of forcing Chromium
+    # channel=None means use the system's default browser
+    _browser = _playwright.chromium.launch(headless=False, channel=None)
     _page = _browser.new_page()
     _page.set_default_timeout(timeout)
 

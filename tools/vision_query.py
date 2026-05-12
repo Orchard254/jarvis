@@ -59,7 +59,16 @@ def vision_query(question: str, region: dict | None = None) -> dict:
     try:
         from tools.capture_screen import capture_screen
 
-        shot = capture_screen(region=region)
+        # Convert dict region {"left","top","width","height"} to tuple (left,top,right,bottom)
+        region_tuple = None
+        if region is not None:
+            region_tuple = (
+                region["left"],
+                region["top"],
+                region["left"] + region["width"],
+                region["top"] + region["height"],
+            )
+        shot = capture_screen(region=region_tuple)
         if not shot.get("success"):
             return {
                 "success": False,
@@ -84,29 +93,14 @@ def vision_query(question: str, region: dict | None = None) -> dict:
     # ── Step 2: ask gemma3 ───────────────────────────────────────────────────
     try:
         import requests
-        from settings import (
-            LLM_TIMEOUT,
-            LLM_VISION_MODEL,
-            OLLAMA_API_KEY,
-            OLLAMA_LOCAL_URL,
-            OLLAMA_MODE,
-            LLM_BASE_URL,
-        )
-
-        # Mirror the endpoint resolution from vision_summary.py
-        mode = OLLAMA_MODE.strip().lower()
-        if mode == "local":
-            base = OLLAMA_LOCAL_URL.rstrip("/")
-            endpoint = base if base.endswith("/api/chat") else base + "/api/chat"
-        else:
-            base = LLM_BASE_URL.rstrip("/")
-            if not any(seg in base for seg in ("/api/", "/v1/")):
-                base = base + "/api/chat"
-            endpoint = base
+        from settings import LLM_TIMEOUT, LLM_VISION_MODEL, OLLAMA_API_KEY
+        from verification.vision_summary import _vision_endpoint
 
         headers = {"Content-Type": "application/json"}
         if OLLAMA_API_KEY:
             headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+
+        endpoint = _vision_endpoint()
 
         # Prompt is question-driven: gemma3 answers specifically what gpt-oss asked.
         # Keeping the prompt tight prevents verbose scene descriptions when all
@@ -177,6 +171,6 @@ def vision_query(question: str, region: dict | None = None) -> dict:
             "success": False,
             "error": f"Vision inference error: {exc}",
             "answer": "",
-            "width": width if "width" in dir() else 0,
-            "height": height if "height" in dir() else 0,
+            "width": width if "width" in locals() else 0,
+            "height": height if "height" in locals() else 0,
         }

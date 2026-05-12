@@ -110,11 +110,13 @@ print(f"\nRESULTS: {passed}/{len(dangerous_tests)} correct")
 
 if failed > 0:
     print(f"\n❌ {failed} VERIFICATION FAILURES - Safety policies need adjustment!")
-    sys.exit(1)
+    if __name__ == "__main__":
+        sys.exit(1)
 else:
     print("\n✅ ALL VERIFICATION TESTS PASSED!")
     print("\nSafety policies correctly:")
     print("  • Block genuinely dangerous operations (rm -rf, format, shutdown, etc.)")
     print("  • Allow legitimate non-harmful code (file ops, system queries, etc.)")
     print("  • Permit temp/cache cleanup when context is clear")
-    sys.exit(0)
+    if __name__ == "__main__":
+        sys.exit(0)

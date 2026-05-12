@@ -1,129 +1,208 @@
 """
 Primitive: read_pc_state()
-Zero DB call. Reads live cache from state_monitor.
-
-Always sets ``success: True`` on a normal snapshot so the tool loop, verifier,
-and reporter agree (raw ``capture_state`` dicts omitted this field before).
+Enumerates the real desktop state live via Win32.  This is the SINGLE source
+of truth for "what's on the taskbar" — used by both ``read_pc_state()`` (the
+tool) and ``state_monitor.py`` (the background cache).
 
 Exports:
-    read_pc_state() — full desktop state
-    get_taskbar_windows() — list of taskbar-visible window dicts (for skills)
+    read_pc_state()       — full desktop state dict
+    get_taskbar_apps()    — filtered, deduplicated list of user-visible windows
+    get_raw_windows()     — all visible top-level windows without filtering
+    BACKGROUND_TASKS      — helper: returns snapshot of execute_code bg processes
+    SYSTEM_PROCS          — blocklist of background / system processes
 """
 
 import json
 import logging
-
-from indexer.state_monitor import capture_state, get_latest
+import threading
 
 logger = logging.getLogger(__name__)
 
+# ── Background task snapshot (lazy import to avoid circular dependency) ───────
+_bg_lock = threading.Lock()
+_bg_processes_imported = False
+_bg_processes_ref = None
 
-def _normalize_state(state: dict) -> dict:
-    """Ensure ``windows`` / ``processes`` lists exist (DB/cache use *_json columns)."""
-    out = dict(state)
-    if "windows" not in out and "windows_json" in out:
-        wj = out.get("windows_json")
+
+def BACKGROUND_TASKS() -> list[dict]:
+    """
+    Return a serializable snapshot of all tracked background processes
+    from ``execute_code``.  Each entry::
+
+        {pid, running, returncode, elapsed_seconds, language, code_preview}
+    """
+    global _bg_processes_imported, _bg_processes_ref
+    if not _bg_processes_imported:
         try:
-            out["windows"] = json.loads(wj) if isinstance(wj, str) else []
-        except (json.JSONDecodeError, TypeError):
-            out["windows"] = []
-    if "processes" not in out and "processes_json" in out:
-        pj = out.get("processes_json")
+            from tools.execute_code import _bg_processes
+            _bg_processes_ref = _bg_processes
+        except ImportError:
+            _bg_processes_ref = {}
+        _bg_processes_imported = True
+    d = _bg_processes_ref
+    if not d:
+        return []
+    now = __import__("time").time()
+    result = []
+    with _bg_lock:  # local lock for thread safety when iterating
+        items = list(d.items())
+    for pid, info in items:
+        p = info.get("proc")
+        rc = p.poll() if p else None
+        done = rc is not None
+        result.append({
+            "pid": pid,
+            "running": not done,
+            "returncode": rc,
+            "elapsed_seconds": round(now - info.get("started", now), 1),
+            "language": info.get("language", "?"),
+            "code_preview": info.get("code", "")[:80],
+        })
+    return result
+
+
+# ── System processes that are never real user-facing taskbar apps ────────────
+SYSTEM_PROCS = {
+    "SystemSettings.exe",
+    "ShellExperienceHost.exe",
+    "SearchHost.exe",
+    "SearchUI.exe",
+    "SearchIndexer.exe",
+    "TextInputHost.exe",
+    "LockApp.exe",
+    "RuntimeBroker.exe",
+    "dllhost.exe",
+    "svchost.exe",
+    "conhost.exe",
+    "ctfmon.exe",
+    "SecurityHealthSystray.exe",
+    "OneDrive.exe",
+    # ApplicationFrameHost.exe NOT blocked — it hosts UWP apps (Calculator, Photos, etc.)
+    #   that ARE user-facing taskbar apps and must appear in the window list.
+    # explorer.exe intentionally NOT here — File Explorer IS a user app
+}
+
+
+def get_raw_windows() -> list[dict]:
+    """Enumerate all visible, sized, top-level windows with a title.
+
+    Returns list of dicts with keys: hwnd, title, process, pid.
+    No SYSTEM_PROCS / dedup filtering — that's what ``get_taskbar_apps()`` adds.
+    """
+    import win32con
+    import win32gui
+    import win32process
+    import psutil
+
+    results = []
+
+    def callback(hwnd, _):
         try:
-            out["processes"] = json.loads(pj) if isinstance(pj, str) else []
-        except (json.JSONDecodeError, TypeError):
-            out["processes"] = []
-    out.setdefault("windows", [])
-    out.setdefault("processes", [])
-    out.setdefault("app_count", 0)
-    out.setdefault("window_count", 0)
-    out.setdefault("focused_process", "")
-    return out
+            if not win32gui.IsWindowVisible(hwnd):
+                return
+            if win32gui.GetParent(hwnd) != 0:
+                return
+            rect = win32gui.GetWindowRect(hwnd)
+            if rect[2] - rect[0] <= 0 or rect[3] - rect[1] <= 0:
+                return
+            title = win32gui.GetWindowText(hwnd).strip()
+            if not title:
+                return
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            proc_name = psutil.Process(pid).name() if pid else "unknown"
+            results.append({
+                "hwnd": int(hwnd),
+                "title": title,
+                "process": proc_name,
+                "pid": pid,
+            })
+        except Exception:
+            pass
+
+    win32gui.EnumWindows(callback, None)
+    return results
 
 
-def read_pc_state() -> dict:
+def get_taskbar_apps() -> list[dict]:
+    """Return taskbar-visible apps: SYSTEM_PROCS filtered + title-deduplicated.
+
+    This is the authoritative list that matches what the user sees on their
+    taskbar.  Each dict: ``hwnd``, ``title``, ``process``, ``pid``.
+    """
+    seen_titles = set()
+    apps = []
+    for w in get_raw_windows():
+        if w["process"] in SYSTEM_PROCS:
+            continue
+        if w["title"] in seen_titles:
+            continue
+        seen_titles.add(w["title"])
+        apps.append(w)
+    return apps
+
+
+def _get_clipboard(max_chars: int = 500) -> str:
+    """Read clipboard text (up to *max_chars*).  Returns ``""`` on failure."""
     try:
-        state = get_latest()
-        if not state:
-            state = capture_state()
-        state = _normalize_state(state)
-        return {"success": True, **state}
+        import win32clipboard
+        win32clipboard.OpenClipboard()
+        try:
+            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+                data = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                return str(data)[:max_chars] if data else ""
+        finally:
+            win32clipboard.CloseClipboard()
+    except Exception:
+        return ""
+    return ""
+
+
+def read_pc_state(**kwargs) -> dict:
+    """Live desktop snapshot.  Zero DB / cache calls — enumerates Win32 directly.
+
+    Returned dict keys (all consumers agree on this shape):
+        success         — bool
+        windows         — filtered, deduplicated taskbar-visible apps list
+        processes       — unique process names from *windows*
+        app_count       — len(windows)
+        window_count    — raw (unfiltered) window count
+        focused_window  — title of the foreground window
+        focused_process — process name of the foreground window
+        clipboard       — current clipboard text (up to 500 chars)
+    """
+    try:
+        import win32gui
+        import win32process
+        import psutil
+
+        apps = get_taskbar_apps()
+        raw_windows = get_raw_windows()
+
+        focused_title = ""
+        focused_proc = ""
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                focused_title = win32gui.GetWindowText(hwnd)
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                focused_proc = psutil.Process(pid).name()
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "windows": apps,
+            "processes": list({a["process"] for a in apps}),
+            "app_count": len(apps),
+            "window_count": len(raw_windows),
+            "focused_window": focused_title,
+            "focused_process": focused_proc,
+            "clipboard": _get_clipboard(),
+            "background_tasks": BACKGROUND_TASKS(),
+        }
     except Exception as e:
         logger.error(f"read_pc_state error: {e}", exc_info=True)
         return {"success": False, "error": f"Internal error: {str(e)}"}
 
 
-def get_taskbar_windows() -> list[dict]:
-    """
-    Return list of taskbar-visible windows for window arrangement tasks.
-
-    This is the SAME enumeration used by read_pc_state, ensuring skills count
-    the same windows the user sees in their taskbar.
-
-    Each window dict contains: hwnd, title, process, pid
-    """
-    try:
-        import win32con
-        import win32gui
-        import win32process
-        import psutil
-    except ImportError:
-        # Fallback: read from state_monitor cache
-        state = read_pc_state()
-        return state.get("windows", [])
-
-    windows = []
-
-    def enum_callback(hwnd, results):
-        try:
-            if not hwnd:
-                return 1
-            if not win32gui.IsWindowVisible(hwnd):
-                return 1
-            # Top-level only (no parent)
-            if win32gui.GetParent(hwnd) != 0:
-                return 1
-            # Has actual size
-            try:
-                rect = win32gui.GetWindowRect(hwnd)
-                width, height = rect[2] - rect[0], rect[3] - rect[1]
-                if width <= 0 or height <= 0:
-                    return 1
-            except Exception:
-                return 1
-            # Taskbar visibility filters (must match state_monitor.py)
-            try:
-                ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-                style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-                if ex_style & win32con.WS_EX_TOOLWINDOW:
-                    return 1  # No taskbar button
-                if not (style & win32con.WS_CAPTION):
-                    return 1  # No title bar
-                owner = win32gui.GetWindow(hwnd, win32con.GW_OWNER)
-                if owner and owner != 0:
-                    return 1  # Owned window
-            except Exception:
-                pass
-            try:
-                title = win32gui.GetWindowText(hwnd)
-            except Exception:
-                return 1
-            if not title.strip():
-                return 1
-            try:
-                _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                proc_name = psutil.Process(pid).name() if pid else "unknown"
-            except Exception:
-                proc_name = "unknown"
-                pid = 0
-            results.append({"hwnd": int(hwnd), "title": title, "process": proc_name, "pid": pid})
-        except Exception:
-            pass
-        return 1
-
-    try:
-        win32gui.EnumWindows(enum_callback, windows)
-    except Exception as e:
-        logger.error(f"get_taskbar_windows: EnumWindows failed: {e}")
-
-    return windows
+get_taskbar_windows = get_taskbar_apps  # backward-compat alias

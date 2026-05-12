@@ -166,7 +166,7 @@ EXECUTION ERROR:
 {error_context}
 
 PREVIOUS FIX ATTEMPTS: {len(previous_fixes)}
-{'Previous attempts and their outcomes:\\n' + chr(10).join(previous_fixes) if previous_fixes else 'This is the first fix attempt.'}
+{('Previous attempts and their outcomes:' + chr(10) + chr(10).join(previous_fixes)) if previous_fixes else 'This is the first fix attempt.'}
 
 Please analyze the error carefully and provide corrected code.
 Your response MUST include:

@@ -10,8 +10,6 @@ Tier 2 — Python stdlib skills: live in skills/stdlib/ and are imported directl
          Imports here kept so skills/stdlib wrappers can re-export from tools/.
 """
 
-# ── Original 9 tools ──────────────────────────────────────────────────────────
-# ── 8 new tools ───────────────────────────────────────────────────────────────
 from tools.browser import browser
 from tools.capture_screen import capture_screen
 from tools.clipboard_tool import clipboard
@@ -23,52 +21,55 @@ from tools.file_ops import file_ops
 from tools.find_on_screen import find_on_screen
 from tools.vision_query import vision_query
 from tools.notify_user import notify_user
-from tools.process_manager import process_manager
-from tools.query_pc_index import query_pc_index
 from tools.read_file import read_file
 from tools.read_pc_state import read_pc_state
+from tools.query_pc_index import query_pc_index
 from tools.search_web import search_web
-from tools.system_settings import system_settings
 from tools.write_file import write_file
-# ── Phase-2 tools: disconnected organs now wired up ──────────────────────────
 from tools.memory_tool import memory
 from tools.speak import speak
 from tools.schedule_tool import schedule
-# ── Phase-3: pending tools now implemented ────────────────────────────────────
 from tools.ask_user import ask_user
-from tools.network_check import network_check
 from tools.time_calendar import time_calendar
 from tools.listen import listen
 from tools.watch_screen import watch_screen
 from tools.send_message import send_message
 
 TOOL_REGISTRY = {
-    # ── Tier 1: Native tools (tool-protocol only) ────────────────────────────
     "execute_code": execute_code,
     "capture_screen": capture_screen,
     "read_pc_state": read_pc_state,
     "query_pc_index": query_pc_index,
+    "control_window": control_window,
     "browser": browser,
     "find_on_screen": find_on_screen,
     "vision_query": vision_query,
+    "time_calendar": time_calendar,
     "memory": memory,
     "speak": speak,
     "schedule": schedule,
     "ask_user": ask_user,
     "listen": listen,
     "watch_screen": watch_screen,
-    # ── Phase-3 tools: now fully registered ───────────────────────────────────
-    "network_check": network_check,
-    "time_calendar": time_calendar,
     "send_message": send_message,
 }
 
 TOOL_SCHEMAS = [
     # ── Tier 1 schemas only ──────────────────────────────────────────────────
-    # Tier-2 tools (network_check, send_message, time_calendar, file_ops,
-    # process_manager, system_settings, clipboard, notify_user, search_web,
-    # fetch_url, control_input, control_window, read_file, write_file) have
-    # been moved to skills/stdlib/ — the LLM imports them in execute_code.
+    # The following tools live in TOOL_REGISTRY and ARE exposed as schemas:
+    #   execute_code, capture_screen, read_pc_state, query_pc_index, control_window, browser,
+    #   find_on_screen, vision_query, time_calendar, memory, speak,
+    #   schedule, ask_user, listen, watch_screen, send_message
+    #
+    # Tools NOT in schemas (use via execute_code import):
+    #   from tools.clipboard_tool import clipboard
+    #   from tools.control_input import control_input
+    #   from tools.file_ops import file_ops
+    #   from tools.read_file import read_file
+    #   from tools.write_file import write_file
+    #   from tools.search_web import search_web
+    #   from tools.fetch_url import fetch_url
+    #   from tools.notify_user import notify_user
     {
         "type": "function",
         "function": {
@@ -76,35 +77,21 @@ TOOL_SCHEMAS = [
             "description": (
                 "Run Python or PowerShell on the local machine. "
                 "Primary tool for OS tasks, launching apps (os.startfile), "
-                "installing software (winget), file ops, and system queries."
+                "installing software (winget), file ops, and system queries. "
+                "Set background=True for long-running tasks — returns immediately "
+                "with a PID, then use action='check'/'wait'/'kill' to manage."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string"},
+                    "code": {"type": "string", "description": "Code to execute (required for action='run')"},
                     "language": {"type": "string", "enum": ["python", "powershell"]},
-                },
-                "required": ["code"],
-            },
-        },
-    },{
-        "type": "function",
-        "function": {
-            "name": "capture_screen",
-            "description": "Screenshot the desktop.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "region": {"type": "object"},
+                    "background": {"type": "boolean", "description": "Run in background (default false). Returns {pid, status: 'running'} immediately."},
+                    "action": {"type": "string", "enum": ["run", "check", "wait", "kill", "list"], "description": "run (default), check (poll pid), wait (block until done), kill (terminate), list (all tracked processes)"},
+                    "pid": {"type": "integer", "description": "Process ID for check/wait/kill actions"},
+                    "timeout": {"type": "integer", "description": "Max seconds for wait action (default 60)"},
                 },
             },
-        },
-    },{
-        "type": "function",
-        "function": {
-            "name": "read_pc_state",
-            "description": "Read live desktop state: open windows, focused app, running processes.",
-            "parameters": {"type": "object"},
         },
     },
     {
@@ -112,16 +99,72 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "query_pc_index",
             "description": (
-                "Search the local PC index for installed apps, files, or window state. "
-                "Always call this BEFORE guessing a path."
+                "Search the PC index for installed apps, recent files, or running windows/processes. "
+                "Use this to quickly locate applications, find files, or check what's running. "
+                "Returns up to 8 results of each type."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "type": {"type": "string", "enum": ["app", "file", "state"]},
+                    "query": {"type": "string", "description": "Search text (e.g. app name, file name, process name)"},
+                    "type": {"type": "string", "enum": ["app", "file", "state"], "description": "Filter by type: app (installed programs), file (recent files), state (windows/processes). Omit for all."},
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "control_window",
+            "description": (
+                "Focus, close, minimize, maximize, restore, resize, or move a window by title substring. "
+                "Use this instead of writing raw PowerShell/win32gui code. "
+                "Only accepts window_title= and action= params — NOT class methods like .list_windows(). "
+                "NOTE: Cannot resize/move windows running as administrator (Task Manager, etc.) — "
+                "JARVIS runs at user level and gets Access Denied on elevated windows."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_title": {"type": "string", "description": "Title substring of the target window (case-insensitive)"},
+                    "action": {"type": "string", "enum": ["focus", "minimize", "maximize", "restore", "close", "resize", "move"]},
+                    "params": {"type": "object", "description": "Optional params: {width, height, left, top} for resize/move actions"},
+                },
+                "required": ["window_title", "action"],
+            },
+        },
+    },{
+        "type": "function",
+        "function": {
+            "name": "capture_screen",
+            "description": (
+                "Screenshot the desktop. "
+                "Use when you need the actual image data (saving to file, comparing pixels). "
+                "For understanding screen content (reading text, identifying UI), use vision_query instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "region": {"type": "object", "description": "Optional crop region {left, top, width, height}"},
+                },
+            },
+        },
+    },{
+        "type": "function",
+        "function": {
+            "name": "read_pc_state",
+            "description": (
+                "Read live desktop state: open windows, running processes, "
+                "focused app, clipboard content, active window count, and "
+                "any tracked background execute_code tasks. "
+                "Use to check what's running, find windows by title, or "
+                "verify app state before/after actions. Takes no arguments."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
             },
         },
     },
@@ -131,7 +174,8 @@ TOOL_SCHEMAS = [
             "name": "browser",
             "description": (
                 "Control a web browser (Playwright). "
-                "Use for interactive browsing, form filling, clicking buttons."
+                "Use for interactive browsing, form filling, clicking buttons, "
+                "tab management (close_tab, get_tabs, switch_tab)."
             ),
             "parameters": {
                 "type": "object",
@@ -146,10 +190,15 @@ TOOL_SCHEMAS = [
                             "read_page",
                             "screenshot",
                             "close",
+                            "close_tab",
+                            "new_tab",
+                            "get_tabs",
+                            "switch_tab",
                             "back",
                             "forward",
                             "get_url",
                             "scroll",
+                            "refresh",
                             "wait_for",
                         ],
                     },
@@ -373,43 +422,9 @@ TOOL_SCHEMAS += [
     {
         "type": "function",
         "function": {
-            "name": "network_check",
-            "description": (
-                "Check network connectivity before tools that require the internet "
-                "(search_web, fetch_url, browser).  Actions: "
-                "ping (is a host reachable?), "
-                "dns (resolve hostname to IPs), "
-                "speed (rough download throughput), "
-                "connections (active TCP/UDP connections), "
-                "interfaces (list network adapters)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["ping", "dns", "speed", "connections", "interfaces"],
-                        "description": "Check to perform (default: ping).",
-                    },
-                    "host": {
-                        "type": "string",
-                        "description": "Host for ping/dns actions (default: 8.8.8.8).",
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "description": "Seconds before ping times out (default 3).",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "time_calendar",
             "description": (
-                "Real-time clock and calendar management.  "
-                "get_time: current date/time/timezone.  "
+                "Calendar management: list, create, and delete events.  "
                 "get_events: upcoming calendar events (next N days).  "
                 "create_event: add a new event to the calendar.  "
                 "delete_event: remove an event by subject.  "
@@ -420,7 +435,7 @@ TOOL_SCHEMAS += [
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["get_time", "get_events", "create_event", "delete_event"],
+                        "enum": ["get_events", "create_event", "delete_event"],
                     },
                     "subject": {
                         "type": "string",

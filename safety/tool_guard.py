@@ -71,7 +71,9 @@ def _is_secret_env_key(key: str) -> bool:
     return False
 
 
-def check_imports(code: str):
+def check_imports(code: str, language: str = "python"):
+    if language != "python":
+        return True, ""
     try:
         tree = ast.parse(code)
         for node in ast.walk(tree):

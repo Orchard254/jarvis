@@ -1,6 +1,6 @@
 """
-Smoke-test: verify TOOL_SCHEMAS is importable, has exactly 9 tools,
-and contains no retired tools (open_app, install_app).
+Smoke-test: verify TOOL_SCHEMAS is importable, has exactly 14 tools,
+and contains no retired/collapsed tools.
 """
 
 import os
@@ -14,14 +14,20 @@ EXPECTED = {
     "execute_code",
     "capture_screen",
     "read_pc_state",
-    "control_window",
-    "control_input",
-    "query_pc_index",
-    "read_file",
-    "write_file",
-    "notify_user",
+    "browser",
+    "find_on_screen",
+    "vision_query",
+    "time_calendar",
+    "memory",
+    "speak",
+    "schedule",
+    "ask_user",
+    "listen",
+    "watch_screen",
+    "send_message",
 }
-RETIRED = {"open_app", "install_app"}
+RETIRED = {"open_app", "install_app", "control_window", "control_input", "read_file",
+           "write_file", "notify_user", "network_check", "query_pc_index"}
 
 schema_names = {s["function"]["name"] for s in TOOL_SCHEMAS}
 registry_names = set(TOOL_REGISTRY.keys())
@@ -31,8 +37,8 @@ assert registry_names == EXPECTED, f"Registry mismatch: {registry_names ^ EXPECT
 assert not (schema_names & RETIRED), (
     f"Retired tools still present: {schema_names & RETIRED}"
 )
-assert len(TOOL_SCHEMAS) == 9, f"Expected 9 schemas, got {len(TOOL_SCHEMAS)}"
+assert len(TOOL_SCHEMAS) == 14, f"Expected 14 schemas, got {len(TOOL_SCHEMAS)}"
 
-print(f"✅ TOOL_SCHEMAS: {len(TOOL_SCHEMAS)} tools — {sorted(schema_names)}")
-print("✅ TOOL_REGISTRY matches TOOL_SCHEMAS")
-print("✅ No retired tools present")
+print(f"[OK] TOOL_SCHEMAS: {len(TOOL_SCHEMAS)} tools — {sorted(schema_names)}")
+print("[OK] TOOL_REGISTRY matches TOOL_SCHEMAS")
+print("[OK] No retired tools present")

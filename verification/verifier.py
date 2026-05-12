@@ -1,71 +1,91 @@
 """
 3-tier router. Returns structured text report ONLY.
+
+For execute_code, additionally checks jarvis.log for ERROR/Traceback
+lines as an independent verification signal — catches silent failures
+that the tool's own success flag might miss.
 """
 
 import logging
+import os
+import re
 
-from tools.capture_screen import capture_screen
-
-from verification.ocr_match import verify_text_on_screen
-from verification.state_checks import verify_process_running, verify_window_visible
-from verification.vision_summary import summarize_screen
+from settings import LOG_FILE
 
 logger = logging.getLogger(__name__)
 
 
 def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
-    if tool_name == "read_pc_state":
-        if result.get("success") is False:
+    if result.get("success") is False:
+        return {
+            "status": "FAILED",
+            "method": "result",
+            "summary": result.get("error") or f"{tool_name} failed.",
+        }
+
+    # For execute_code, cross-check against the log for silent failures
+    if tool_name == "execute_code":
+        log_result = _check_log_for_failures()
+        if log_result:
             return {
                 "status": "FAILED",
-                "method": "state_read",
-                "summary": result.get("error") or "read_pc_state failed.",
+                "method": "log_check",
+                "summary": log_result,
             }
-        return {
-            "status": "CONFIRMED",
-            "method": "state_read",
-            "summary": "Desktop state retrieved.",
-        }
-
-    if tool_name in ("execute_code", "control_window", "open_app"):
-        # Try window visibility with the expected string (any app, not just notepad)
-        if expected and verify_window_visible(expected):
-            return {
-                "status": "CONFIRMED",
-                "method": "state_check",
-                "summary": f"Window '{expected}' visible.",
-            }
-        # Try process check as fallback
-        if expected and verify_process_running(expected):
-            return {
-                "status": "CONFIRMED",
-                "method": "process_check",
-                "summary": f"Process '{expected}' is running.",
-            }
-        if result.get("returncode") == 0 or result.get("success"):
-            return {
-                "status": "CONFIRMED",
-                "method": "return_code",
-                "summary": f"{tool_name} succeeded.",
-            }
-
-    if expected and verify_text_on_screen(expected):
-        return {
-            "status": "CONFIRMED",
-            "method": "ocr",
-            "summary": f"Text '{expected}' found on screen.",
-        }
-
-    if result.get("image_b64"):
-        summary = summarize_screen(result["image_b64"], expected)
-        return {
-            "status": "INCONCLUSIVE",
-            "method": "vision_summary",
-            "summary": summary,
-        }
 
     return {
-        "status": "FAILED",
-        "method": "none",
-        "summary": f"Verification inconclusive for {tool_name}.",
+        "status": "CONFIRMED",
+        "method": "result",
+        "summary": f"{tool_name} completed.",
     }
+
+
+_FAILURE_PATTERNS = re.compile(
+    r"^(.*\b(ERROR|Traceback|Exception|Failed|CRITICAL)\b.*)$",
+    re.MULTILINE,
+)
+
+
+def _check_log_for_failures(lines: int = 30) -> str:
+    """
+    Read the last *lines* lines of jarvis.log and check for failure signals.
+    Returns a human-readable summary if failures found, or empty string if clean.
+    """
+    path = LOG_FILE
+    if not os.path.isfile(path):
+        return ""
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            # Efficient tail: seek near end and read
+            f.seek(0, 2)
+            file_size = f.tell()
+            # Read up to 8KB from the end
+            chunk_size = min(file_size, 8192)
+            f.seek(file_size - chunk_size)
+            tail = f.read()
+
+        matches = _FAILURE_PATTERNS.findall(tail)
+        if not matches:
+            return ""
+
+        # Deduplicate and take the last 3 distinct failure lines
+        seen: set[str] = set()
+        failure_lines: list[str] = []
+        for full_line, *_ in reversed(matches):
+            key = full_line.strip()
+            if key and key not in seen:
+                seen.add(key)
+                failure_lines.append(key)
+                if len(failure_lines) >= 3:
+                    break
+
+        if failure_lines:
+            snippet = " | ".join(reversed(failure_lines))
+            return f"Log shows recent errors: {snippet}"
+
+        return ""
+
+    except Exception as exc:
+        logger.debug(f"Log check skipped: {exc}")
+        return ""

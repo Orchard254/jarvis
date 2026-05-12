@@ -5,6 +5,7 @@ Read-only interface to PC Index. Never writes.
 
 import json
 import logging
+import sqlite3
 from pathlib import Path
 
 from settings import PC_INDEX_DB

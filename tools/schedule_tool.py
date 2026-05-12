@@ -23,6 +23,7 @@ list    — show all pending / recurring scheduled tasks
 
 import logging
 import re
+import sqlite3
 import time
 import uuid
 from datetime import datetime

@@ -86,22 +86,38 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
     Returns:
         List of insight text strings relevant to the current tools
     """
-    if not suggested_tools:
-        return []
-
-    suggested_set = set(suggested_tools)
     all_prefs = get_all()
 
-    relevant = []
+    # Collect all insights (prefixed with "insight:")
+    all_insights: list[str] = []
     for key, value in all_prefs.items():
         if not key.startswith("insight:") or not isinstance(value, str) or len(value) <= 10:
             continue
+        all_insights.append(value)
 
-        # Check if insight mentions any tool name
+    # No suggested tools → return general insights (those not mentioning specific tools)
+    if not suggested_tools:
+        general = [
+            v for v in all_insights
+            if not any(t in v.lower() for t in [
+                "read_pc_state", "execute_code", "vision_query",
+                "capture_screen", "control_window", "control_input", "find_on_screen",
+                "file_ops", "web_search", "notify_user", "time_calendar",
+                "ask_user", "schedule", "memory", "speak",
+                "browser",
+            ])
+        ]
+        return general[-max_insights:] if general else all_insights[-max_insights:]
+
+    suggested_set = set(suggested_tools)
+
+    relevant = []
+    for value in all_insights:
         insight_lower = value.lower()
+
+        # Check if insight mentions any tool name from suggested set
         tools_in_insight = set()
         for tool in suggested_set:
-            # Match tool names mentioned in insight text
             if tool.replace("_", " ") in insight_lower or tool in insight_lower:
                 tools_in_insight.add(tool)
 
@@ -109,8 +125,11 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
         # OR if it doesn't mention any specific tool (general advice)
         mentions_tools = any(
             t in insight_lower
-            for t in ["read_pc_state", "execute_code", "vision_query", "query_pc_index",
-                     "capture_screen", "control_window", "control_input", "find_on_screen"]
+            for t in ["read_pc_state", "execute_code", "vision_query",
+                     "capture_screen", "control_window", "control_input", "find_on_screen",
+                     "file_ops", "web_search", "notify_user", "time_calendar",
+                     "ask_user", "schedule", "memory", "speak",
+                     "browser"]
         )
 
         if not mentions_tools or tools_in_insight:

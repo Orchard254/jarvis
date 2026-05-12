@@ -10,7 +10,7 @@ try:
 except ImportError:
     DEPS_AVAILABLE = False
 
-from settings import ENABLE_SKILLS, SKILL_MATCH_THRESHOLD, SKILLS_CHROMA
+import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def init():
     """
     global _client, _model, _collection
 
-    if not ENABLE_SKILLS:
+    if not settings.ENABLE_SKILLS:
         logger.info("Skills disabled, skipping embedder init")
         return
     if not DEPS_AVAILABLE:
@@ -56,8 +56,8 @@ def init():
         pass
 
     try:
-        SKILLS_CHROMA.mkdir(parents=True, exist_ok=True)
-        _client = chromadb.PersistentClient(path=str(SKILLS_CHROMA))
+        settings.SKILLS_CHROMA.mkdir(parents=True, exist_ok=True)
+        _client = chromadb.PersistentClient(path=str(settings.SKILLS_CHROMA))
         _collection = _client.get_or_create_collection(
             "skills", metadata={"hnsw:space": "cosine"}
         )
@@ -156,7 +156,7 @@ def search_similar(intent: str, limit: int = 3) -> list[dict]:
         matches = []
         for i in range(len(results["ids"][0])):
             sim = 1 - results["distances"][0][i]
-            if sim >= SKILL_MATCH_THRESHOLD:
+            if sim >= settings.SKILL_MATCH_THRESHOLD:
                 matches.append(
                     {
                         "skill_id": results["ids"][0][i],

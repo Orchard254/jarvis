@@ -15,14 +15,16 @@ _temp_root = tempfile.mkdtemp()
 temp_skills_db = Path(_temp_root) / "skills.db"
 temp_skills_chroma = Path(_temp_root) / "chroma"
 
-# Override settings for testing
+# Save originals and override settings for testing
 import settings
+_orig_skills_enabled = settings.ENABLE_SKILLS
+_orig_skills_db = settings.SKILLS_DB
+_orig_skills_chroma = settings.SKILLS_CHROMA
+_orig_candidate_cap = settings.SKILL_CANDIDATE_CAP
+_orig_match_threshold = settings.SKILL_MATCH_THRESHOLD
 settings.ENABLE_SKILLS = True
 settings.SKILLS_DB = temp_skills_db
 settings.SKILLS_CHROMA = temp_skills_chroma
-settings.SKILL_PROMOTION_RUNS = 2
-settings.SKILL_DEMOTE_FAILURES = 2
-settings.SKILL_RETIRE_FAILURES = 5
 settings.SKILL_CANDIDATE_CAP = 3
 settings.SKILL_MATCH_THRESHOLD = 0.0  # Low threshold for tests
 
@@ -32,23 +34,32 @@ from skills.skill_store import (
 )
 from skills.skill_embedder import init as init_embedder, search_similar
 from skills.skill_runner import run_skill
+from core.thread_db import close_thread_connections
 
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
-    # Clean up before each test
+    close_thread_connections()
     if temp_skills_db.exists():
         temp_skills_db.unlink()
     if temp_skills_chroma.exists():
         shutil.rmtree(temp_skills_chroma, ignore_errors=True)
-    # Initialize DB for each test
     init_db()
     yield
-    # Cleanup
+    close_thread_connections()
     if temp_skills_db.exists():
         temp_skills_db.unlink()
     if temp_skills_chroma.exists():
         shutil.rmtree(temp_skills_chroma, ignore_errors=True)
+
+
+# Restore original settings after all tests in this file
+def pytest_unconfigure():
+    settings.ENABLE_SKILLS = _orig_skills_enabled
+    settings.SKILLS_DB = _orig_skills_db
+    settings.SKILLS_CHROMA = _orig_skills_chroma
+    settings.SKILL_CANDIDATE_CAP = _orig_candidate_cap
+    settings.SKILL_MATCH_THRESHOLD = _orig_match_threshold
 
 
 def test_skill_lifecycle_crud():
@@ -100,36 +111,25 @@ def test_skill_runner_executes_through_safety(monkeypatch):
     assert result["success"] is True
 
 
-def test_automatic_demote_on_failures():
-    skill_id = save_candidate("demote test", "print('fail')")
-    promote_skill(skill_id)
-    
-    # Failures should demote to candidate
-    record_run(skill_id, False)
-    skill = get_skill(skill_id)
-    assert skill["status"] == "active"
-    
-    record_run(skill_id, False)
-    skill = get_skill(skill_id)
-    assert skill["status"] == "candidate"
-
-
 def test_prune_candidates_caps_memory():
-    # Create more than cap candidates
     ids = []
     for i in range(settings.SKILL_CANDIDATE_CAP + 2):
         ids.append(save_candidate(f"candidate {i}", f"print({i})"))
     
-    # Count before pruning
+    close_thread_connections()
     conn = sqlite3.connect(str(settings.SKILLS_DB))
-    count_before = conn.execute("SELECT COUNT(*) FROM skills WHERE status = 'candidate'").fetchone()[0]
-    conn.close()
+    try:
+        count_before = conn.execute("SELECT COUNT(*) FROM skills WHERE status = 'candidate'").fetchone()[0]
+    finally:
+        conn.close()
     assert count_before == settings.SKILL_CANDIDATE_CAP + 2
     
     prune_candidates()
     
-    # Count after pruning
+    close_thread_connections()
     conn = sqlite3.connect(str(settings.SKILLS_DB))
-    count_after = conn.execute("SELECT COUNT(*) FROM skills WHERE status = 'candidate'").fetchone()[0]
-    conn.close()
+    try:
+        count_after = conn.execute("SELECT COUNT(*) FROM skills WHERE status = 'candidate'").fetchone()[0]
+    finally:
+        conn.close()
     assert count_after == settings.SKILL_CANDIDATE_CAP

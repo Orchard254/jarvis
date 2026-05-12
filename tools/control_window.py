@@ -252,33 +252,35 @@ def control_window(
 
         elif action == "resize":
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            width = params.get("width", right - left)
-            height = params.get("height", bottom - top)
+            width = int(params.get("width", right - left))
+            height = int(params.get("height", bottom - top))
             win32gui.MoveWindow(hwnd, left, top, width, height, True)
 
         elif action == "move":
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            new_left = params.get("left", left)
-            new_top = params.get("top", top)
+            new_left = int(params.get("left", left))
+            new_top = int(params.get("top", top))
             win32gui.MoveWindow(
                 hwnd, new_left, new_top, right - left, bottom - top, True
             )
 
         elif action == "focus":
-            _force_focus(hwnd)
+            focused = _force_focus(hwnd)
 
         else:
             return {"success": False, "error": f"Unknown action: '{action}'"}
 
         # ── focus verification (non-close only) ──────────────────────────────
-        focused = win32gui.GetForegroundWindow()
-        focus_ok = (focused == hwnd) if action == "focus" else True
+        focused_hwnd = win32gui.GetForegroundWindow()
+        focus_ok = (focused_hwnd == hwnd) if action == "focus" else True
         result = {
-            "success": True,
+            "success": not (action == "focus" and not focus_ok),
             "window": window_title,
             "action": action,
             "focus_verified": focus_ok,
         }
+        if action == "focus" and not focus_ok:
+            result["error"] = f"Could not focus window '{window_title}'"
         audit_log.log_call(
             "control_window",
             {"window_title": window_title, "action": action, "params": params},
@@ -287,24 +289,57 @@ def control_window(
         return result
 
     except Exception as exc:
+        err_str = str(exc)
+        if "Access is denied" in err_str or "error (5," in err_str:
+            msg = (
+                f"Cannot move/resize '{window_title}' — it runs as administrator. "
+                f"JARVIS does not have permission to control elevated windows."
+            )
+            logger.warning(f"control_window: {msg}")
+            return {"success": False, "error": msg, "elevated": True}
         logger.exception(f"control_window error: {exc}")
         return {"success": False, "error": str(exc)}
 
 
 def _force_focus(hwnd: int) -> bool:
-    """Attach thread input so SetForegroundWindow always succeeds."""
+    """Bring a window to the foreground reliably.
+
+    Uses three methods in order of reliability:
+      1. SwitchToThisWindow  — bypasses foreground lock (most reliable)
+      2. SetForegroundWindow + AttachThreadInput  — standard approach
+      3. Minimize+restore    — nuclear option, always works
+
+    Returns True if the foreground window matches *hwnd* after the attempt.
+    """
     try:
-        if win32gui.SetForegroundWindow(hwnd):
+        # Method 1: SwitchToThisWindow — bypasses Windows foreground lock
+        import ctypes
+        ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
+        if win32gui.GetForegroundWindow() == hwnd:
             return True
-        # GetWindowThreadProcessId returns (thread_id, process_id).
-        # AttachThreadInput needs the *thread* ID — NOT the PID.
-        # The old code had the tuple unpacked backwards (_, tid_target)
-        # which silently passed the PID, breaking focus on every call.
+    except Exception:
+        pass
+
+    try:
+        # Method 2: Standard SetForegroundWindow + AttachThreadInput
+        if win32gui.SetForegroundWindow(hwnd):
+            return win32gui.GetForegroundWindow() == hwnd
         tid_target, _ = win32process.GetWindowThreadProcessId(hwnd)
         tid_current = win32api.GetCurrentThreadId()
         win32process.AttachThreadInput(tid_current, tid_target, True)
         win32gui.SetForegroundWindow(hwnd)
         win32process.AttachThreadInput(tid_current, tid_target, False)
+        if win32gui.GetForegroundWindow() == hwnd:
+            return True
+    except Exception:
+        pass
+
+    # Method 3: Minimize then restore — forces Windows to foreground the window
+    try:
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        import ctypes
+        ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
         return win32gui.GetForegroundWindow() == hwnd
     except Exception:
         return False

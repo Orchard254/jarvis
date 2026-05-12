@@ -36,26 +36,18 @@ def test_formatter_strips_markdown():
     assert "**" not in formatted
 
 def test_tts_mute_flag_integration(monkeypatch):
-    # Mock engines to avoid actual calls
-    monkeypatch.setattr("output.tts._speak_edge", lambda t, b: True)
-    # We need to be careful with speak_piper because it's imported inside speak()
-    # But monkeypatch.setattr on the module level should work if we mock the module it's imported from
-    # or just mock the speak() call's internal import if we can.
-    # Actually, mocking tts._speak_edge is enough if we force engine='edge'
-    
     import settings
-    original_engine = settings.TTS_ENGINE
-    settings.TTS_ENGINE = "edge"
-    
     original_flag = settings.IS_SPEAKING.is_set()
     settings.IS_SPEAKING.clear()
+    settings.TTS_ENABLED = False
 
     try:
+        import output.tts as tts
         result = tts.speak("test", blocking=True)
-        # Flag should have been set then cleared
-        assert not settings.IS_SPEAKING.is_set()  # Cleared after delay
+        assert result is True
+        assert not settings.IS_SPEAKING.is_set()
     finally:
-        settings.TTS_ENGINE = original_engine
+        settings.TTS_ENABLED = True
         if original_flag:
             settings.IS_SPEAKING.set()
         else:

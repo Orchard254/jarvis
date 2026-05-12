@@ -36,6 +36,7 @@ def init_db():
     indexes = [
         "CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)",
         "CREATE INDEX IF NOT EXISTS idx_episodes_time ON episodes(timestamp)",
+        "CREATE INDEX IF NOT EXISTS idx_episodes_command_text ON episodes(command_text)",
     ]
     
     with get_episodic_connection() as conn:

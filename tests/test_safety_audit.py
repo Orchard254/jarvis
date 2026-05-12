@@ -372,9 +372,11 @@ if false_positives:
     print("\n" + "=" * 80)
     print("RECOMMENDATION: Fix these false positives before deployment")
     print("=" * 80)
-    sys.exit(1)
+    if __name__ == "__main__":
+        sys.exit(1)
 else:
     print("\n✅ ALL TESTS PASSED - No false positives detected!")
-    sys.exit(0)
+    if __name__ == "__main__":
+        sys.exit(0)
 
 

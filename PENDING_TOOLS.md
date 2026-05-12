@@ -8,13 +8,9 @@
 - Thread-safe: works from background tool-loop thread.
 - Configurable `timeout_seconds` auto-closes; returns `{answer, cancelled}`.
 
-## ✅ network_check — `tools/network_check.py`
-- Actions: `ping`, `dns`, `speed`, `connections`, `interfaces`.
-- Zero new dependencies (psutil already a project dep).
-
 ## ✅ time_calendar — `tools/time_calendar.py`
-- `get_time`: full datetime/timezone snapshot.
 - `get_events` / `create_event` / `delete_event` on **outlook** or **ics** backend.
+- `get_time` removed from tool schema (gpt-oss knows the date); still accessible via `skills.stdlib.time_cal.get_time()`.
 - Backend via `CALENDAR_BACKEND` in `.env`.
 
 ## ✅ listen — `tools/listen.py`
@@ -35,10 +31,9 @@
 ## Summary
 
 | Tool | Status | File |
-|---|---|---|
+|---|---|---|---|
 | `ask_user` | ✅ Done | `tools/ask_user.py` |
-| `network_check` | ✅ Done | `tools/network_check.py` |
-| `time_calendar` | ✅ Done | `tools/time_calendar.py` |
+| `time_calendar` | ✅ Done (collapsed: `get_time`) | `tools/time_calendar.py` |
 | `listen` | ✅ Done | `tools/listen.py` |
 | `watch_screen` | ✅ Done | `tools/watch_screen.py` |
 | `send_message` | ✅ Done | `tools/send_message.py` |

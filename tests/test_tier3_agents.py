@@ -363,7 +363,9 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     if result.wasSuccessful():
         print("✅ All Tier 3 tests passed!")
-        sys.exit(0)
+        if __name__ == "__main__":
+            sys.exit(0)
     else:
         print("❌ Some tests failed")
-        sys.exit(1)
+        if __name__ == "__main__":
+            sys.exit(1)

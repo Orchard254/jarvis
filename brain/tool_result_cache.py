@@ -63,14 +63,10 @@ class ToolResultCache:
     # Read-only tools that are safe to cache
     READ_ONLY_TOOLS = frozenset({
         "read_file",
-        "query_pc_index",
         "read_pc_state",
         "capture_screen",
         "find_on_screen",
-        "network_check",
         "time_calendar",
-        "list_processes",  # if available
-        "get_window_info",  # if available
     })
 
     # Tools that should invalidate related cache entries
@@ -79,9 +75,10 @@ class ToolResultCache:
         "file_ops",
         "execute_code",
         "control_input",
+        "control_window",
         "process_manager",
-        "delete_file",  # if available
-        "move_file",  # if available
+        "delete_file",
+        "move_file",
     })
 
     def __init__(self, max_entries: int = 1000, default_ttl: int = 300):

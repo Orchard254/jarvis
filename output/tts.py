@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -41,6 +42,10 @@ def _init_mixer() -> bool:
     if _mixer_ready:
         return True
     try:
+        os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+        # Try DirectSound first on Windows to avoid WASAPI issues
+        if sys.platform == "win32":
+            os.environ["SDL_AUDIODRIVER"] = "directsound"
         import pygame  # noqa: PLC0415
 
         if not pygame.get_init():

@@ -35,7 +35,7 @@ class ConnectionPool:
         db_str = str(db_path)
         
         def _create_connection() -> sqlite3.Connection:
-            conn = sqlite3.connect(db_str, timeout=timeout)
+            conn = sqlite3.connect(db_str, timeout=timeout, check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
             # Optimize for write-heavy workloads
