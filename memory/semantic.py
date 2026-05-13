@@ -102,7 +102,7 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
             if not any(t in v.lower() for t in [
                 "read_pc_state", "execute_code", "vision_query",
                 "capture_screen", "control_window", "control_input", "find_on_screen",
-                "file_ops", "web_search", "notify_user", "time_calendar",
+                "file_ops", "web_search", "notify_user",
                 "ask_user", "schedule", "memory", "speak",
                 "browser",
             ])

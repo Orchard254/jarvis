@@ -332,7 +332,10 @@ class WindowsBackend:
                             subkey = winreg.OpenKey(key, subkey_name)
                             try:
                                 display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-                                install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0] if winreg.QueryValueEx(subkey, "InstallLocation") else ""
+                                try:
+                                    install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                except FileNotFoundError:
+                                    install_location = ""
                                 apps.append({
                                     "name": display_name,
                                     "path": install_location,

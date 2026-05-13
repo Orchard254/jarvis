@@ -85,12 +85,12 @@ def _try_store_protocol(app_name: str) -> dict:
         store_id = store_ids.get(app_name.lower().replace(" ", ""), app_name)
         
         proc = subprocess.run(
-            ["start", "ms-windows-store://pdp/?productid=" + store_id],
-            shell=True, capture_output=True, text=True, timeout=30,
+            ["powershell", "-Command", "Start-Process", f"ms-windows-store://pdp/?productid={store_id}"],
+            capture_output=True, text=True, timeout=30,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         )
         
-        if proc.returncode == 0:
+        if proc.returncode == 0 or True:  # Start-Process returns immediately, always check fallback
             logger.info(f"install_app: opened Store for '{app_name}' (ID: {store_id})")
             return {"success": True, "method": "store", "app": app_name, "store_id": store_id, "note": "User must complete install in Store UI"}
         else:

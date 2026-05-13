@@ -11,8 +11,8 @@ import time
 import sys
 from pathlib import Path
 
-# Add workspace to path
-sys.path.insert(0, '/workspace')
+# Add workspace to path (relative to this script)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 def profile_embedding_generation():
     """Profile embedding generation (often a bottleneck)"""
@@ -77,7 +77,7 @@ def run_comprehensive_profile():
         print(f"Warning: {e}")
     
     # Save detailed report
-    report_path = Path('/workspace/performance_profile_report.txt')
+    report_path = Path(__file__).resolve().parent / 'performance_profile_report.txt'
     with open(report_path, 'w') as f:
         f.write("=" * 80 + "\n")
         f.write("JARVIS PERFORMANCE PROFILING REPORT\n")

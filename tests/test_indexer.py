@@ -27,9 +27,12 @@ def test_app_scanner_pushes_records():
     assert count is None or isinstance(count, int)  # scan_apps returns via queue
     w.stop()
 
-def test_query_pc_index_returns_list():
+def test_query_pc_index_returns_dict():
     results = query_pc_index("notepad", type="app")
-    assert isinstance(results, list)
+    assert isinstance(results, dict)
+    assert "success" in results
+    assert "results" in results
+    assert isinstance(results["results"], list)
 
 def test_indexer_background_starts_and_stops_cleanly():
     pc_indexer.start()

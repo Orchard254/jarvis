@@ -66,7 +66,8 @@ class FeedbackCollector:
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Submit positive feedback (thumbs up)."""
-        return await self.submit_feedback(
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
             task_id=task_id,
             step_id=step_id,
             feedback_type=FeedbackType.THUMBS_UP,
@@ -82,7 +83,8 @@ class FeedbackCollector:
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Submit negative feedback (thumbs down)."""
-        return await self.submit_feedback(
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
             task_id=task_id,
             step_id=step_id,
             feedback_type=FeedbackType.THUMBS_DOWN,
@@ -100,8 +102,9 @@ class FeedbackCollector:
         """Submit a 1-5 star rating."""
         if not 1 <= rating <= 5:
             raise ValueError("Rating must be between 1 and 5")
-        
-        return await self.submit_feedback(
+
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
             task_id=task_id,
             step_id=step_id,
             feedback_type=FeedbackType.RATING,
@@ -117,7 +120,8 @@ class FeedbackCollector:
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Submit free-form text feedback."""
-        return await self.submit_feedback(
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
             task_id=task_id,
             step_id=step_id,
             feedback_type=FeedbackType.TEXT,
@@ -134,7 +138,8 @@ class FeedbackCollector:
         context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Submit a correction showing what the output should have been."""
-        return await self.submit_feedback(
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
             task_id=task_id,
             step_id=step_id,
             feedback_type=FeedbackType.CORRECTION,
@@ -153,21 +158,29 @@ class FeedbackCollector:
         step_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None
     ) -> str:
+        """Async version — runs submit_feedback_sync in a thread."""
+        return await asyncio.to_thread(
+            self.submit_feedback_sync,
+            task_id=task_id,
+            feedback_type=feedback_type,
+            value=value,
+            step_id=step_id,
+            context=context,
+        )
+
+    def submit_feedback_sync(
+        self,
+        task_id: str,
+        feedback_type: FeedbackType,
+        value: Any,
+        step_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
         """
-        Submit general feedback.
-        
-        Args:
-            task_id: ID of the task being reviewed
-            feedback_type: Type of feedback
-            value: The feedback value (depends on type)
-            step_id: Optional specific step ID
-            context: Additional context about the state
-            
-        Returns:
-            feedback_id: Unique identifier for this feedback
+        Submit general feedback (synchronous).
         """
         import uuid
-        
+
         feedback = Feedback(
             feedback_id=str(uuid.uuid4()),
             task_id=task_id,
@@ -181,17 +194,17 @@ class FeedbackCollector:
                 "source": "user"
             }
         )
-        
+
         self._pending_feedback.append(feedback)
-        
+
         # Persist immediately
-        await self._persist_feedback(feedback)
-        
+        self._persist_feedback_sync(feedback)
+
         logger.info(f"Collected {feedback_type.value} feedback for task {task_id[:8]}")
         return feedback.feedback_id
 
-    async def _persist_feedback(self, feedback: Feedback) -> None:
-        """Persist feedback to disk."""
+    def _persist_feedback_sync(self, feedback: Feedback) -> None:
+        """Persist feedback to disk (synchronous)."""
         try:
             with open(self._feedback_file, 'a') as f:
                 f.write(json.dumps(feedback.to_dict()) + '\n')

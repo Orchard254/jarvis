@@ -19,7 +19,11 @@ win10toast
 # Voice I/O
 SpeechRecognition
 pyaudio
+sounddevice          # low-latency audio capture for WebRTC VAD
+webrtcvad            # professional voice activity detection
 openwakeword
+noisereduce          # spectral noise reduction before STT
+scipy                # fallback high-pass filter if noisereduce unavailable
 
 # Verification & Utilities
 pytesseract

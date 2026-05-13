@@ -309,8 +309,24 @@ Provide only the complete, working Python function with docstring:"""
             )
             module = importlib.util.module_from_spec(spec)
             
-            # Execute the code in the module's namespace
-            exec(code, module.__dict__)
+            # Execute the code in the module's namespace with restricted builtins
+            restricted_builtins = {
+                '__builtins__': {
+                    'None': None, 'True': True, 'False': False,
+                    'int': int, 'float': float, 'str': str, 'bool': bool,
+                    'list': list, 'dict': dict, 'tuple': tuple, 'set': set,
+                    'len': len, 'range': range, 'enumerate': enumerate, 'zip': zip,
+                    'map': map, 'filter': filter, 'sorted': sorted, 'reversed': reversed,
+                    'min': min, 'max': max, 'sum': sum, 'abs': abs,
+                    'isinstance': isinstance, 'issubclass': issubclass, 'hasattr': hasattr, 'getattr': getattr, 'setattr': setattr,
+                    'type': type, 'print': print, 'Exception': Exception, 'ValueError': ValueError, 'TypeError': TypeError,
+                    'KeyError': KeyError, 'IndexError': IndexError, 'StopIteration': StopIteration,
+                    'iter': iter, 'next': next, 'any': any, 'all': all,
+                    'open': open, 'super': super, 'property': property, 'staticmethod': staticmethod, 'classmethod': classmethod,
+                    '__import__': __import__, # still needed for imports
+                }
+            }
+            exec(code, {**restricted_builtins, **module.__dict__})
             
             # Get the function
             if skill_name not in module.__dict__:

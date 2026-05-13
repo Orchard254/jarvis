@@ -1,18 +1,16 @@
-
 """
-Primitive: capture_screen(region=None, monitor=None)
+Primitive: capture_screen(region=None, monitor=None, window_title=None, cursor=False, format="png")
 Detects black/UAC screens, resizes to limit token bloat.
-Supports multi-monitor setups via mss (preferred) or Pillow fallback.
+Supports multi-monitor setups, per-window capture, and cursor overlay.
 """
 import base64
 import io
 import logging
-from PIL import Image
+from PIL import Image, ImageDraw
 from settings import MAX_SCREENSHOTS_IN_CONTEXT
 
 logger = logging.getLogger(__name__)
 
-# Try mss first for multi-monitor support
 try:
     import mss
     _mss_available = True
@@ -28,19 +26,18 @@ except ImportError:
 
 def _grab_mss(monitor_idx: int = 0, region: tuple = None):
     """Capture via mss — supports multiple monitors."""
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         if region:
-            # region is (left, top, right, bottom)
             mon = {"left": region[0], "top": region[1], "width": region[2] - region[0], "height": region[3] - region[1]}
         else:
-            # monitor 0 = all monitors combined; 1+ = individual monitors
+            # sct.monitors[0] is the virtual combined monitor spanning all displays
+            # sct.monitors[1] is the primary monitor, sct.monitors[2+] are secondary
             if monitor_idx == 0:
-                # Default to primary monitor (first real monitor, not combined)
-                mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+                mon = sct.monitors[0]
             elif monitor_idx < len(sct.monitors):
                 mon = sct.monitors[monitor_idx]
             else:
-                mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+                mon = sct.monitors[0]
         raw = sct.grab(mon)
         return Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
 
@@ -49,43 +46,199 @@ def _grab_pil(region: tuple = None):
     """Capture via Pillow — primary monitor only."""
     if region:
         return ImageGrab.grab(bbox=region)
-    # Pillow 8.2+ supports all_screens, but it merges them into one giant image.
-    # We default to primary only for predictable behaviour.
+    return ImageGrab.grab()
+
+
+def _capture_window(window_title: str):
+    """Capture a specific window by title substring. Returns PIL Image or None."""
     try:
-        return ImageGrab.grab()
-    except Exception:
-        return ImageGrab.grab(bbox=None)
+        import win32gui
+        import win32con
+        import win32ui
+    except ImportError:
+        logger.warning("capture_window requires pywin32")
+        return None
+
+    try:
+        def find_hwnd():
+            search_title = window_title.lower().strip()
+            result = [None]
+            def _cb(h, _):
+                try:
+                    if not h or not win32gui.IsWindow(h):
+                        return 1
+                    if win32gui.IsWindowVisible(h):
+                        t = win32gui.GetWindowText(h).lower()
+                        if search_title in t:
+                            result[0] = h
+                            return 0
+                except Exception:
+                    pass
+                return 1
+            win32gui.EnumWindows(_cb, None)
+            return result[0]
+
+        hwnd = find_hwnd()
+        if not hwnd:
+            return None
+
+        # Restore if minimized
+        if win32gui.IsIconic(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+
+        # Bring to foreground
+        import ctypes
+        ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
+
+        # Get window rect
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width = right - left
+        height = bottom - top
+
+        if width <= 0 or height <= 0:
+            return None
+
+        # Capture via win32gui
+        hwnd_dc = win32gui.GetWindowDC(hwnd)
+        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+        save_dc = mfc_dc.CreateCompatibleDC()
+
+        bitmap = win32ui.CreateBitmap()
+        bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
+        save_dc.SelectObject(bitmap)
+
+        # PrintWindow captures the window contents
+        import ctypes
+        PW_RENDERFULLCONTENT = 2
+        ctypes.windll.user32.PrintWindow(hwnd, save_dc.GetSafeHdc(), PW_RENDERFULLCONTENT)
+
+        bmpinfo = bitmap.GetInfo()
+        bmpstr = bitmap.GetBitmapBits(True)
+        img = Image.frombytes("RGB", (bmpinfo["bmWidth"], bmpinfo["bmHeight"]), bmpstr, "raw", "BGRX")
+
+        win32gui.DeleteObject(bitmap.GetHandle())
+        save_dc.DeleteDC()
+        mfc_dc.DeleteDC()
+        win32gui.ReleaseDC(hwnd, hwnd_dc)
+
+        return img
+
+    except Exception as e:
+        logger.debug(f"_capture_window failed: {e}")
+        return None
 
 
-def capture_screen(region: tuple = None, monitor: int = None) -> dict:
+def _overlay_cursor(img: Image.Image) -> Image.Image:
+    """Draw the current mouse cursor position on the image."""
+    try:
+        import pyautogui
+        cursor_x, cursor_y = pyautogui.position()
+        draw = ImageDraw.Draw(img)
+        r = 6
+        draw.ellipse(
+            [cursor_x - r, cursor_y - r, cursor_x + r, cursor_y + r],
+            outline="red",
+            width=2,
+        )
+        draw.line(
+            [cursor_x - r - 4, cursor_y, cursor_x + r + 4, cursor_y],
+            fill="red",
+            width=2,
+        )
+        draw.line(
+            [cursor_x, cursor_y - r - 4, cursor_x, cursor_y + r + 4],
+            fill="red",
+            width=2,
+        )
+    except Exception as e:
+        logger.debug(f"Cursor overlay failed: {e}")
+    return img
+
+
+def capture_screen(
+    region: tuple = None,
+    monitor: int = None,
+    window_title: str = None,
+    cursor: bool = False,
+    img_format: str = "png",
+    quality: int = 85,
+    active: bool = False,
+) -> dict:
     """
-    Capture screen and return base64 PNG.
+    Capture screen and return base64 encoded image.
 
     Args:
         region: Optional (left, top, right, bottom) bbox.
-        monitor: Monitor index (0 = default/primary, 1+ = specific monitor).
-                 Only effective when mss is installed.
+        monitor: Monitor index (0 = all monitors combined, 1+ = specific).
+        window_title: Optional window title substring to capture (Windows only).
+        cursor: If True, overlay cursor position on the image.
+        img_format: "png" (lossless, default) or "jpeg" (smaller, faster).
+        quality: JPEG quality 1-100 (default 85, only used for JPEG format).
+        active: If True, capture only the active/foreground window.
     """
     try:
-        monitor_idx = monitor if monitor is not None else 0
+        # ── Active window shortcut ─────────────────────────────────────────────
+        if active:
+            import win32gui
+            hwnd = win32gui.GetForegroundWindow()
+            title = win32gui.GetWindowText(hwnd)
+            if title:
+                return capture_screen(window_title=title, cursor=cursor, img_format=img_format, quality=quality)
+            return {"success": False, "error": "No active window found"}
 
-        if _mss_available:
-            try:
-                img = _grab_mss(monitor_idx=monitor_idx, region=region)
-            except Exception as _mss_err:
-                logger.debug(f"mss grab failed ({_mss_err}), falling back to PIL")
-                img = _grab_pil(region=region)
-        elif _pil_grab_available:
-            img = _grab_pil(region=region)
+        # ── Normalize region: accept dict {left,top,width,height} OR tuple (l,t,r,b) ─
+        normalized_region = region
+        if isinstance(normalized_region, dict):
+            l = int(normalized_region.get("left", 0))
+            t = int(normalized_region.get("top", 0))
+            w = int(normalized_region.get("width", 0))
+            h = int(normalized_region.get("height", 0))
+            normalized_region = (l, t, l + w, t + h)
+        elif normalized_region is not None:
+            normalized_region = tuple(int(v) for v in normalized_region)
+
+        # ── Per-window capture ───────────────────────────────────────────────
+        if window_title:
+            img = _capture_window(window_title)
+            if img is None:
+                return {
+                    "success": False,
+                    "error": f"Window '{window_title}' not found or could not be captured",
+                }
         else:
-            return {"success": False, "error": "No screen capture backend available (mss or Pillow)"}
+            monitor_idx = monitor if monitor is not None else 0
 
+            if _mss_available:
+                try:
+                    img = _grab_mss(monitor_idx=monitor_idx, region=normalized_region)
+                except Exception as _mss_err:
+                    logger.debug(f"mss grab failed ({_mss_err}), falling back to PIL")
+                    img = _grab_pil(region=normalized_region)
+            elif _pil_grab_available:
+                img = _grab_pil(region=normalized_region)
+            else:
+                return {"success": False, "error": "No screen capture backend available (mss or Pillow)"}
+
+        if img is None:
+            return {"success": False, "error": "Capture returned no image"}
+
+        # ── Cursor overlay ───────────────────────────────────────────────────
+        if cursor:
+            img = _overlay_cursor(img)
+
+        # ── Resize to limit token bloat ──────────────────────────────────────
         max_dim = 1280
         if img.width > max_dim or img.height > max_dim:
             img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
+        # ── Encode ───────────────────────────────────────────────────────────
         buffer = io.BytesIO()
-        img.save(buffer, format="PNG", optimize=True)
+        if img_format == "jpeg":
+            img = img.convert("RGB")
+            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        else:
+            img.save(buffer, format="PNG", optimize=True)
+
         b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
         return {
@@ -93,8 +246,23 @@ def capture_screen(region: tuple = None, monitor: int = None) -> dict:
             "width": img.width,
             "height": img.height,
             "success": True,
-            "monitor": monitor_idx,
+            "monitor": monitor if monitor is not None else 0,
+            "format": img_format,
+            "cursor_overlay": cursor,
         }
     except Exception as e:
         logger.error(f"capture_screen failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def capture_active_window(cursor: bool = False, img_format: str = "png") -> dict:
+    """Capture the currently active/foreground window."""
+    try:
+        import win32gui
+        hwnd = win32gui.GetForegroundWindow()
+        title = win32gui.GetWindowText(hwnd)
+        if title:
+            return capture_screen(window_title=title, cursor=cursor, img_format=img_format)
+        return {"success": False, "error": "No active window found"}
+    except Exception as e:
         return {"success": False, "error": str(e)}

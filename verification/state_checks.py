@@ -43,10 +43,8 @@ def verify_window_visible(title: str) -> bool:
     try:
         win32gui.EnumWindows(_cb, None)
     except Exception as exc:
-        # EnumWindows raises when the callback returns False — that's normal.
-        # Any other exception is logged.
         if found[0]:
-            pass  # expected early-exit exception
+            pass  # callback returned 0; EnumWindows may raise depending on wrapper
         else:
             logger.debug(f"verify_window_visible unexpected error: {exc}")
 

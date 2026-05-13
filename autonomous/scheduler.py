@@ -46,6 +46,7 @@ class Scheduler:
         self._stop_event = threading.Event()
         self._thread = None
         self._scheduled: dict[str, dict] = {}
+        self._scheduled_lock = threading.Lock()
         self._gate = ApprovalGate(timeout_seconds=_APPROVAL_TIMEOUT)
         _init_recurring_db()
         self._load_recurring_from_db()
@@ -57,7 +58,8 @@ class Scheduler:
         if scheduled_for is None:
             raise ValueError(f"Unrecognized schedule: '{cron_expression}'")
 
-        self._scheduled[task_id] = {"command": command, "cron": cron_expression, "next_run": scheduled_for}
+        with self._scheduled_lock:
+            self._scheduled[task_id] = {"command": command, "cron": cron_expression, "next_run": scheduled_for}
         create_task(command, scheduled_for=scheduled_for)
 
         if cron_expression.lower().startswith("every"):
@@ -68,9 +70,10 @@ class Scheduler:
         return task_id
 
     def cancel(self, task_id: str) -> dict:
-        removed = task_id in self._scheduled
-        if removed:
-            del self._scheduled[task_id]
+        with self._scheduled_lock:
+            removed = task_id in self._scheduled
+            if removed:
+                del self._scheduled[task_id]
         db_updated = False
         try:
             conn = get_connection(MEMORY_DB, timeout=5.0)
@@ -108,24 +111,25 @@ class Scheduler:
                 logger.error(f"scheduler: monitor error: {e}")
 
             now = time.time()
-            for task_id, entry in list(self._scheduled.items()):
-                if entry["next_run"] > now:
-                    continue
-                command = entry["command"]
-                cron = entry["cron"]
-                logger.info(f"scheduler: recurring '{task_id[:8]}' due — '{command[:40]}'")
-                try:
-                    self._orchestrator(command)
-                except Exception as exc:
-                    logger.error(f"scheduler: recurring '{task_id[:8]}' failed: {exc}")
+            with self._scheduled_lock:
+                for task_id, entry in list(self._scheduled.items()):
+                    if entry["next_run"] > now:
+                        continue
+                    command = entry["command"]
+                    cron = entry["cron"]
+                    logger.info(f"scheduler: recurring '{task_id[:8]}' due — '{command[:40]}'")
+                    try:
+                        self._orchestrator(command)
+                    except Exception as exc:
+                        logger.error(f"scheduler: recurring '{task_id[:8]}' failed: {exc}")
 
-                if cron.lower().startswith("every"):
-                    next_run = self._parse_cron(cron)
-                    if next_run:
-                        self._scheduled[task_id]["next_run"] = next_run
-                        self._update_next_run_db(task_id, next_run)
-                else:
-                    del self._scheduled[task_id]
+                    if cron.lower().startswith("every"):
+                        next_run = self._parse_cron(cron)
+                        if next_run:
+                            self._scheduled[task_id]["next_run"] = next_run
+                            self._update_next_run_db(task_id, next_run)
+                    else:
+                        del self._scheduled[task_id]
 
             self._stop_event.wait(30)
         logger.info("scheduler: monitor loop stopped")
@@ -148,7 +152,13 @@ class Scheduler:
             action_log = []
             try:
                 orch = getattr(self._orchestrator, "__self__", None)
-                if orch and hasattr(orch, "_last_tool_calls"):
+                if orch and hasattr(orch, "_last_tool_calls") and hasattr(orch, "_handle_lock"):
+                    with orch._handle_lock:
+                        action_log = [
+                            {"tool": e.get("tool"), "args": e.get("args"), "success": e.get("result", {}).get("success", False)}
+                            for e in orch._last_tool_calls
+                        ]
+                elif orch and hasattr(orch, "_last_tool_calls"):
                     action_log = [
                         {"tool": e.get("tool"), "args": e.get("args"), "success": e.get("result", {}).get("success", False)}
                         for e in orch._last_tool_calls
@@ -196,7 +206,8 @@ class Scheduler:
                     if recalculated:
                         next_run = recalculated
                         self._update_next_run_db(task_id, next_run)
-                self._scheduled[task_id] = {"command": row["command"], "cron": cron, "next_run": next_run}
+                with self._scheduled_lock:
+                    self._scheduled[task_id] = {"command": row["command"], "cron": cron, "next_run": next_run}
             if rows:
                 logger.info(f"scheduler: reloaded {len(rows)} recurring schedule(s) from DB")
         except Exception as exc:

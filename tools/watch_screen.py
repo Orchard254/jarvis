@@ -51,10 +51,13 @@ def _pixel_diff_ratio(img_a, img_b) -> float:
     try:
         from PIL import ImageChops, ImageFilter  # type: ignore
         diff = ImageChops.difference(img_a.convert("RGB"), img_b.convert("RGB"))
-        # count pixels with any channel > 10
-        pixels = list(diff.getdata())
-        changed = sum(1 for p in pixels if max(p) > 10)
-        return changed / max(len(pixels), 1)
+        total = 0
+        changed = 0
+        for p in diff.getdata():
+            total += 1
+            if max(p) > 10:
+                changed += 1
+        return changed / max(total, 1)
     except Exception:
         return 1.0  # safe default: always trigger vision
 
@@ -64,13 +67,15 @@ def _grab_screen(region: dict | None = None):
     try:
         import pyautogui  # type: ignore
         if region:
+            left = region.get("left", 0)
+            top = region.get("top", 0)
+            width = region.get("width")
+            height = region.get("height")
+            if width is None or height is None:
+                logger.warning("watch_screen: region missing width/height — using full screen")
+                return pyautogui.screenshot()
             return pyautogui.screenshot(
-                region=(
-                    region.get("left", 0),
-                    region.get("top", 0),
-                    region.get("width", 800),
-                    region.get("height", 600),
-                )
+                region=(left, top, width, height)
             )
         return pyautogui.screenshot()
     except Exception as exc:

@@ -17,25 +17,7 @@ logger = logging.getLogger(__name__)
 # Maximum number of UTF-8 encoded bytes allowed in a single write operation.
 MAX_WRITE_BYTES = 10 * 1024 * 1024  # 10 MB
 
-# Path fragments that must never be written — SSH keys, cloud-provider
-# credential directories, and other common credential files.
-_BLOCKED_WRITE_FRAGMENTS = (
-    ".ssh",
-    ".aws",
-    ".gnupg",
-    ".gpg",
-    "id_rsa",
-    "id_ed25519",
-    "id_ecdsa",
-    "id_dsa",
-    "authorized_keys",
-    "known_hosts",
-    ".netrc",
-    ".pgpass",
-    "credentials",
-    ".kube/config",
-    "kubeconfig",
-)
+from safety.path_guard import SENSITIVE_PATH_FRAGMENTS as _BLOCKED_WRITE_FRAGMENTS, contains_sensitive_path
 
 # Root of the Jarvis project — used to decide whether a .env file write is
 # inside the project (allowed) or somewhere else on the filesystem (blocked).
@@ -72,7 +54,7 @@ def _check_blocked_path(p: Path):
     return False, ""
 
 
-def write_file(path: str, content: str) -> dict:
+def write_file(path: str, content: str, append: bool = False) -> dict:
     """
     Write *content* to *path*.
 

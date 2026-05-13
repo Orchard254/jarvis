@@ -12,8 +12,10 @@ from brain.tool_loop import run
 
 def test_system_prompt_contains_rules():
     prompt = build_system_prompt()
-    assert "query_pc_index" in prompt
-    assert "execute_code" in prompt
+    assert "screen" in prompt
+    assert "window" in prompt
+    assert "system" in prompt
+    assert "exec" in prompt
 
 def test_context_manager_prunes_heavy_history():
     msgs = [{"role": "user", "content": "test"}] * 30
@@ -21,12 +23,12 @@ def test_context_manager_prunes_heavy_history():
     assert len(pruned) < 30
 
 def test_response_parser_validates_tools():
-    valid, err = validate_tool_calls([{"function": {"name": "execute_code", "arguments": {"code": "x"}}}], {"execute_code"})
-    assert valid is True
+    valid, err = validate_tool_calls([{"function": {"name": "exec", "arguments": {"code": "x"}}}], {"exec"})
+    assert valid == True
 
 def test_response_parser_blocks_unknown():
-    valid, err = validate_tool_calls([{"function": {"name": "fake_tool", "arguments": {}}}], {"execute_code"})
-    assert valid is False
+    valid, err = validate_tool_calls([{"function": {"name": "fake_tool", "arguments": {}}}], {"exec"})
+    assert valid == False
 
 def test_tool_loop_executes_callbacks(monkeypatch):
     call_count = 0
@@ -55,5 +57,5 @@ def test_tool_loop_executes_callbacks(monkeypatch):
     result = run("test", [], mock_exec, mock_verify, mode="interactive_cloud", valid_tool_names={"read_pc_state"})
     assert call_count == 2
     assert "read_pc_state" in executed
-    assert result["success"] is True
+    assert result["success"] == True
     assert "Done." in result["response"]

@@ -119,13 +119,16 @@ class ConnectionPool:
 # Global pools for each database module
 _episodic_pool: Optional[ConnectionPool] = None
 _semantic_pool: Optional[ConnectionPool] = None
+_pool_lock = threading.Lock()
 
 
 def get_episodic_pool() -> ConnectionPool:
     """Get or create the episodic memory connection pool."""
     global _episodic_pool
     if _episodic_pool is None:
-        _episodic_pool = ConnectionPool(MEMORY_DB, pool_size=5)
+        with _pool_lock:
+            if _episodic_pool is None:
+                _episodic_pool = ConnectionPool(MEMORY_DB, pool_size=5)
     return _episodic_pool
 
 
@@ -133,7 +136,9 @@ def get_semantic_pool() -> ConnectionPool:
     """Get or create the semantic memory connection pool."""
     global _semantic_pool
     if _semantic_pool is None:
-        _semantic_pool = ConnectionPool(MEMORY_DB, pool_size=3)
+        with _pool_lock:
+            if _semantic_pool is None:
+                _semantic_pool = ConnectionPool(MEMORY_DB, pool_size=3)
     return _semantic_pool
 
 

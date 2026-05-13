@@ -18,6 +18,14 @@ from core.streaming_manager import streaming_manager, StreamingResponse
 from core.progress_reporter import progress_registry, ProgressReporter
 from core.observability import observability
 
+# Implicit feedback collector — tracks retries as negative signals,
+# first-try success as positive signals for skill scoring.
+try:
+    from core.feedback_loop import get_collector as _get_implicit_feedback
+    _implicit_feedback = _get_implicit_feedback()
+except Exception:
+    _implicit_feedback = None
+
 logger = logging.getLogger(__name__)
 
 # Checkpoint directory for long-running tasks
@@ -40,10 +48,11 @@ class ExecutorPool:
                **kwargs) -> Future:
         """Submit a function for async execution with task tracking and optional retry/checkpoint"""
         
-        # Initialize Phase 4 components
+        # Initialize Phase 4 components + implicit feedback tracking
         stream = None
         reporter = None
         obs_span = None
+        func_name = getattr(func, '__name__', 'unknown')
         
         if enable_streaming:
             stream = streaming_manager.create_stream(task_id=task_id, expose_thoughts=False)
@@ -66,7 +75,17 @@ class ExecutorPool:
             attempt = 0
             max_attempts = 5 if use_retry else 1
             last_error = None
-            
+
+            # Track task for implicit feedback signals
+            if _implicit_feedback:
+                try:
+                    _implicit_feedback.start_task(
+                        task_id, func_name,
+                        context={"max_attempts": max_attempts, "use_retry": use_retry}
+                    )
+                except Exception as e:
+                    logger.warning(f"Implicit feedback start_task failed: {e}")
+
             while attempt < max_attempts:
                 try:
                     registry.update_status(task_id, TaskStatus.RUNNING, progress=10)
@@ -96,6 +115,13 @@ class ExecutorPool:
                     
                     registry.update_status(task_id, TaskStatus.SUCCESS, 
                                           result=result, progress=100)
+                    
+                    # Record implicit success (first-try or after retries)
+                    if _implicit_feedback:
+                        try:
+                            _implicit_feedback.record_success(task_id)
+                        except Exception as e:
+                            logger.warning(f"Implicit feedback record_success failed: {e}")
                     
                     # Complete progress tracking
                     if reporter:
@@ -127,6 +153,13 @@ class ExecutorPool:
                     from core.contextual_help import contextual_help
                     contextual_help.record_failure(getattr(func, '__name__', 'unknown'))
                     
+                    # Record implicit retry signal
+                    if _implicit_feedback:
+                        try:
+                            _implicit_feedback.record_retry(task_id)
+                        except Exception as e:
+                            logger.warning(f"Implicit feedback record_retry failed: {e}")
+
                     # Simple retry with linear backoff
                     if use_retry and attempt < max_attempts:
                         delay = min(1.0 * attempt, 30.0)

@@ -55,18 +55,20 @@ def vision_query(question: str, region: dict | None = None) -> dict:
             "error":   str,   # only present on failure
         }
     """
+    width = 0
+    height = 0
     # ── Step 1: capture ──────────────────────────────────────────────────────
     try:
         from tools.capture_screen import capture_screen
 
         # Convert dict region {"left","top","width","height"} to tuple (left,top,right,bottom)
         region_tuple = None
-        if region is not None:
+        if region and isinstance(region, dict):
             region_tuple = (
-                region["left"],
-                region["top"],
-                region["left"] + region["width"],
-                region["top"] + region["height"],
+                int(region["left"]),
+                int(region["top"]),
+                int(region["left"]) + int(region["width"]),
+                int(region["top"]) + int(region["height"]),
             )
         shot = capture_screen(region=region_tuple)
         if not shot.get("success"):
@@ -171,6 +173,6 @@ def vision_query(question: str, region: dict | None = None) -> dict:
             "success": False,
             "error": f"Vision inference error: {exc}",
             "answer": "",
-            "width": width if "width" in locals() else 0,
-            "height": height if "height" in locals() else 0,
+            "width": width,
+            "height": height,
         }

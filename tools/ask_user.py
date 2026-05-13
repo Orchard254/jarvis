@@ -9,9 +9,9 @@ guessing whenever input is genuinely ambiguous (e.g. "I found 3 files named
 Implementation strategy
 -----------------------
 - tkinter runs on the *main* thread on Windows, but tool calls run on a
-  background thread.  We therefore post the dialog work to the main thread
-  via a threading.Event + result-slot pattern, and block the calling thread
-  until the answer arrives.
+  background thread.  We use a thread-safe queue to post the dialog work
+  to the main thread's event loop via root.after_idle(), and block the
+  calling thread until the answer arrives.
 - If tkinter is unavailable (headless server / SSH session), we fall back to
   a plain console `input()` prompt so the tool still works.
 - A configurable timeout prevents indefinite hangs: after `timeout_seconds`
@@ -19,14 +19,15 @@ Implementation strategy
 
 Thread safety note
 ------------------
-`_run_on_main_thread()` is called only when the caller is NOT already on the
-main thread.  If Jarvis is running in a purely single-threaded console mode,
-the dialog is shown directly.
+Tkinter is NOT thread-safe. All Tk calls must happen on the main thread.
+We use root.after() to schedule dialog creation on the main thread's event
+loop and a queue.Queue to pass the result back to the calling thread.
 """
 
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ── tkinter availability check ────────────────────────────────────────────────
 try:
     import tkinter as tk
-    from tkinter import simpledialog, messagebox
+    from tkinter import simpledialog
 
     _tk_available = True
 except ImportError:
@@ -44,39 +45,43 @@ except ImportError:
 
 # ── internal helper: run dialog on main thread ────────────────────────────────
 
-def _show_dialog(prompt: str, choices: list[str] | None, timeout_seconds: int) -> dict:
+def _show_dialog(prompt: str, choices: list[str] | None, timeout_seconds: int,
+                 root: "tk.Tk | None" = None) -> dict:
     """
-    Actually display the dialog window.  Must be called from the main thread
-    (or from any thread when tkinter is used in a non-GUI-main context — this
-    works fine on Windows as long as a new Tk root is created per call).
+    Display a dialog window.  Must be called from the Tk thread.
+
+    Parameters
+    ----------
+    root : tk.Tk or None
+        If provided, use this existing root (withdrawn) instead of creating
+        a new one.  The root is NOT destroyed on exit.
     """
-    root = tk.Tk()
-    root.withdraw()
-    root.title("JARVIS")
-    root.attributes("-topmost", True)
+    own_root = False
+    if root is None:
+        root = tk.Tk()
+        root.withdraw()
+        root.title("JARVIS")
+        root.attributes("-topmost", True)
+        own_root = True
 
     result: dict = {"answer": None, "cancelled": False}
 
-    # Auto-close after timeout
     def _on_timeout():
         result["cancelled"] = True
         result["answer"] = None
         root.quit()
 
-    timer_id = root.after(timeout_seconds * 1000, _on_timeout)
+    timer_id: int = root.after(timeout_seconds * 1000, _on_timeout)
 
     try:
         if choices:
-            # Multiple-choice: show buttons
             _choice_dialog(root, prompt, choices, result, timer_id)
         else:
-            # Free-text input
             answer = simpledialog.askstring(
                 "JARVIS needs input",
                 prompt,
                 parent=root,
             )
-            root.after_cancel(timer_id)
             if answer is None:
                 result["cancelled"] = True
             else:
@@ -85,16 +90,18 @@ def _show_dialog(prompt: str, choices: list[str] | None, timeout_seconds: int) -
         logger.error(f"ask_user dialog error: {exc}")
         result["cancelled"] = True
     finally:
-        try:
-            root.destroy()
-        except Exception:
-            pass
+        root.after_cancel(timer_id)
+        if own_root:
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
     return result
 
 
 def _choice_dialog(root: "tk.Tk", prompt: str, choices: list[str],
-                   result: dict, timer_id: str) -> None:
+                   result: dict, timer_id: int) -> None:
     """Show a simple button-choice dialog inside an existing Tk root."""
     dialog = tk.Toplevel(root)
     dialog.title("JARVIS")
@@ -118,6 +125,55 @@ def _choice_dialog(root: "tk.Tk", prompt: str, choices: list[str],
 
     dialog.protocol("WM_DELETE_WINDOW", lambda: _pick(None))
     root.mainloop()
+
+
+# ── Persistent Tk root on a dedicated thread ─────────────────────────────────
+# Tkinter is NOT thread-safe.  We keep one long-lived root window running on
+# a dedicated Tk thread with its own mainloop, and schedule all dialog work
+# via root.after().  Results are passed back through a queue.Queue.
+
+_tk_root: "tk.Tk | None" = None
+_tk_queue: "queue.Queue" = queue.Queue()
+_tk_started = threading.Event()
+
+
+def _tk_thread_main():
+    """Run the persistent Tk event loop on a dedicated thread."""
+    global _tk_root
+    _tk_root = tk.Tk()
+    _tk_root.withdraw()
+    _tk_root.title("JARVIS")
+    _tk_root.attributes("-topmost", True)
+    _tk_root.protocol("WM_DELETE_WINDOW", _tk_root.withdraw)
+    _tk_started.set()
+    _tk_root.mainloop()
+
+
+def _ensure_tk_thread():
+    """Start the persistent Tk thread if not already running."""
+    if not _tk_started.is_set():
+        t = threading.Thread(target=_tk_thread_main, daemon=True)
+        t.start()
+        _tk_started.wait(timeout=5.0)
+
+
+def _show_dialog_on_tk_thread(prompt, choices, timeout_seconds):
+    """Schedule _show_dialog on the Tk thread and block for the result."""
+    _ensure_tk_thread()
+    q: "queue.Queue" = queue.Queue()
+
+    def _task():
+        try:
+            result = _show_dialog(prompt, choices, timeout_seconds, root=_tk_root)
+            q.put(result)
+        except Exception as exc:
+            q.put({"answer": None, "cancelled": True, "_error": str(exc)})
+
+    _tk_root.after(0, _task)
+    try:
+        return q.get(timeout=timeout_seconds + 10)
+    except queue.Empty:
+        return {"answer": None, "cancelled": True}
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -149,23 +205,13 @@ def ask_user(
     # ── tkinter path ──────────────────────────────────────────────────────────
     if _tk_available:
         # If we're already on the main thread, run directly.
-        # Otherwise use a threading Event to hand off work and wait.
+        # Otherwise use the persistent Tk thread.
         if threading.current_thread() is threading.main_thread():
             result = _show_dialog(prompt, choices, timeout_seconds)
         else:
-            _done = threading.Event()
-            _result_slot: dict = {}
+            result = _show_dialog_on_tk_thread(prompt, choices, timeout_seconds)
 
-            def _worker():
-                _result_slot.update(_show_dialog(prompt, choices, timeout_seconds))
-                _done.set()
-
-            t = threading.Thread(target=_worker, daemon=True)
-            t.start()
-            _done.wait(timeout=timeout_seconds + 5)
-            result = _result_slot if _result_slot else {"answer": None, "cancelled": True}
-
-        return {"success": True, **result}
+        return {"success": True, "answer": result.get("answer"), "cancelled": result.get("cancelled", False)}
 
     # ── console fallback (headless / no tkinter) ──────────────────────────────
     logger.info("ask_user: using console fallback")

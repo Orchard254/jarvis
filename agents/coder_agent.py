@@ -367,7 +367,7 @@ Do not repeat the same fix strategy.
                         mod = node.module.split(".")[0]
                         if mod not in self.SAFE_STD_MODULES:
                             warnings.append(f"Potentially unsafe import: {mod}")
-        except:
+        except SyntaxError:
             pass
         
         is_valid = len(warnings) == 0 or all("potentially unsafe import" in w.lower() for w in warnings)

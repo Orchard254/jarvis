@@ -96,7 +96,7 @@ try:
         _orig_tqdm_close(self)
 
     _std_tqdm.close = _safe_tqdm_close
-    del _std_tqdm, _orig_tqdm_close
+    del _std_tqdm
 except Exception:
     pass
 # ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ def main():
     audit_log.setup()
     pc_indexer.start()
 
-    mem = memory_manager.MemoryManager(session_id="prod_cli_01")
+    mem = memory_manager.MemoryManager(session_id=f"cli_{os.getpid()}")
 
     # Prune old episodic memory (>90 days) on startup so the DB stays lean.
     # This is fast when there's little old data and silent on failure.
@@ -151,7 +151,17 @@ def main():
     except Exception as _prune_exc:
         logger.debug(f"Episode prune skipped: {_prune_exc}")
 
-    orc = Orchestrator(memory=mem)
+    # Initialize long-term memory (RAG-based, cross-session) for
+    # semantically relevant memory retrieval
+    ltm = None
+    try:
+        from memory.long_term_memory import init_memory_manager
+        ltm = init_memory_manager(persist_dir=str(settings.DATA_DIR / "long_term_memory"))
+        logger.info("Long-term memory initialized with semantic search")
+    except Exception as _ltm_exc:
+        logger.warning(f"Long-term memory unavailable: {_ltm_exc}")
+
+    orc = Orchestrator(memory=mem, long_term_memory=ltm)
 
     print("\n" + "=" * 50)
     print("JARVIS ONLINE. Type a command or 'quit' to exit.")

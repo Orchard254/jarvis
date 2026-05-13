@@ -91,8 +91,8 @@ def _outlook_get_events(days: int) -> dict:
         now = datetime.now()
         end = now + timedelta(days=days)
         restriction = (
-            f"[Start] >= '{now.strftime('%m/%d/%Y')}' "
-            f"AND [Start] <= '{end.strftime('%m/%d/%Y')}'"
+            f"[Start] >= '{now.strftime('%Y-%m-%d')}' "
+            f"AND [Start] <= '{end.strftime('%Y-%m-%d')}'"
         )
         filtered = items.Restrict(restriction)
 
@@ -195,12 +195,16 @@ def _ics_get_events(days: int) -> dict:
             if dtstart is None:
                 continue
             dt = dtstart.dt
+            now_local = datetime.now()
             if isinstance(dt, datetime):
-                start_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
+                if dt.tzinfo:
+                    start_dt = dt.astimezone(None).replace(tzinfo=None)
+                else:
+                    start_dt = dt
             else:
                 from datetime import date
                 start_dt = datetime.combine(dt, datetime.min.time())
-            if now <= start_dt <= end:
+            if now_local <= start_dt <= end:
                 events.append({
                     "subject": str(comp.get("SUMMARY", "")),
                     "start": str(dtstart.dt),
@@ -358,7 +362,7 @@ def time_calendar(
             if not subject:
                 return {"success": False, "error": "subject is required for delete"}
             if backend == "outlook":
-                return _outlook_delete_event(subject, date or datetime.now().strftime("%m/%d/%Y"))
+                return _outlook_delete_event(subject, date or datetime.now().strftime("%Y-%m-%d"))
             else:
                 return _ics_delete_event(subject, date)
 

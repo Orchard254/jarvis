@@ -58,7 +58,11 @@ def search_web(query: str, limit: int = 5) -> dict:
         results = []
         for item in raw_results[:limit]:
             a_tag = item.find("a", class_="result__a")
-            snip = item.find("a", class_="result__snippet")
+            snip = item.find("span", class_="result__snippet")
+            if snip is None:
+                snip = item.find("div", class_="result__snippet")
+            if snip is None:
+                snip = item.find("a", class_="result__snippet")
             title = a_tag.get_text(strip=True) if a_tag else ""
             href = a_tag.get("href", "") if a_tag else ""
             snippet = snip.get_text(strip=True) if snip else ""
@@ -101,7 +105,7 @@ def search_web(query: str, limit: int = 5) -> dict:
 
         # Very rough regex extraction — good enough for a fallback
         titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', resp.text)
-        snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', resp.text)
+        snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</(?:span|div|a)>', resp.text)
 
         results = []
         for i, title in enumerate(titles[:limit]):

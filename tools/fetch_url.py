@@ -41,8 +41,10 @@ def fetch_url(url: str, extract_text: bool = True) -> dict:
                 title_tag = soup.find("title")
                 if title_tag:
                     title = title_tag.get_text(strip=True)
-                elif soup.find("h1"):
-                    title = soup.find("h1").get_text(strip=True)
+                else:
+                    h1_tag = soup.find("h1")
+                    if h1_tag:
+                        title = h1_tag.get_text(strip=True)
 
                 # Remove noise tags
                 for tag in soup(["script", "style", "nav", "footer", "header"]):

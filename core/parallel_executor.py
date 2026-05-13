@@ -85,17 +85,18 @@ class ParallelExecutor:
         rec_stack = set()
 
         def has_cycle(node_id: str) -> bool:
+            if node_id not in self.tasks:
+                return False
             visited.add(node_id)
             rec_stack.add(node_id)
 
-            node = self.tasks.get(node_id)
-            if node:
-                for dep in node.dependencies:
-                    if dep not in visited:
-                        if has_cycle(dep):
-                            return True
-                    elif dep in rec_stack:
+            node = self.tasks[node_id]
+            for dep in node.dependencies:
+                if dep not in visited:
+                    if has_cycle(dep):
                         return True
+                elif dep in rec_stack:
+                    return True
             
             rec_stack.remove(node_id)
             return False
@@ -153,16 +154,24 @@ class ParallelExecutor:
                 await callback_result
 
         try:
-            # Resolve tool from registry
-            if not hasattr(tool_registry, 'get_tool'):
+            # Resolve tool from registry (dict of name -> callable)
+            if isinstance(tool_registry, dict):
+                tool = tool_registry.get(task.tool_name)
+            elif hasattr(tool_registry, 'get_tool'):
+                tool = tool_registry.get_tool(task.tool_name)
+            else:
                 raise ValueError("Invalid tool registry")
             
-            tool = tool_registry.get_tool(task.tool_name)
             if not tool:
                 raise ValueError(f"Tool {task.tool_name} not found")
 
-            # Execute tool
-            result = await tool.execute(**task.arguments)
+            # Execute tool (callable or object with .execute)
+            if isinstance(tool, dict):
+                raise ValueError(f"Tool {task.tool_name} resolved to a dict, not a callable")
+            if hasattr(tool, 'execute') and callable(tool.execute):
+                result = tool.execute(**task.arguments)
+            else:
+                result = tool(**task.arguments)
             
             task.result = result
             task.status = DependencyStatus.COMPLETED

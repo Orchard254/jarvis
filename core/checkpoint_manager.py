@@ -218,7 +218,7 @@ class CheckpointManager:
                         with open(filepath, 'r') as f:
                             data = json.load(f)
                             checkpoints.append((data['timestamp'], filepath))
-                    except:
+                    except (IOError, json.JSONDecodeError, KeyError):
                         continue
             
             # Sort by timestamp descending
@@ -266,7 +266,7 @@ class CheckpointManager:
                             "step_index": data.get("step_index"),
                             "created_at": data.get("metadata", {}).get("created_at")
                         })
-                except:
+                except (IOError, json.JSONDecodeError):
                     continue
             
             result.sort(key=lambda x: x.get("timestamp", 0), reverse=True)

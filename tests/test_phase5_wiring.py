@@ -9,7 +9,7 @@ def test_orchestrator_instantiates_clean():
     orc = Orchestrator()
     assert orc._history == []
     assert orc._mode == "interactive_cloud"
-    assert orc.running is True
+    assert orc.running == True
 
 def test_mode_switching_valid():
     orc = Orchestrator()

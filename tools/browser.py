@@ -26,7 +26,7 @@ def browser(
     url: str = None,
     selector: str = None,
     text: str = None,
-    timeout: int = 10000,
+    timeout: int = 30000,
     wait_for: str = None,
 ) -> dict:
     """
@@ -54,6 +54,9 @@ def browser(
 
         # ── navigate (auto-launches if needed) ──────────────────────────────
         elif action == "navigate":
+            if not url:
+                return {"success": False, "error": "URL required for navigate"}
+            _ensure_alive(timeout)
             if _page is None:
                 _do_launch(timeout)
             _page.goto(url, wait_until="domcontentloaded", timeout=timeout)
@@ -216,28 +219,46 @@ class _NoBrowserError(RuntimeError):
 
 
 def _require_page():
+    _ensure_alive()
     if _page is None or _browser is None:
         raise _NoBrowserError(
             "Browser not launched. Use action='launch' first or action='navigate' to auto-launch."
         )
 
 
-def _do_launch(timeout: int = 10000):
+def _ensure_alive():
+    """Re-launch if browser or page is dead. Call before every action."""
     global _playwright, _browser, _page
-    # If already open, verify it's still alive before reusing.
-    # A crashed or externally-closed browser leaves _browser non-None but dead —
-    # any subsequent call would throw, trapping the LLM in a retry loop.
     if _browser is not None:
         try:
-            _browser.is_connected()  # raises if the browser process is gone
-            return  # alive — reuse existing session
+            if _browser.is_connected():
+                if _page is not None:
+                    try:
+                        _page.title()
+                        return
+                    except Exception:
+                        logger.warning("browser: page is dead — creating new page")
+                        _page = _browser.new_page()
+                        return
+                _page = _browser.new_page()
+                return
         except Exception:
             logger.warning("browser: existing session is dead — relaunching")
-            _do_close()  # clean up stale globals before fresh launch
+            _do_close()
+    _do_launch(30000)
+
+
+def _do_launch(timeout: int = 30000):
+    global _playwright, _browser, _page
+    if _browser is not None:
+        if _browser.is_connected():
+            return  # alive — reuse existing session
+        logger.warning("browser: existing session is dead — relaunching")
+        _do_close()  # clean up stale globals before fresh launch
     _playwright = sync_playwright().__enter__()
-    # Use system default browser instead of forcing Chromium
-    # channel=None means use the system's default browser
-    _browser = _playwright.chromium.launch(headless=False, channel=None)
+    # Use system Chrome instead of bundled Chromium
+    # channel="chrome" launches the user's installed Chrome browser
+    _browser = _playwright.chromium.launch(headless=False, channel="chrome")
     _page = _browser.new_page()
     _page.set_default_timeout(timeout)
 

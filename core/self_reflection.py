@@ -356,7 +356,7 @@ Provide only the revised output:"""
             "average_score": avg_score,
             "average_iterations": avg_iterations,
             "revision_rate": revisions_made / len(all_results),
-            "most_common_improvements": self._get_common_improvements(all_results)
+            "most_common_improvements": self._get_common_improvement_areas(all_results)
         }
     
     def _get_common_improvement_areas(self, results: List[ReflectionResult]) -> List[str]:

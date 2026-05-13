@@ -66,7 +66,8 @@ class ToolResultCache:
         "read_pc_state",
         "capture_screen",
         "find_on_screen",
-        "time_calendar",
+        "screen",
+        "system",
     })
 
     # Tools that should invalidate related cache entries
@@ -79,6 +80,9 @@ class ToolResultCache:
         "process_manager",
         "delete_file",
         "move_file",
+        "exec",
+        "window",
+        "input",
     })
 
     def __init__(self, max_entries: int = 1000, default_ttl: int = 300):
@@ -283,13 +287,12 @@ class ToolResultCache:
 
     def _evict_oldest(self, count: int = 1) -> None:
         """Evict the oldest cache entries."""
-        # Sort by timestamp and remove oldest
-        sorted_entries = sorted(
-            self._cache.items(),
-            key=lambda x: x[1].timestamp
-        )
-        for key, _ in sorted_entries[:count]:
-            del self._cache[key]
+        # Find and remove the oldest entries
+        for _ in range(count):
+            if not self._cache:
+                break
+            oldest_key = min(self._cache, key=lambda k: self._cache[k].timestamp)
+            del self._cache[oldest_key]
         logger.debug(f"cache: evicted {count} oldest entries")
 
 

@@ -67,7 +67,7 @@ class PrioritizedTask:
         if self.result is not None:
             try:
                 d['result'] = str(self.result)[:500]  # Truncate large results
-            except:
+            except Exception:
                 d['result'] = "<non-serializable>"
         return d
 

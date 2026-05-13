@@ -1,6 +1,7 @@
 
+import os
 import sys
-sys.path.insert(0, r'c:\Users\macha\OneDrive\Desktop\Ai\jarvis')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from brain.ollama_client import chat
 from brain.prompt_builder import build_system_prompt, get_pruned_schemas
 

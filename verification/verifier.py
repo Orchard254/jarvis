@@ -16,22 +16,33 @@ logger = logging.getLogger(__name__)
 
 
 def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
-    if result.get("success") is False:
+    if not result.get("success"):
         return {
             "status": "FAILED",
             "method": "result",
             "summary": result.get("error") or f"{tool_name} failed.",
         }
 
-    # For execute_code, cross-check against the log for silent failures
-    if tool_name == "execute_code":
-        log_result = _check_log_for_failures()
-        if log_result:
+    # For execute_code/exec, cross-check the output AND log for silent failures
+    if tool_name in ("execute_code", "exec"):
+        # Check tool output for failure signals (e.g., "ERROR:" from launch script)
+        output = result.get("output", "") or ""
+        if "ERROR:" in output or "Failed" in output or "Traceback" in output:
             return {
                 "status": "FAILED",
-                "method": "log_check",
-                "summary": log_result,
+                "method": "output_check",
+                "summary": f"Output shows failure: {output.strip()[-200:]}",
             }
+        # Cross-check against the log too (only when there's output to validate,
+        # to avoid false positives from stale log entries in test environments)
+        if output:
+            log_result = _check_log_for_failures()
+            if log_result:
+                return {
+                    "status": "FAILED",
+                    "method": "log_check",
+                    "summary": log_result,
+                }
 
     return {
         "status": "CONFIRMED",

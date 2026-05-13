@@ -4,12 +4,17 @@ Unified safety funnel. All tool calls pass through here.
 
 import logging
 
+from core.circuit_breaker import CircuitBreakerRegistry, CircuitOpenError
 from safety import audit_log
 from safety.confidence_gate import check as confidence_check
 from safety.plan_validator import validate as plan_validate
 from safety.tool_guard import check_paths
 
 logger = logging.getLogger(__name__)
+
+# Global circuit breaker registry — one breaker per tool name
+# Opens after 3 consecutive failures, auto-recovers after 60s cooldown
+circuit_breakers = CircuitBreakerRegistry()
 
 
 def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
@@ -57,7 +62,21 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
     # Strip empty/whitespace keys — LLM occasionally emits {"": null} which
     # causes TypeError when splatted: f(**{"": x}) → unexpected keyword ""
     clean_args = {k: v for k, v in args.items() if k and k.strip()}
-    result = tool_fn(**clean_args)
+
+    # Circuit breaker check — prevents cascading failures when a tool
+    # consistently fails (opens after 3 consecutive failures, auto-recovers
+    # after 60s). The breaker records success/failure automatically.
+    cb = circuit_breakers.get_or_create(tool_name, failure_threshold=3)
+    try:
+        result = cb.sync_call(tool_fn, **clean_args)
+    except CircuitOpenError:
+        audit_log.log_blocked(tool_name, clean_args, "circuit_breaker_open")
+        return {
+            "success": False,
+            "blocked": True,
+            "error": f"Tool '{tool_name}' is temporarily unavailable due to recent failures. Try again later or use a different approach.",
+        }
+
     audit_log.log_call(tool_name, clean_args, result)
     if isinstance(result, list):
         return {"success": True, "results": result}

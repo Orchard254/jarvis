@@ -4,7 +4,8 @@ Implements the circuit breaker pattern to prevent cascading failures.
 """
 import time
 import asyncio
-from typing import Any, Callable, Optional, Dict
+import threading
+from typing import Any, Callable, Optional, Dict, Union
 from enum import Enum
 from dataclasses import dataclass, field
 import logging
@@ -57,7 +58,8 @@ class CircuitBreaker:
         self._state = CircuitState.CLOSED
         self._stats = CircuitStats()
         self._last_state_change: float = time.time()
-        self._lock = asyncio.Lock()
+        self._async_lock = asyncio.Lock()
+        self._sync_lock = threading.Lock()
 
     @property
     def state(self) -> CircuitState:
@@ -75,12 +77,12 @@ class CircuitBreaker:
 
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """
-        Execute a function through the circuit breaker.
+        Execute a function through the circuit breaker (async).
         
         Raises:
             CircuitOpenError: If circuit is open and rejecting requests
         """
-        async with self._lock:
+        async with self._async_lock:
             current_state = self.state
             
             if current_state == CircuitState.OPEN:
@@ -91,7 +93,9 @@ class CircuitBreaker:
             self._stats.total_calls += 1
 
         try:
-            result = await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                result = await result
             await self._on_success()
             return result
         except self.expected_exceptions as e:
@@ -101,13 +105,41 @@ class CircuitBreaker:
             await self._on_failure(e)
             raise
 
-    async def _on_success(self) -> None:
-        """Handle successful call."""
+    def sync_call(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute a function through the circuit breaker (sync).
+        
+        Raises:
+            CircuitOpenError: If circuit is open and rejecting requests
+        """
+        with self._sync_lock:
+            current_state = self.state
+
+            if current_state == CircuitState.OPEN:
+                self._stats.rejected_calls += 1
+                logger.warning(f"Circuit {self.name} is OPEN, rejecting request")
+                raise CircuitOpenError(f"Circuit breaker {self.name} is open")
+
+            self._stats.total_calls += 1
+
+        try:
+            result = func(*args, **kwargs)
+            self._on_success_sync()
+            return result
+        except self.expected_exceptions as e:
+            self._on_failure_sync(e)
+            raise
+        except Exception as e:
+            self._on_failure_sync(e)
+            raise
+
+    def _on_success_sync(self) -> None:
+        """Handle successful call (sync version)."""
         self._stats.successful_calls += 1
         self._stats.last_success_time = time.time()
         self._stats.consecutive_failures = 0
         self._stats.consecutive_successes += 1
-        
+
         if self._state == CircuitState.HALF_OPEN:
             if self._stats.consecutive_successes >= self.success_threshold:
                 logger.info(f"Circuit {self.name} transitioning from HALF_OPEN to CLOSED")
@@ -115,15 +147,15 @@ class CircuitBreaker:
                 self._last_state_change = time.time()
                 self._stats.consecutive_successes = 0
 
-    async def _on_failure(self, exception: Exception) -> None:
-        """Handle failed call."""
+    def _on_failure_sync(self, exception: Exception) -> None:
+        """Handle failed call (sync version)."""
         self._stats.failed_calls += 1
         self._stats.last_failure_time = time.time()
         self._stats.consecutive_failures += 1
         self._stats.consecutive_successes = 0
-        
+
         logger.warning(f"Circuit {self.name} failure: {exception}")
-        
+
         if self._state == CircuitState.HALF_OPEN:
             logger.warning(f"Circuit {self.name} failing in HALF_OPEN, reopening")
             self._state = CircuitState.OPEN
@@ -136,6 +168,12 @@ class CircuitBreaker:
                 )
                 self._state = CircuitState.OPEN
                 self._last_state_change = time.time()
+
+    async def _on_success(self) -> None:
+        self._on_success_sync()
+
+    async def _on_failure(self, exception: Exception) -> None:
+        self._on_failure_sync(exception)
 
     def reset(self) -> None:
         """Manually reset the circuit breaker to closed state."""

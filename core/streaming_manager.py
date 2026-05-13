@@ -4,6 +4,7 @@ Implements chunked output with support for mixed content types.
 Provides server-sent events (SSE) compatible formatting.
 """
 import json
+import threading
 import time
 import uuid
 from typing import Optional, Dict, Any, List, Generator, AsyncGenerator
@@ -316,7 +317,7 @@ class StreamingManager:
     
     def __init__(self):
         self._streams: Dict[str, StreamingResponse] = {}
-        self._lock = threading.Lock() if 'threading' in globals() else None
+        self._lock = threading.Lock()
         logger.info("StreamingManager initialized")
     
     def create_stream(self, task_id: Optional[str] = None,
@@ -329,10 +330,7 @@ class StreamingManager:
             format_type=format_type
         )
         
-        if self._lock:
-            with self._lock:
-                self._streams[stream.task_id] = stream
-        else:
+        with self._lock:
             self._streams[stream.task_id] = stream
         
         logger.debug(f"Created stream for task {stream.task_id}")
@@ -340,17 +338,12 @@ class StreamingManager:
     
     def get_stream(self, task_id: str) -> Optional[StreamingResponse]:
         """Get an existing stream by task ID."""
-        if self._lock:
-            with self._lock:
-                return self._streams.get(task_id)
-        return self._streams.get(task_id)
+        with self._lock:
+            return self._streams.get(task_id)
     
     def close_stream(self, task_id: str) -> bool:
         """Close and remove a stream."""
-        if self._lock:
-            with self._lock:
-                stream = self._streams.pop(task_id, None)
-        else:
+        with self._lock:
             stream = self._streams.pop(task_id, None)
         
         if stream:
@@ -362,29 +355,15 @@ class StreamingManager:
     
     def get_active_streams(self) -> List[str]:
         """Get list of active task IDs."""
-        if self._lock:
-            with self._lock:
-                return [tid for tid, s in self._streams.items() if not s._completed]
-        return [tid for tid, s in self._streams.items() if not s._completed]
+        with self._lock:
+            return [tid for tid, s in self._streams.items() if not s._completed]
     
     def cleanup_inactive(self, max_age_seconds: float = 3600) -> int:
         """Remove streams that are completed or too old."""
         current_time = time.time()
         removed = 0
         
-        if self._lock:
-            with self._lock:
-                to_remove = []
-                for task_id, stream in self._streams.items():
-                    if stream._completed:
-                        to_remove.append(task_id)
-                    elif stream._start_time and (current_time - stream._start_time) > max_age_seconds:
-                        to_remove.append(task_id)
-                
-                for task_id in to_remove:
-                    del self._streams[task_id]
-                    removed += 1
-        else:
+        with self._lock:
             to_remove = []
             for task_id, stream in self._streams.items():
                 if stream._completed:
@@ -400,9 +379,6 @@ class StreamingManager:
             logger.debug(f"Cleaned up {removed} inactive streams")
         return removed
 
-
-# Import threading at module level for StreamingManager
-import threading
 
 # Global instance
 streaming_manager = StreamingManager()

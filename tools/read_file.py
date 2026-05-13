@@ -16,36 +16,10 @@ logger = logging.getLogger(__name__)
 # limit risks exhausting process memory on large log files, database dumps, etc.
 MAX_READ_BYTES = 10 * 1024 * 1024  # 10 MB
 
-# Path fragments that must never be read — SSH keys, cloud-provider credential
-# directories, and other common credential files.
-_BLOCKED_READ_FRAGMENTS = (
-    ".ssh",
-    ".aws",
-    ".gnupg",
-    ".gpg",
-    "id_rsa",
-    "id_ed25519",
-    "id_ecdsa",
-    "id_dsa",
-    "authorized_keys",
-    "known_hosts",
-    ".netrc",
-    ".pgpass",
-    "credentials",
-    ".kube/config",
-    "kubeconfig",
-)
+from safety.path_guard import contains_sensitive_path as _is_blocked_path
 
 
-def _is_blocked_path(p: Path) -> bool:
-    """Return True if *p* matches any sensitive path fragment."""
-    # Normalise to forward-slash, lower-case for case-insensitive comparison
-    # on Windows where paths are case-insensitive.
-    normalized = p.as_posix().lower()
-    return any(frag in normalized for frag in _BLOCKED_READ_FRAGMENTS)
-
-
-def read_file(path: str) -> dict:
+def read_file(path: str, line_offset: int = None, line_limit: int = None) -> dict:
     """
     Read a text file at *path* and return its contents.
 

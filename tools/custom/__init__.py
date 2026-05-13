@@ -28,7 +28,7 @@ Example ``my_tool.py``::
             },
         )
 
-No need to edit any other file — just drop in and restart.
+No need to edit any other file -- just drop in and restart.
 """
 
 from __future__ import annotations
@@ -40,16 +40,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Return types for consumers
 _CUSTOM_TOOLS: dict[str, callable] = {}
 _CUSTOM_SCHEMAS: list[dict] = []
+_INITIALIZED = False
 
 
 def _discover() -> tuple[dict[str, callable], list[dict]]:
-    """
-    Scan ``tools/custom/`` for ``*.py`` files, load each module, and call
-    ``register()`` if it exists.  Returns ``(registry, schemas)``.
-    """
     registry: dict[str, callable] = {}
     schemas: list[dict] = []
 
@@ -65,7 +61,7 @@ def _discover() -> tuple[dict[str, callable], list[dict]]:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             if not hasattr(mod, "register"):
-                logger.debug(f"custom.tools: {name} has no register() — skipped")
+                logger.debug(f"custom.tools: {name} has no register() -- skipped")
                 continue
             reg_result = mod.register()
             if not reg_result or len(reg_result) != 3:
@@ -83,20 +79,23 @@ def _discover() -> tuple[dict[str, callable], list[dict]]:
             schemas.append(tool_schema)
             logger.info(f"custom.tools: registered '{tool_name}' from {name}.py")
         except Exception as exc:
-            logger.warning(f"custom.tools: failed to load {name}.py — {exc}")
+            logger.warning(f"custom.tools: failed to load {name}.py -- {exc}")
 
     return registry, schemas
 
 
-# Auto-run discovery on first import so ``tools/__init__.py`` can merge results.
-_CUSTOM_TOOLS, _CUSTOM_SCHEMAS = _discover()
+def _ensure_discovered():
+    global _CUSTOM_TOOLS, _CUSTOM_SCHEMAS, _INITIALIZED
+    if not _INITIALIZED:
+        _CUSTOM_TOOLS, _CUSTOM_SCHEMAS = _discover()
+        _INITIALIZED = True
 
 
 def get_custom_tools() -> dict[str, callable]:
-    """Return the discovered custom tool registry."""
+    _ensure_discovered()
     return dict(_CUSTOM_TOOLS)
 
 
 def get_custom_schemas() -> list[dict]:
-    """Return the discovered custom tool schemas."""
+    _ensure_discovered()
     return list(_CUSTOM_SCHEMAS)

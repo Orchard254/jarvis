@@ -3,6 +3,7 @@ Progress Reporter for JARVIS Phase 4.
 Generates natural language progress summaries from raw step data.
 Calculates ETA based on rolling averages of step duration.
 """
+import threading
 import time
 import logging
 from typing import Dict, Any, List, Optional, Tuple
@@ -350,49 +351,35 @@ class ProgressRegistry:
     
     def __init__(self):
         self._reporters: Dict[str, ProgressReporter] = {}
-        self._lock = threading.Lock() if 'threading' in globals() else None
+        self._lock = threading.Lock()
     
     def create_reporter(self, task_id: str, 
                        task_description: str = "") -> ProgressReporter:
         """Create a new progress reporter for a task."""
         reporter = ProgressReporter(task_id, task_description)
-        if self._lock:
-            with self._lock:
-                self._reporters[task_id] = reporter
-        else:
+        with self._lock:
             self._reporters[task_id] = reporter
         return reporter
     
     def get_reporter(self, task_id: str) -> Optional[ProgressReporter]:
         """Get an existing progress reporter."""
-        if self._lock:
-            with self._lock:
-                return self._reporters.get(task_id)
-        return self._reporters.get(task_id)
+        with self._lock:
+            return self._reporters.get(task_id)
     
     def remove_reporter(self, task_id: str) -> bool:
         """Remove a progress reporter."""
-        if self._lock:
-            with self._lock:
-                if task_id in self._reporters:
-                    del self._reporters[task_id]
-                    return True
-        elif task_id in self._reporters:
-            del self._reporters[task_id]
-            return True
+        with self._lock:
+            if task_id in self._reporters:
+                del self._reporters[task_id]
+                return True
         return False
     
     def get_all_statuses(self) -> Dict[str, Dict[str, Any]]:
         """Get status for all active tasks."""
-        if self._lock:
-            with self._lock:
-                return {tid: r.get_detailed_status() 
-                       for tid, r in self._reporters.items()}
-        return {tid: r.get_detailed_status() 
-               for tid, r in self._reporters.items()}
+        with self._lock:
+            return {tid: r.get_detailed_status() 
+                   for tid, r in self._reporters.items()}
 
-
-import threading
 
 # Global instance
 progress_registry = ProgressRegistry()

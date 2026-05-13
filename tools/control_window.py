@@ -23,6 +23,15 @@ import win32gui
 import win32process
 from safety import audit_log  # allowed: tools/ → safety/
 
+# Cross-platform abstraction layer for window/process operations.
+# Falls back gracefully if unavailable (e.g. in headless/container env).
+try:
+    from core.platform_abstraction import PlatformAbstraction
+    _platform = PlatformAbstraction()
+    _HAS_PLATFORM = True
+except Exception:
+    _HAS_PLATFORM = False
+
 logger = logging.getLogger(__name__)
 
 # Seconds to wait after WM_CLOSE before escalating to the next fallback.
@@ -33,42 +42,58 @@ def _wait_grace():
     """Non-blocking wait using Windows message pump instead of time.sleep."""
     import time as _time
     start = _time.time()
+    pumped = 0
     while (_time.time() - start) < _CLOSE_GRACE_SECS:
-        # Pump Windows messages so UI can process the close
-        try:
-            import pythoncom
-            pythoncom.PumpWaitingMessages()
-        except Exception:
-            pass
-        _time.sleep(0.05)  # Small sleep to avoid busy-waiting
+        if pumped % 10 == 0:
+            try:
+                import pythoncom
+                pythoncom.PumpWaitingMessages()
+            except Exception:
+                pass
+        pumped += 1
+        _time.sleep(0.05)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _find_hwnd(window_title: str):
-    """Return the first visible HWND whose title contains `window_title` (case-insensitive)."""
+def _find_hwnd(window_title: str, retries: int = 10, delay: float = 0.5):
+    """Return the first visible HWND whose title contains `window_title` (case-insensitive).
+
+    Retries up to `retries` times with `delay` seconds between attempts to
+    handle the window not yet being registered (e.g. just after launch).
+    """
     hwnd_ref = [None]
     search_title = str(window_title).lower().strip()
 
-    def _cb(h, _):
-        try:
-            if not h or not win32gui.IsWindow(h):
-                return 1
-            if win32gui.IsWindowVisible(h):
-                t = win32gui.GetWindowText(h).lower()
-                if search_title in t:
-                    hwnd_ref[0] = h
-                    return 0  # stop enumeration
-        except Exception:
-            pass
-        return 1
+    def _search():
+        def _cb(h, _):
+            try:
+                if not h or not win32gui.IsWindow(h):
+                    return 1
+                if win32gui.IsWindowVisible(h):
+                    t = win32gui.GetWindowText(h).lower()
+                    if search_title in t:
+                        hwnd_ref[0] = h
+                        return 0
+            except Exception:
+                pass
+            return 1
 
-    try:
-        win32gui.EnumWindows(_cb, None)
-    except Exception as e:
-        logger.error(f"EnumWindows failed in _find_hwnd: {e}")
-    return hwnd_ref[0]
+        try:
+            win32gui.EnumWindows(_cb, None)
+        except Exception as e:
+            logger.error(f"EnumWindows failed in _find_hwnd: {e}")
+        return hwnd_ref[0]
+
+    import time as _time
+    for attempt in range(retries):
+        result = _search()
+        if result is not None:
+            return result
+        if attempt < retries - 1:
+            _time.sleep(delay)
+    return None
 
 
 def _window_alive(hwnd: int) -> bool:
@@ -114,11 +139,11 @@ def _taskkill(process_name: str, window_title: str) -> dict:
 
     # --- SAFETY_ENABLED guard --------------------------------------------
     # settings.SAFETY_ENABLED controls whether hard kills are permitted.
-    # If absent from settings.py the attribute defaults to True (safe).
     safety_on = getattr(settings, "SAFETY_ENABLED", True)
-    if not safety_on:
-        # Operator explicitly disabled safety — log prominently, then proceed.
-        logger.warning("SAFETY_ENABLED=False — proceeding with forced taskkill")
+    if safety_on:
+        logger.warning("SAFETY_ENABLED=True — skipping forced taskkill")
+        return {"success": False, "error": "taskkill blocked by SAFETY_ENABLED"}
+    logger.warning("SAFETY_ENABLED=False — proceeding with forced taskkill")
 
     logger.info(f"taskkill fallback: /F /IM {process_name}")
     proc = subprocess.run(
@@ -215,28 +240,150 @@ def _close_with_fallbacks(hwnd: int, window_title: str) -> dict:
     return _taskkill(process_name, window_title)
 
 
-# ── public API ────────────────────────────────────────────────────────────────
+# ── window listing helpers ────────────────────────────────────────────────────
 
 
-def control_window(
-    window_title: str, action: str, params: Optional[dict] = None
-) -> dict:
-    """
-    Control a visible window by title substring.
+def list_windows() -> dict:
+    """List all visible windows with their titles, positions, and process names."""
+    # Prefer platform abstraction for cross-platform support
+    if _HAS_PLATFORM:
+        try:
+            windows = _platform.get_windows()
+            return {"success": True, "count": len(windows), "windows": windows}
+        except Exception:
+            pass
 
-    Supported actions: minimize | maximize | restore | close | resize | move | focus
+    # Fallback to direct win32 enumeration
+    windows = []
 
-    For action="close" a three-stage escalation is used:
-      WM_CLOSE → Alt+F4 → taskkill /F /IM
-    Each stage is audit-logged independently.
-    """
-    params = params or {}
+    def _cb(h, _):
+        try:
+            if not h or not win32gui.IsWindow(h):
+                return 1
+            if win32gui.IsWindowVisible(h):
+                title = win32gui.GetWindowText(h)
+                if title:
+                    rect = win32gui.GetWindowRect(h)
+                    process_name = _get_process_name(h)
+                    windows.append({
+                        "hwnd": h,
+                        "title": title,
+                        "left": rect[0],
+                        "top": rect[1],
+                        "right": rect[2],
+                        "bottom": rect[3],
+                        "width": rect[2] - rect[0],
+                        "height": rect[3] - rect[1],
+                        "process": process_name or "unknown",
+                    })
+        except Exception:
+            pass
+        return 1
+
+    try:
+        win32gui.EnumWindows(_cb, None)
+        return {"success": True, "count": len(windows), "windows": windows}
+    except Exception as e:
+        return {"success": False, "error": str(e), "windows": []}
+
+
+def get_window_info(window_title: str) -> dict:
+    """Get detailed info about a specific window by title substring."""
     try:
         hwnd = _find_hwnd(window_title)
         if not hwnd:
             return {"success": False, "error": f"No window found: '{window_title}'"}
 
-        # ── non-close actions (unchanged from original) ──────────────────
+        rect = win32gui.GetWindowRect(hwnd)
+        process_name = _get_process_name(hwnd)
+        title = win32gui.GetWindowText(hwnd)
+        is_visible = win32gui.IsWindowVisible(hwnd)
+        is_minimized = win32gui.IsIconic(hwnd)
+        is_maximized = win32gui.IsZoomed(hwnd)
+
+        return {
+            "success": True,
+            "hwnd": hwnd,
+            "title": title,
+            "left": rect[0],
+            "top": rect[1],
+            "right": rect[2],
+            "bottom": rect[3],
+            "width": rect[2] - rect[0],
+            "height": rect[3] - rect[1],
+            "process": process_name or "unknown",
+            "visible": is_visible,
+            "minimized": is_minimized,
+            "maximized": is_maximized,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def set_window_topmost(window_title: str, topmost: bool = True) -> dict:
+    """Set a window to always-on-top or remove always-on-top."""
+    try:
+        hwnd = _find_hwnd(window_title)
+        if not hwnd:
+            return {"success": False, "error": f"No window found: '{window_title}'"}
+
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_TOPMOST if topmost else win32con.HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,
+        )
+        return {
+            "success": True,
+            "window": window_title,
+            "topmost": topmost,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ── public API ────────────────────────────────────────────────────────────────
+
+
+def control_window(
+    window_title: str = "", action: str = "list", params: Optional[dict] = None
+) -> dict:
+    """
+    Control a visible window by title substring.
+
+    Supported actions: minimize | maximize | restore | close | resize | move |
+                       focus | list | info | topmost
+
+    For action="close" a three-stage escalation is used:
+      WM_CLOSE → Alt+F4 → taskkill /F /IM
+    Each stage is audit-logged independently.
+
+    Special actions (no window_title needed):
+      list — list all visible windows
+    """
+    params = params or {}
+
+    # ── Global actions that don't need a window_title ───────────────────────
+    if action == "list":
+        return list_windows()
+
+    # ── Actions that need a window_title ────────────────────────────────────
+    if not window_title:
+        return {"success": False, "error": "window_title is required for this action"}
+
+    try:
+        # info and topmost use separate handlers
+        if action == "info":
+            return get_window_info(window_title)
+
+        if action == "topmost":
+            return set_window_topmost(window_title, params.get("enabled", True))
+
+        hwnd = _find_hwnd(window_title)
+        if not hwnd:
+            return {"success": False, "error": f"No window found: '{window_title}'"}
+
+        # ── non-close actions ───────────────────────────────────────────────
         if action == "minimize":
             win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
 
@@ -247,7 +394,6 @@ def control_window(
             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
 
         elif action == "close":
-            # Delegate entirely to the staged fallback logic.
             return _close_with_fallbacks(hwnd, window_title)
 
         elif action == "resize":
@@ -265,7 +411,7 @@ def control_window(
             )
 
         elif action == "focus":
-            focused = _force_focus(hwnd)
+            _force_focus(hwnd)
 
         else:
             return {"success": False, "error": f"Unknown action: '{action}'"}

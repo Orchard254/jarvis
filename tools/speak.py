@@ -1,51 +1,62 @@
 """
-Speak tool — lets the LLM explicitly trigger text-to-speech mid-task.
-
-This is distinct from the automatic TTS the orchestrator applies to the
-final response. Use this tool when Jarvis should narrate progress, read
-something aloud, or communicate verbally without ending the task loop.
-
-Args
-----
-text      — the string to speak (required)
-blocking  — wait for audio to finish before returning (default True)
-            set False to speak and immediately continue working
+Unified voice I/O tool.
+Actions: speak, ask, listen
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def speak(text: str, blocking: bool = True) -> dict:
-    """
-    Speak *text* aloud via the configured TTS engine (Edge TTS / Piper).
+def speak(
+    action: str = "speak",
+    text: str | None = None,
+    prompt: str | None = None,
+    choices: list[str] | None = None,
+    timeout_seconds: int = 60,
+    blocking: bool = True,
+    speak_prompt: bool = True,
+) -> dict:
+    if action == "speak":
+        return _speak(text, blocking)
+    elif action == "ask":
+        return _ask(prompt, choices, timeout_seconds)
+    elif action == "listen":
+        return _listen(prompt, timeout_seconds, speak_prompt)
+    return {"success": False, "error": f"Unknown speak action: {action}"}
 
-    Returns {success, text, blocking} or {success: False, error}.
-    """
-    if not text or not text.strip():
-        return {"success": False, "error": "No text provided to speak."}
 
-    text = text.strip()
-
+def _speak(text: str | None, blocking: bool) -> dict:
+    if not text:
+        return {"success": False, "error": "text required for speak action"}
     try:
-        from output.tts import speak as _tts_speak
-
-        ok = _tts_speak(text, blocking=blocking)
-        if ok:
-            logger.info(f"speak tool: spoke {len(text)} chars (blocking={blocking})")
-            return {
-                "success": True,
-                "text": text,
-                "blocking": blocking,
-                "chars": len(text),
-            }
-        else:
-            return {
-                "success": False,
-                "error": "TTS engine failed or is disabled — check TTS_ENABLED in settings.",
-            }
-
+        from output.tts import speak as tts_speak
+        ok = tts_speak(text=text, blocking=blocking)
+        return {"success": ok, "chars": len(text)}
     except Exception as e:
-        logger.error(f"speak tool: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"TTS failed: {e}"}
+
+
+def _ask(prompt: str | None, choices: list[str] | None, timeout: int) -> dict:
+    if not prompt:
+        return {"success": False, "error": "prompt required for ask action"}
+    try:
+        from tools.ask_user import ask_user
+        return ask_user(prompt=prompt, choices=choices, timeout_seconds=timeout)
+    except Exception as e:
+        return {"success": False, "error": f"Ask user failed: {e}"}
+
+
+def _listen(prompt: str | None, timeout: int, speak_prompt: bool) -> dict:
+    try:
+        from tools.listen import listen as listen_tool
+        return listen_tool(
+            prompt=prompt,
+            timeout_seconds=timeout,
+            speak_prompt=speak_prompt,
+        )
+    except Exception as e:
+        return {"success": False, "error": f"Listen failed: {e}"}

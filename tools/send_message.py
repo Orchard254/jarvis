@@ -75,9 +75,14 @@ def _send_email(to: str, subject: str, body: str, html: bool) -> dict:
     msg.attach(MIMEText(body, mime_type, "utf-8"))
 
     try:
+        import ssl
+        ctx = ssl.create_default_context()
+        if settings.get_env_bool("SMTP_SKIP_VERIFY", False):
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
         with smtplib.SMTP(host, port, timeout=15) as server:
             server.ehlo()
-            server.starttls()
+            server.starttls(context=ctx)
             server.login(user, password)
             server.sendmail(from_addr, [to], msg.as_string())
         logger.info(f"send_message (email): sent to {to} — '{subject}'")
@@ -108,7 +113,7 @@ def _send_telegram(body: str, chat_id: str) -> dict:
         }
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({"chat_id": target, "text": body, "parse_mode": "HTML"}).encode()
+    payload = json.dumps({"chat_id": target, "text": body, "parse_mode": ""}).encode()
     req = urllib.request.Request(
         url,
         data=payload,

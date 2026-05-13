@@ -77,8 +77,6 @@ def _handle_volume(value) -> dict:
     # Fallback: pyautogui key presses (set only; can't reliably get)
     if value is not None:
         try:
-            import pyautogui
-
             # Use nircmd if available for precise set
             result = subprocess.run(
                 ["nircmd.exe", "setsysvolume", str(int(int(value) / 100 * 65535))],
@@ -99,13 +97,13 @@ def _handle_volume(value) -> dict:
         return {
             "success": False,
             "setting": "volume",
-            "error": "pycaw not installed and nircmd not found. Run: pip install pycaw",
+            "error": "pycaw not available for get/set and nircmd not found for set. Run: pip install pycaw",
         }
     else:
         return {
             "success": False,
             "setting": "volume",
-            "error": "Cannot read volume without pycaw. Run: pip install pycaw",
+            "error": "Cannot get volume without pycaw (nircmd only supports set). Run: pip install pycaw",
         }
 
 

@@ -12,12 +12,14 @@ import autonomous.task_queue
 import settings
 from autonomous.approval_gate import ApprovalGate
 from autonomous.scheduler import Scheduler
+from brain.planner import build_plan
 from brain.tool_loop import run as tool_loop_run
+from core.feedback_collector import FeedbackCollector, FeedbackType
 from safety import executor as safety
 from settings import ITERATION_CAPS, TOOL_LOOP_HISTORY_MESSAGES
-from skills.skill_store import get_active_skills, search_by_intent
+from skills.skill_store import get_active_skills
 from skills.skill_store import init_db as init_skills
-from tools import TOOL_REGISTRY
+from tools import TOOL_REGISTRY, TOOL_SCHEMAS
 from tools.read_pc_state import read_pc_state
 from verification.verifier import verify_action
 
@@ -25,22 +27,14 @@ from core.console import cli_input
 from core.reporter import report
 
 _TOOL_CONFIDENCE: dict[str, float] = {
-    "read_pc_state": 0.95,
-    "capture_screen": 0.95,
-    "execute_code": 0.80,
+    "screen": 0.90,
+    "input": 0.80,
+    "window": 0.85,
+    "system": 0.95,
     "browser": 0.75,
-    "find_on_screen": 0.90,
-    "vision_query": 0.90,
-    "time_calendar": 0.85,
-    "control_window": 0.85,
-    "query_pc_index": 0.90,
     "memory": 0.85,
+    "exec": 0.80,
     "speak": 0.80,
-    "schedule": 0.80,
-    "ask_user": 0.90,
-    "listen": 0.85,
-    "watch_screen": 0.75,
-    "send_message": 0.80,
 }
 
 logger = logging.getLogger(__name__)
@@ -68,7 +62,7 @@ class CappedList(list):
 
 
 class Orchestrator:
-    def __init__(self, memory=None):
+    def __init__(self, memory=None, long_term_memory=None):
         self._history: list[dict] = CappedList(max_len=40)
         self._mode = "interactive_cloud"
         self._approval_gate = ApprovalGate()
@@ -76,6 +70,7 @@ class Orchestrator:
         self._scheduler = Scheduler(self.handle)
         self._scheduler.start()
         self._memory = memory
+        self._long_term_memory = long_term_memory
         self.running = True
         self._last_tool_calls: list[dict] = []
         self._handle_lock = __import__("threading").Lock()
@@ -100,20 +95,17 @@ class Orchestrator:
 
         if memory:
             try:
-                recent = memory.get_recent_episodes(limit=20)
-                for ep in reversed(recent):
-                    cmd = ep.get("command_text", "")
-                    tr = ep.get("tool_result") or {}
-                    resp = tr.get("response", "") if isinstance(tr, dict) else ""
-                    if cmd and resp:
-                        self._history.append({"role": "user", "content": cmd})
-                        self._history.append({"role": "assistant", "content": resp})
-                logger.info(
-                    f"Loaded {len(self._history) // 2} conversation turns from memory"
-                )
+                prefs = memory.get_context_summary()
+                if prefs:
+                    self._history.append({
+                        "role": "system",
+                        "content": f"Session restored. User preferences from memory: {prefs}",
+                    })
+                    logger.info("Loaded memory context summary (no conversation history)")
             except Exception as _e:
-                logger.debug(f"Could not load history from memory: {_e}")
+                logger.debug(f"Could not load memory context: {_e}")
 
+        self._feedback = FeedbackCollector(storage_path=str(settings.DATA_DIR / "feedback"))
         logger.info("Orchestrator initialized with full pipeline wiring and Skill Store")
 
     def handle(self, user_input: str) -> str:
@@ -148,23 +140,78 @@ class Orchestrator:
                         return "No active tasks"
                     return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
 
-            # Pre-search skill store before entering tool loop (Bug 5 fix)
-            skill_match = search_by_intent(clean_input) if settings.ENABLE_SKILLS else None
-            skill_context = ""
-            if skill_match and skill_match.get("skill_id"):
-                skill_context = (
-                    f"Saved skill found for intent '{clean_input}':\n"
-                    f"  code: {skill_match.get('code', '')[:500]}\n"
-                    f"  language: {skill_match.get('language', 'python')}\n"
-                    f"Execute this code via execute_code — do NOT assume it already ran."
-                )
-
             memory_context = ""
             if self._memory:
                 memory_context = self._memory.get_context_summary()
 
+            # Also enrich with long-term semantic memories when available
+            if self._long_term_memory:
+                try:
+                    ltm_context = self._long_term_memory.get_relevant_context(clean_input, max_memories=3)
+                    if ltm_context:
+                        memory_context = (memory_context + "\n" + ltm_context) if memory_context else ltm_context
+                except Exception:
+                    pass
+
             with self._handle_lock:
                 history_snapshot = list(self._history)
+
+            # ── Pre-execution planning ──────────────────────────────────────────
+            # For action-oriented requests, generate a structured plan before
+            # the tool loop executes anything. This avoids the expensive
+            # 1-tool-call-per-iteration pattern.
+            plan = None
+            if _should_plan(clean_input):
+                # Include notes from previous planner failures so the LLM learns
+                plan_history_context = memory_context or ""
+                if self._memory:
+                    try:
+                        planner_insights = self._memory.get_preference("planner_lessons", "")
+                        if planner_insights:
+                            plan_history_context += "\n[Planning lessons learned from past failures]:\n" + str(planner_insights)
+                    except Exception:
+                        pass
+
+                # Ground the planner in live system state
+                live_state = ""
+                try:
+                    from tools.system import system
+                    state_result = system(action="state")
+                    if state_result.get("success"):
+                        parts = []
+                        windows = state_result.get("windows", [])
+                        processes = state_result.get("processes", [])
+                        if windows:
+                            parts.append(f"Windows: {' | '.join(w.get('title','?') for w in windows[:6])}")
+                        if processes:
+                            names = sorted(set(p.get("name","?") for p in processes[:8]))
+                            parts.append(f"Processes: {', '.join(names)}")
+                        focused = state_result.get("focused_window")
+                        if focused:
+                            parts.append(f"Focused: {focused}")
+                        if parts:
+                            live_state = " === LIVE STATE ===\n" + "\n".join(parts)
+                except Exception:
+                    pass
+
+                try:
+                    plan = build_plan(
+                        user_input=clean_input,
+                        history=history_snapshot,
+                        memory_context=plan_history_context,
+                        tool_schemas=TOOL_SCHEMAS,
+                        live_state=live_state,
+                    )
+                    if not plan.get("success") or not plan.get("steps"):
+                        plan = None
+                        logger.info(f"Planner returned no steps for '{clean_input[:50]}' — using ReAct loop")
+                    else:
+                        logger.info(
+                            f"Planner: {len(plan['steps'])} steps for '{clean_input[:50]}'"
+                        )
+                except Exception as _plan_exc:
+                    logger.info(f"Planner failed for '{clean_input[:50]}': {_plan_exc}")
+                    plan = None
 
             result = tool_loop_run(
                 user_input=clean_input,
@@ -176,9 +223,34 @@ class Orchestrator:
                 memory_context=memory_context,
                 valid_tool_names=set(TOOL_REGISTRY.keys()),
                 pc_state_fn=read_pc_state,
+                plan=plan,
             )
 
+            # ── Learn from planner failures ────────────────────────────────────
+            # If the plan failed but ReAct succeeded, store a lesson for next time
+            if plan and not result.get("plan_executed") and result.get("success") and self._memory:
+                plan_steps = [s["tool"] for s in plan.get("steps", [])]
+                actual_tools = list({tc["tool"] for tc in result.get("tool_calls", [])})
+                lesson = (
+                    f"Planned: {plan_steps} | "
+                    f"Succeeded with: {actual_tools}"
+                )
+                try:
+                    existing = self._memory.get_preference("planner_lessons", "")
+                    updated = lesson if not existing else existing + "\n" + lesson
+                    updated = "\n".join(updated.split("\n")[-5:])  # keep last 5
+                    self._memory.set_preference("planner_lessons", updated)
+                    logger.info(f"Planner lesson stored: {lesson}")
+                except Exception:
+                    pass
+
             response = result.get("response", "Done.")
+
+            # ── Self-reflection disabled ─────────────────────────────────────
+            # Heuristic self-reflection was removed because it always scored
+            # ~0.38 with no actionable improvements — pure CPU waste.
+            # Re-enable with a real LLM-based critique when needed.
+
             with self._handle_lock:
                 self._last_tool_calls = result.get("tool_calls", [])
 
@@ -205,6 +277,34 @@ class Orchestrator:
                     success=result.get("success"),
                     tool_result={"response": response[:500]},
                 )
+
+            # Store successful interactions in long-term memory for cross-session recall
+            if self._long_term_memory and result.get("tool_calls"):
+                try:
+                    self._long_term_memory.remember_interaction(
+                        user_input=user_input,
+                        agent_response=response,
+                        success=result.get("success", False),
+                    )
+                except Exception:
+                    pass
+
+            # ── Record feedback for tool tasks ──────────────────────────────────
+            if result.get("tool_calls"):
+                try:
+                    fb_type = FeedbackType.THUMBS_UP if result.get("success") else FeedbackType.THUMBS_DOWN
+                    self._feedback.submit_feedback_sync(
+                        task_id=clean_input[:40],
+                        feedback_type=fb_type,
+                        value=result.get("success"),
+                        context={
+                            "iterations": result.get("iterations", 0),
+                            "tool_count": len(result.get("tool_calls", [])),
+                            "plan_executed": result.get("plan_executed", False),
+                        },
+                    )
+                except Exception:
+                    pass
 
             with self._handle_lock:
                 self._history.append({"role": "user", "content": user_input})
@@ -310,3 +410,38 @@ class Orchestrator:
                 logger.error(f"CLI loop error: {e}")
                 print(f"System error: {e}")
         print("JARVIS stopped.")
+
+
+def _should_plan(user_input: str) -> bool:
+    """Determine if a request warrants pre-execution planning.
+
+    Planning is triggered for requests that likely need tool execution.
+    Chat-only requests (greetings, simple Q&A) skip planning.
+    """
+    if not user_input or len(user_input) < 3:
+        return False
+
+    chat_patterns = (
+        "hello", "hi ", "hey", "thanks", "thank you", "good", "bad",
+        "yes", "no", "maybe", "okay", "ok ", "sure", "bye", "goodbye",
+        "how are you", "what's up", "sup", "nice",
+    )
+    if user_input.lower().strip().startswith(chat_patterns):
+        return False
+
+    # Commands that involve tools should always plan
+    action_triggers = (
+        "open ", "launch ", "start ", "close ", "quit ", "kill ",
+        "focus ", "minimize ", "maximize ", "restore ", "resize ", "move ",
+        "click ", "type ", "press ", "scroll ",
+        "capture ", "screenshot ", "find ",
+        "enter ", "write ", "paste ",
+        "search ", "look up ", "find ",
+        "create ", "delete ", "remove ", "copy ", "move ",
+        "send ", "email ", "schedule ",
+        "list ", "show ", "check ", "get ",
+        "set ", "change ", "turn ", "enable ", "disable ",
+        "download ", "install ", "update ",
+        "where ", "what ", "how do ", "can you ",
+    )
+    return user_input.lower().strip().startswith(action_triggers)

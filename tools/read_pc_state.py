@@ -25,17 +25,12 @@ _bg_processes_ref = None
 
 
 def BACKGROUND_TASKS() -> list[dict]:
-    """
-    Return a serializable snapshot of all tracked background processes
-    from ``execute_code``.  Each entry::
-
-        {pid, running, returncode, elapsed_seconds, language, code_preview}
-    """
-    global _bg_processes_imported, _bg_processes_ref
+    global _bg_processes_imported, _bg_processes_ref, _bg_lock
     if not _bg_processes_imported:
         try:
-            from tools.execute_code import _bg_processes
+            from tools.execute_code import _bg_processes, _bg_lock as _exec_bg_lock
             _bg_processes_ref = _bg_processes
+            _bg_lock = _exec_bg_lock
         except ImportError:
             _bg_processes_ref = {}
         _bg_processes_imported = True
@@ -44,7 +39,7 @@ def BACKGROUND_TASKS() -> list[dict]:
         return []
     now = __import__("time").time()
     result = []
-    with _bg_lock:  # local lock for thread safety when iterating
+    with _bg_lock:
         items = list(d.items())
     for pid, info in items:
         p = info.get("proc")

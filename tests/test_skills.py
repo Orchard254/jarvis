@@ -108,7 +108,7 @@ def test_skill_runner_executes_through_safety(monkeypatch):
     promote_skill(skill_id)
     
     result = run_skill(skill_id, "test run")
-    assert result["success"] is True
+    assert result["success"] == True
 
 
 def test_prune_candidates_caps_memory():

@@ -12,8 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-BASE_DIR = Path(__file__).parent
-load_dotenv(dotenv_path=BASE_DIR / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 
 def get_env_str(key: str, default: str = "") -> str:
@@ -53,8 +52,8 @@ REMINDERS_DIR = BASE_DIR / get_env_str("REMINDERS_DIR", "reminders")
 CONFIG_DIR = BASE_DIR / get_env_str("CONFIG_DIR", "config")
 
 # ── LLM & Context Budget ───────────────────────────────
-LLM_MODEL = get_env_str("OLLAMA_MODEL", "gpt-oss:120b-cloud")
-LLM_VISION_MODEL = get_env_str("OLLAMA_VISION_MODEL", "gemma3:27b-cloud")
+LLM_MODEL = get_env_str("OLLAMA_MODEL", "qwen3-vl:235b-instruct-cloud")
+LLM_VISION_MODEL = get_env_str("OLLAMA_VISION_MODEL", "qwen3-vl:235b-instruct-cloud")
 LLM_BASE_URL = get_env_str("OLLAMA_CLOUD_URL", "https://api.ollama.com/api/chat")
 OLLAMA_LOCAL_URL = get_env_str("OLLAMA_LOCAL_URL", "http://localhost:11434")
 OLLAMA_LOCAL_MODEL = get_env_str("OLLAMA_LOCAL_MODEL", "llama3")
@@ -92,8 +91,6 @@ MAX_SCREENSHOTS_IN_CONTEXT = get_env_int("MAX_SCREENSHOTS_IN_CONTEXT", 0)
 VISION_TO_TEXT_MODE = get_env_bool("VISION_TO_TEXT_MODE", True)
 
 # ── Iteration & Mode Caps (Cloud-Optimized) ────────────────
-# Read from .env with explicit type conversion
-_max_rounds = get_env_int("MAX_AGENT_ROUNDS", 3)
 ITERATION_CAPS = {
     "interactive_cloud": 10,  # Balances complex tasks vs cost
     "interactive_local": 12,
@@ -106,190 +103,42 @@ EXECUTE_CODE_TIMEOUT = get_env_int("EXECUTE_CODE_TIMEOUT", 30)
 MAX_RAM_PERCENT = get_env_int("MAX_RAM_PERCENT", 85)
 TOOL_RETRY_LIMITS = {
     "execute_code": get_env_int("EXECUTE_CODE_RETRIES", 3),
+    "exec": get_env_int("EXECUTE_CODE_RETRIES", 3),
     "control_window": get_env_int("CONTROL_WINDOW_RETRIES", 3),
+    "window": get_env_int("CONTROL_WINDOW_RETRIES", 3),
     "control_input": get_env_int("CONTROL_INPUT_RETRIES", 3),
+    "input": get_env_int("CONTROL_INPUT_RETRIES", 3),
     "capture_screen": get_env_int("CAPTURE_SCREEN_RETRIES", 3),
+    "screen": get_env_int("CAPTURE_SCREEN_RETRIES", 3),
 }
 
 ALLOWED_IMPORTS = {
-    "os",
-    "pathlib",
-    "shutil",
-    "glob",
-    "tools",
-    "pkgutil",
-    "webbrowser",
-    "tempfile",
-    "json",
-    "csv",
-    "re",
-    "datetime",
-    "time",
-    "collections",
-    "itertools",
-    "functools",
-    "copy",
-    "subprocess",
-    "psutil",
-    "win32gui",
-    "win32con",
-    "win32api",
-    "win32process",
-    "pyautogui",
-    "PIL",
-    "requests",
-    "pytesseract",
-    "sqlite3",
-    "hashlib",
-    "base64",
-    "uuid",
-    "logging",
-    "math",
-    "string",
-    "textwrap",
-    "difflib",
-    "sys",
-    # ── previously missing — model generates code using these ─────────────────
-    "winreg",       # Windows registry access
-    "ctypes",       # low-level Windows API calls
-    "threading",    # background threads in generated scripts
-    "socket",       # network queries (hostname, IP)
-    "urllib",       # URL operations
-    "http",         # HTTP client in generated scripts
-    "io",           # BytesIO / StringIO
-    "struct",       # binary data packing
-    "platform",     # OS version / machine info
-    "signal",       # process signal handling
-    "queue",        # thread-safe queues
-    "traceback",    # error introspection in generated scripts
-    # ── clipboard libraries for UI automation tasks ────────────────────────────
-    "pyperclip",    # cross-platform clipboard operations
-    "win32clipboard",  # Windows clipboard API
-    # ── additional Windows automation & UI control ─────────────────────────────
-    "win32ui",      # Windows UI automation (device contexts, window capture)
-    "win32pdh",     # Windows performance data (CPU, memory monitoring)
-    "comtypes",     # COM automation (alternative to win32com)
-    "pythoncom",    # Python COM support
-    # ── image processing & screen capture ──────────────────────────────────────
-    "mss",          # fast screen capture
-    "cv2",          # OpenCV for image processing/computer vision
-    "numpy",        # numerical operations (required by cv2, PIL)
-    "imagegrab",    # PIL.ImageGrab for screenshots
-    # ── web automation ─────────────────────────────────────────────────────────
-    "selenium",     # browser automation
-    "webdriver",    # Selenium WebDriver
-    "bs4",          # BeautifulSoup for HTML parsing
-    "lxml",         # fast XML/HTML parser
-    # ── Windows audio API ──────────────────────────────────────────────────────
-    "pycaw",        # Windows Core Audio API (precise volume/device control)
-    "pycaw.pycaw",  # pycaw main module (AudioUtilities, IAudioEndpointVolume)
-    # ── document handling ──────────────────────────────────────────────────────
-    "docx",         # python-docx for Word documents
-    "xlsxwriter",   # Excel file creation
-    "openpyxl",     # Excel file reading/writing
-    "pdf2image",    # PDF to image conversion
-    "PyPDF2",       # PDF manipulation
-    # ── audio processing ───────────────────────────────────────────────────────
-    "wave",         # WAV file handling
-    "audioop",      # audio operations
-    "pyaudio",      # audio recording/playback
-    "speech_recognition",  # STT alternative
-    # ── data serialization ─────────────────────────────────────────────────────
-    "pickle",       # Python object serialization
-    "yaml",         # YAML parsing (pyyaml)
-    "toml",         # TOML parsing
-    "xml",          # XML processing
-    "html",         # HTML utilities
-    # ── compression & archives ─────────────────────────────────────────────────
-    "zipfile",      # ZIP file operations
-    "tarfile",      # TAR file operations
-    "gzip",         # GZIP compression
-    "bz2",          # BZ2 compression
-    # ── networking & protocols ─────────────────────────────────────────────────
-    "ftplib",       # FTP client
-    "poplib",       # POP3 email
-    "imaplib",      # IMAP email
-    "smtplib",      # SMTP email (already listed but good to have here too)
-    "email",        # email utilities (already listed)
-    "socketserver", # network servers
-    "asyncio",      # async I/O
-    "aiohttp",      # async HTTP
-    # ── system introspection & debugging ───────────────────────────────────────
-    "inspect",      # live object inspection
-    "dis",          # disassembler for bytecode
-    "ast",          # Python AST manipulation
-    "profile",      # profiling tools
-    "cProfile",     # deterministic profiler
-    # ── concurrency enhancements ───────────────────────────────────────────────
-    "multiprocessing",  # process-based parallelism
-    "concurrent",       # concurrent.futures
-    "contextlib",       # context manager utilities
-    # ── stdlib skills — pre-written, audited modules the LLM can import ───────
-    # e.g. from skills.stdlib.web import search_web, fetch_url
-    "skills",       # umbrella: skills.stdlib.* submodules
-    "icalendar",    # used internally by skills.stdlib.time_cal
-    "win32com",     # used internally by skills.stdlib.time_cal (Outlook backend)
-    "zoneinfo",     # used internally by skills.stdlib.time_cal
-    "tzlocal",      # used internally by skills.stdlib.time_cal
-    # ── additional useful libraries for AI agent tasks ───────────────────────────
-    "pygetwindow",  # window management (get, move, resize windows)
-    "reportlab",    # PDF document creation
-    "exchangelib",  # Microsoft Exchange/Outlook integration
-    "playwright",   # modern browser automation (alternative to Selenium)
-    "spacy",        # NLP and text processing
-    "nltk",         # natural language toolkit
-    "tqdm",         # progress bars for long operations
-    "rich",         # rich terminal output and formatting
-    "colorama",     # cross-platform colored terminal text
-    "dotenv",       # environment variable management
-    "python_pptx",  # PowerPoint presentation creation
-    "fitz",         # PyMuPDF for advanced PDF handling
-    "scipy",        # scientific computing
-    "matplotlib",   # plotting and visualization
-    "skimage",      # scikit-image for advanced image processing
-    "sounddevice",  # audio playback/recording
-    "soundfile",    # audio file I/O
-    "pandas",       # data manipulation and analysis
-    "sqlalchemy",   # database ORM and queries
-    "chardet",      # character encoding detection
-    "dateutil",     # date parsing and manipulation
-    "shlex",        # shell-like syntax parsing
-    "warnings",     # warning control
-    "unittest",     # testing framework
-    "typing",       # type hints
-    "dataclasses",  # data class decorators
-    "enum",         # enumeration support
-    "abc",          # abstract base classes
-    "weakref",      # weak references
-    "types",        # dynamic type creation
-    "pprint",       # pretty-printing
-    "random",       # random number generation
-    "statistics",   # statistical functions
-    "decimal",      # decimal arithmetic
-    "fractions",    # fraction arithmetic
-    "array",        # array module
-    "bisect",       # bisection algorithms
-    "heapq",        # heap queue algorithms
-    "configparser", # configuration file parser
-    "mimetypes",    # MIME type guessing
-    "binascii",     # binary ASCII conversions
-    "hmac",         # HMAC hashing
-    "secrets",      # secure random numbers
-    "unicodedata",  # Unicode database
-    "codecs",       # codec registry and base classes
-    "fnmatch",      # Unix filename pattern matching
-    "linecache",    # random access line caching
-    "locale",       # internationalization services
-    "gettext",      # internationalization via gettext
-    # ── modules the LLM commonly generates but were missing ────────────────────
-    "numbers",      # numeric abstract base classes
-    "win32event",   # Windows event objects
-    "win32service", # Windows service control
-    "win32file",    # Windows file operations
-    "win32pipe",    # Windows named pipes
-    "win32security",# Windows security descriptors / ACLs
-    "win32net",     # Windows network management
-    "win32print",   # Windows printer management
+    # ── core stdlib ─────────────────────────────────────────────────────
+    "os", "sys", "subprocess", "json", "re", "time", "datetime", "pathlib",
+    "math", "random", "collections", "itertools", "functools", "copy", "io",
+    "textwrap", "hashlib", "base64", "uuid", "logging", "sqlite3", "threading",
+    "socket", "urllib", "http", "struct", "platform", "signal", "queue",
+    "traceback", "shutil", "glob", "tempfile", "csv", "string", "difflib",
+    "pickle", "xml", "html", "zipfile", "contextlib", "asyncio", "shlex",
+    "tkinter",
+    # ── Windows API ──────────────────────────────────────────────────────
+    "win32gui", "win32con", "win32api", "win32process", "winreg", "ctypes",
+    # ── automation ───────────────────────────────────────────────────────
+    "pyautogui", "pygetwindow", "pyperclip",
+    # ── system ───────────────────────────────────────────────────────────
+    "psutil", "platform",
+    # ── image ────────────────────────────────────────────────────────────
+    "PIL", "cv2", "numpy", "mss",
+    # ── network ──────────────────────────────────────────────────────────
+    "requests", "smtplib", "email",
+    # ── document ─────────────────────────────────────────────────────────
+    "docx", "openpyxl", "PyPDF2",
+    # ── audio ────────────────────────────────────────────────────────────
+    "wave", "pyaudio",
+    # ── web automation ───────────────────────────────────────────────────
+    "selenium", "bs4", "lxml", "playwright",
+    # ── other ────────────────────────────────────────────────────────────
+    "skills", "inspect", "ast", "webbrowser",
 }
 
 BLOCKED_PATHS = [
@@ -351,7 +200,7 @@ EDGE_TTS_RATE = get_env_str("EDGE_TTS_RATE", "+0%")
 EDGE_TTS_VOLUME = get_env_str("EDGE_TTS_VOLUME", "+0%")
 EDGE_TTS_PITCH = get_env_str("EDGE_TTS_PITCH", "+0Hz")
 # Max seconds to wait for the TTS network call
-EDGE_TTS_TIMEOUT = get_env_int("EDGE_TTS_TIMEOUT", 15)
+EDGE_TTS_TIMEOUT = get_env_int("EDGE_TTS_TIMEOUT", 30)
 
 # ── Piper TTS (local fallback) ────────────────────────────
 PIPER_BINARY = get_env_str("PIPER_EXE", "piper.exe")
@@ -366,6 +215,11 @@ KOKORO_SPEED = get_env_float("KOKORO_SPEED", 1.15)
 STT_ENGINE = get_env_str("STT_ENGINE", "google")
 STT_LANGUAGE = get_env_str("STT_LANGUAGE", "en-US")
 STT_SAMPLE_RATE = get_env_int("SAMPLE_RATE", 16000)
+STT_DENOISE = get_env_bool("STT_DENOISE", False)
+STT_USE_VAD = get_env_bool("STT_USE_VAD", False)
+STT_VAD_AGGRESSIVENESS = get_env_int("STT_VAD_AGGRESSIVENESS", 1)
+STT_VAD_LOOKBACK = get_env_float("STT_VAD_LOOKBACK", 0.5)
+STT_VAD_SILENCE_TIMEOUT = get_env_float("STT_VAD_SILENCE_TIMEOUT", 0.6)
 MIC_DEVICE = get_env_int("MIC_DEVICE", -1)
 AUDIO_DEVICE = get_env_int("AUDIO_DEVICE", -1)
 SILENCE_THRESHOLD = get_env_int("SILENCE_THRESHOLD", 400)

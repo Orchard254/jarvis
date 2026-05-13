@@ -29,12 +29,71 @@ class OllamaError(Exception):
 
 
 # Simple tracker for mock LLM
+_mock_lock = __import__('threading').Lock()
 _mock_tools_called = False
 # Track last user message to reset state for new commands
 _last_user_cmd = ""
 
 # For testing: always use mock LLM
 FORCE_MOCK_LLM = False
+
+
+def _try_local_fallback(messages, tools, temperature) -> dict | None:
+    """Try local Ollama instance when cloud is unavailable. Returns result or None."""
+    if not FALLBACK_TO_LOCAL:
+        return None
+    logger.info("Falling back to local Ollama instance...")
+    try:
+        local_payload = {
+            "model": OLLAMA_LOCAL_MODEL,
+            "messages": messages,
+            "stream": False,
+            "temperature": temperature,
+        }
+        if tools:
+            local_payload["tools"] = tools
+        local_base_url = OLLAMA_LOCAL_URL.rstrip("/")
+        if "/api/chat" in local_base_url or "/v1" in local_base_url:
+            local_endpoint = local_base_url
+        else:
+            local_endpoint = f"{local_base_url}/chat/completions"
+        resp = requests.post(
+            local_endpoint,
+            json=local_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=LLM_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "choices" in data:
+            choice = data["choices"][0]
+            msg = choice.get("message", {})
+            tool_calls_raw = msg.get("tool_calls") or []
+        else:
+            msg = data.get("message", {})
+            tool_calls_raw = msg.get("tool_calls") or []
+        tool_calls = []
+        for tc in tool_calls_raw:
+            fn = tc.get("function", {})
+            args = fn.get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            tool_calls.append({
+                "id": tc.get("id", f"call_{len(tool_calls)}"),
+                "function": {"name": fn.get("name", ""), "arguments": args},
+            })
+        return {
+            "content": (msg.get("content") or "").strip(),
+            "tool_calls": tool_calls if tool_calls else None,
+            "model": data.get("model", OLLAMA_LOCAL_MODEL),
+            "done": True,
+        }
+    except Exception as local_e:
+        logger.warning(f"Local fallback also failed: {local_e}")
+        return None
 
 
 def chat(
@@ -62,10 +121,14 @@ def chat(
 
     if FORCE_MOCK_LLM:
         logger.info("Using mock LLM for testing")
-        return _mock_chat(messages, tools)
+        with _mock_lock:
+            return _mock_chat(messages, tools)
 
     headers = {"Content-Type": "application/json"}
     if OLLAMA_API_KEY:
+        # Ollama cloud API expects the key directly; Bearer format works for
+        # OpenAI-compatible endpoints. Both are sent — the cloud API ignores
+        # the Bearer prefix and reads the raw key from the Authorization header.
         headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
 
     # Resolve thinking parameters — caller overrides settings defaults
@@ -99,7 +162,7 @@ def chat(
     else:
         endpoint = f"{base_url}/chat/completions"
 
-    # Exponential backoff retry logic
+    # Exponential backoff retry logic with per-status multipliers
     retry_count = 0
     while retry_count <= max_retries:
         try:
@@ -114,13 +177,10 @@ def chat(
                 choice = data["choices"][0]
                 msg = choice.get("message", {})
                 tool_calls_raw = msg.get("tool_calls") or []
-                # Extract thinking content if present (OpenAI reasoning format)
                 thinking = msg.get("reasoning_content") or msg.get("thinking") or ""
             else:
-                # Fallback to original Ollama format
                 msg = data.get("message", {})
                 tool_calls_raw = msg.get("tool_calls") or []
-                # Ollama native thinking field
                 thinking = msg.get("thinking") or ""
 
             if thinking:
@@ -151,83 +211,38 @@ def chat(
 
         except Exception as e:
             retry_count += 1
+
+            # Determine backoff multiplier from status code
+            backoff_mult = 1.0
+            status_code = 0
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 429:
+                    backoff_mult = 4.0
+                elif status_code >= 500:
+                    backoff_mult = 2.0
+
             if retry_count > max_retries:
                 logger.error(f"Cloud LLM unavailable after {max_retries} retries: {e}")
-                if FALLBACK_TO_LOCAL:
-                    logger.info("Falling back to local Ollama instance...")
-                    try:
-                        local_payload = {
-                            "model": OLLAMA_LOCAL_MODEL,
-                            "messages": messages,
-                            "stream": False,
-                            "temperature": temperature,
-                        }
-                        if tools:
-                            local_payload["tools"] = tools
-                        local_base_url = OLLAMA_LOCAL_URL.rstrip("/")
-                        if "/api/chat" in local_base_url or "/v1" in local_base_url:
-                            local_endpoint = local_base_url
-                        else:
-                            local_endpoint = f"{local_base_url}/chat/completions"
-                        resp = requests.post(
-                            local_endpoint,
-                            json=local_payload,
-                            headers={"Content-Type": "application/json"},
-                            timeout=LLM_TIMEOUT,
-                        )
-                        resp.raise_for_status()
-                        data = resp.json()
-                        if "choices" in data:
-                            choice = data["choices"][0]
-                            msg = choice.get("message", {})
-                            tool_calls_raw = msg.get("tool_calls") or []
-                        else:
-                            msg = data.get("message", {})
-                            tool_calls_raw = msg.get("tool_calls") or []
-                        tool_calls = []
-                        for tc in tool_calls_raw:
-                            fn = tc.get("function", {})
-                            args = fn.get("arguments", {})
-                            if isinstance(args, str):
-                                try:
-                                    args = json.loads(args)
-                                except json.JSONDecodeError:
-                                    args = {}
-                            tool_calls.append(
-                                {
-                                    "id": tc.get("id", f"call_{len(tool_calls)}"),
-                                    "function": {
-                                        "name": fn.get("name", ""),
-                                        "arguments": args,
-                                    },
-                                }
-                            )
-                        return {
-                            "content": (msg.get("content") or "").strip(),
-                            "tool_calls": tool_calls if tool_calls else None,
-                            "model": data.get("model", OLLAMA_LOCAL_MODEL),
-                            "done": True,
-                        }
-                    except Exception as local_e:
-                        logger.warning(f"Local fallback also failed: {local_e}")
+                result = _try_local_fallback(messages, tools, temperature)
+                if result:
+                    return result
                 logger.warning("Falling back to mock LLM")
                 return _mock_chat(messages, tools)
-            wait_time = 2 ** (retry_count - 1)
-            # BUG FIX: add ±25% jitter to prevent thundering-herd retries
-            # when multiple agent threads hit a transient 500 simultaneously.
+
+            wait_time = (2 ** (retry_count - 1)) * backoff_mult
             jitter = random.uniform(-0.25 * wait_time, 0.25 * wait_time)
             wait_total = max(0.1, wait_time + jitter)
-            # Log payload size on server errors to aid future diagnosis
-            if "500" in str(e) or "Server Error" in str(e):
-                payload_kb = len(json.dumps(payload)) / 1024
+            payload_kb = len(json.dumps(payload)) / 1024
+            if status_code:
                 logger.warning(
                     f"Request failed (attempt {retry_count}/{max_retries}), "
-                    f"retrying in {wait_total:.1f}s (payload={payload_kb:.1f}KB): {e}"
+                    f"retrying in {wait_total:.1f}s (payload={payload_kb:.1f}KB, http={status_code}): {e}"
                 )
             else:
                 logger.warning(
                     f"Request failed (attempt {retry_count}/{max_retries}), "
-                    f"retrying in {wait_total:.1f}s: {e}"
+                    f"retrying in {wait_total:.1f}s (payload={payload_kb:.1f}KB): {e}"
                 )
             deadline = time.monotonic() + wait_total
             while time.monotonic() < deadline:
@@ -236,6 +251,7 @@ def chat(
 
 def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
     global _mock_tools_called, _last_user_cmd
+    # Caller must hold _mock_lock
     logger.info(
         f"_mock_chat called, _mock_tools_called={_mock_tools_called}, _last_user_cmd={_last_user_cmd}"
     )
@@ -351,7 +367,8 @@ def chat_stream(
     Returns: {"content": str, "tool_calls": list | None, "done": True}
     """
     if FORCE_MOCK_LLM:
-        return _mock_chat(messages, tools)
+        with _mock_lock:
+            return _mock_chat(messages, tools)
 
     from settings import THINKING_ENABLED, THINKING_BUDGET, REASONING_EFFORT
 

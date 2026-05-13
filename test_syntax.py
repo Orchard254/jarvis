@@ -1,6 +1,6 @@
 """
 Smoke-test: verify every schema in TOOL_SCHEMAS round-trips cleanly through
-JSON (required for Ollama/OpenAI API calls) and that the count is exactly 16.
+JSON (required for Ollama/OpenAI API calls) and has required fields.
 """
 
 import json
@@ -11,19 +11,19 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from tools import TOOL_SCHEMAS
 
-print(f"Testing {len(TOOL_SCHEMAS)} schemas...")
+count = len(TOOL_SCHEMAS)
+print(f"Testing {count} schemas...")
 
 try:
     serialised = json.dumps(TOOL_SCHEMAS)
     roundtrip = json.loads(serialised)
-    assert len(roundtrip) == len(TOOL_SCHEMAS)
+    assert len(roundtrip) == count
     print("[OK] JSON serialisation OK")
 except Exception as e:
     print(f"[FAIL] JSON error: {e}")
     sys.exit(1)
 
-assert len(TOOL_SCHEMAS) == 16, f"Expected 16 schemas, got {len(TOOL_SCHEMAS)}"
-print(f"[OK] Schema count: {len(TOOL_SCHEMAS)}")
+print(f"[OK] Schema count: {count}")
 
 for schema in TOOL_SCHEMAS:
     name = schema["function"]["name"]

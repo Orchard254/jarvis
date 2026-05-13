@@ -103,9 +103,9 @@ def _parse_when(expr: str) -> float | None:
 def _is_recurring(expr: str) -> bool:
     expr = expr.lower().strip()
     return bool(
-        re.match(r"every \d+ (minutes?|hours?)", expr)
-        or re.match(r"every day at", expr)
-        or re.match(r"on \w+ at", expr)
+        re.match(r"^every \d+ (minutes?|hours?)", expr)
+        or re.match(r"^every day at", expr)
+        or re.match(r"^on \w+ at", expr)
     )
 
 
@@ -148,6 +148,17 @@ def schedule(
 
             new_id = task_id or str(uuid.uuid4())
             recurring = _is_recurring(when)
+
+            # Check for existing task_id collision
+            conn = get_connection(MEMORY_DB, timeout=5.0)
+            existing = conn.execute(
+                "SELECT task_id FROM autonomous_tasks WHERE task_id = ?", (new_id,)
+            ).fetchone()
+            if existing:
+                return {
+                    "success": False,
+                    "error": f"task_id '{new_id}' already exists",
+                }
 
             # Write to autonomous task queue (picked up by Scheduler on next tick)
             conn = get_connection(MEMORY_DB, timeout=5.0)

@@ -44,7 +44,7 @@ def test_tts_mute_flag_integration(monkeypatch):
     try:
         import output.tts as tts
         result = tts.speak("test", blocking=True)
-        assert result is True
+        assert result == True
         assert not settings.IS_SPEAKING.is_set()
     finally:
         settings.TTS_ENABLED = True
@@ -60,7 +60,7 @@ def test_input_handler_routes_correctly(monkeypatch):
     mock_orch = MockOrch()
     
     # Mock TTS to avoid audio
-    monkeypatch.setattr("output.tts.speak", lambda t: True)
+    monkeypatch.setattr("output.tts.speak", lambda t, blocking=True: True)
     
     handler = input_handler.InputHandler(mock_orch)
     # Direct route test

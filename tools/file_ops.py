@@ -179,6 +179,8 @@ def file_ops(
             dst = _safe_path(destination)
             if _is_blocked(src):
                 return {"success": False, "error": "Path is protected"}
+            if _is_blocked(dst):
+                return {"success": False, "error": "Destination is protected"}
             if not src.exists():
                 return {"success": False, "error": f"Path does not exist: {path}"}
 
@@ -194,7 +196,12 @@ def file_ops(
         elif action == "mkdir":
             if path is None:
                 return {"success": False, "error": "action 'mkdir' requires 'path'"}
-            p = Path(path).expanduser()
+            try:
+                p = _safe_path(path)
+            except Exception as e:
+                return {"success": False, "error": f"Invalid path: {path} - {e}"}
+            if _is_blocked(p):
+                return {"success": False, "error": f"Path is protected: {path}"}
             p.mkdir(parents=True, exist_ok=True)
             return {"success": True, "path": str(p.resolve()), "action": "mkdir"}
 
@@ -239,7 +246,7 @@ def file_ops(
                 if len(matches) >= limit:
                     break
                 try:
-                    with filepath.open("r", encoding="utf-8", errors="strict") as fh:
+                    with filepath.open("r", encoding="utf-8", errors="replace") as fh:
                         for lineno, line in enumerate(fh, 1):
                             m = compiled.search(line)
                             if m:
@@ -323,11 +330,7 @@ def file_ops(
             if path is None:
                 return {"success": False, "error": "action 'read' requires 'path'"}
 
-            _BLOCKED_READ = (
-                ".ssh", ".aws", ".gnupg", ".gpg", "id_rsa", "id_ed25519",
-                "id_ecdsa", "id_dsa", "authorized_keys", "known_hosts",
-                ".netrc", ".pgpass", "credentials", ".kube/config", "kubeconfig",
-            )
+            from safety.path_guard import SENSITIVE_PATH_FRAGMENTS as _BLOCKED_READ, contains_sensitive_path
             MAX_READ = 10 * 1024 * 1024  # 10 MB
 
             try:
@@ -386,11 +389,7 @@ def file_ops(
             if content is None:
                 return {"success": False, "error": "action 'write' requires 'content'"}
 
-            _BLOCKED_WRITE = (
-                ".ssh", ".aws", ".gnupg", ".gpg", "id_rsa", "id_ed25519",
-                "id_ecdsa", "id_dsa", "authorized_keys", "known_hosts",
-                ".netrc", ".pgpass", "credentials", ".kube/config", "kubeconfig",
-            )
+            from safety.path_guard import SENSITIVE_PATH_FRAGMENTS as _BLOCKED_WRITE
             MAX_WRITE = 10 * 1024 * 1024  # 10 MB
 
             try:
@@ -401,6 +400,14 @@ def file_ops(
             norm = p.as_posix().lower()
             if any(frag in norm for frag in _BLOCKED_WRITE):
                 return {"success": False, "error": f"Access denied: blocked path '{path}'"}
+
+            # Block .env files outside the Jarvis project directory
+            if p.name.lower() == ".env":
+                _jarvis_root = Path(__file__).resolve().parents[1]
+                try:
+                    p.relative_to(_jarvis_root)
+                except ValueError:
+                    return {"success": False, "error": ".env files outside the Jarvis project directory are not allowed"}
 
             content_bytes = len(content.encode("utf-8"))
             if content_bytes > MAX_WRITE:

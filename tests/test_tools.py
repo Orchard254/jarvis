@@ -8,12 +8,37 @@ from tools import TOOL_REGISTRY
 from safety import executor
 from verification import verifier
 
+TOOLS_EXEMPT_FROM_GUIDANCE: set[str] = set()
+
 def test_all_tools_registered():
-    assert len(TOOL_REGISTRY) >= 14
-    assert "execute_code" in TOOL_REGISTRY
-    assert "capture_screen" in TOOL_REGISTRY
-    assert "read_pc_state" in TOOL_REGISTRY
+    assert len(TOOL_REGISTRY) >= 8
+    assert "window" in TOOL_REGISTRY
+    assert "screen" in TOOL_REGISTRY
+    assert "system" in TOOL_REGISTRY
     assert "browser" in TOOL_REGISTRY
+    assert "input" in TOOL_REGISTRY
+    assert "memory" in TOOL_REGISTRY
+    assert "exec" in TOOL_REGISTRY
+    assert "speak" in TOOL_REGISTRY
+
+def test_all_schemas_have_negative_guidance():
+    """Every tool description must tell the LLM when NOT to use it."""
+    import json, re
+    from tools import TOOL_SCHEMAS
+
+    for schema in TOOL_SCHEMAS:
+        fn = schema.get("function", {})
+        name = fn.get("name", "?")
+        desc = fn.get("description", "")
+
+        if name in TOOLS_EXEMPT_FROM_GUIDANCE:
+            continue
+
+        has_do_not = bool(re.search(r"Do NOT\b", desc, re.IGNORECASE))
+        assert has_do_not, (
+            f"Tool '{name}' is missing 'Do NOT' negative guidance "
+            f"in its description. Add at least one 'Do NOT use for X — use Y instead' sentence."
+        )
 
 def test_execute_code_safe():
     from tools.execute_code import execute_code
@@ -43,3 +68,27 @@ def test_verification_router():
     res = execute_code("import time; time.sleep(0.1)")
     report = verifier.verify_action("execute_code", res, expected="success")
     assert report["status"] in ("CONFIRMED", "INCONCLUSIVE")
+
+def test_planner_prompt_synced_with_schemas():
+    """Every schema tool must appear in the planner prompt and vice versa."""
+    import re
+    from pathlib import Path
+
+    planner = (Path(__file__).parent.parent / "brain" / "planner.py").read_text(encoding="utf-8")
+    start = planner.find("_PLANNER_PROMPT")
+    end = planner.find("def _build_system_context")
+    prompt = planner[start:end]
+
+    tools_in_prompt = set(re.findall(r"^\d+\.\s+(\w+)\(", prompt, re.MULTILINE))
+
+    from tools import TOOL_SCHEMAS
+    schema_tools = {s["function"]["name"] for s in TOOL_SCHEMAS}
+
+    # Custom runtime tools are expected to be missing from the static planner prompt
+    custom_tools = {"manage_bluetooth"}
+    expected_missing = schema_tools - tools_in_prompt - custom_tools
+
+    assert not expected_missing, (
+        f"Tools in schemas but missing from planner prompt: {expected_missing}. "
+        "Add them to the tool list in brain/planner.py _PLANNER_PROMPT."
+    )

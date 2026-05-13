@@ -99,11 +99,10 @@ def _summarize_early_turns(early_turns: list[dict]) -> str:
                 content_str = str(content_str)
             try:
                 content_data = json.loads(content_str)
-                # Try to extract tool name from nested result
                 tool_name = (
-                    content_data.get("tool")  # direct (old format)
-                    or content_data.get("result", {}).get("tool_name")  # nested result
-                    or "tool"  # generic fallback
+                    content_data.get("tool_name")
+                    or content_data.get("tool")
+                    or "tool"
                 )
                 tools_used.append(tool_name)
             except (json.JSONDecodeError, AttributeError):

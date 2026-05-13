@@ -25,7 +25,7 @@ if DESKTOP_TOAST_ENABLED:
         pass
 
 
-def notify_user(message: str, urgency: str = "normal") -> dict:
+def notify_user(message: str, urgency: str = "normal", title: str | None = None, duration: int | None = None) -> dict:
     logger.info(f"notify_user [{urgency}]: {message}")
     print(f"\n[JARVIS NOTIFICATION - {urgency.upper()}]: {message}\n")
     if _toast_available and _toaster:
@@ -33,9 +33,9 @@ def notify_user(message: str, urgency: str = "normal") -> dict:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 _toaster.show_toast(
-                    "JARVIS",
+                    title or "JARVIS",
                     message,
-                    duration={"low": 3, "normal": 5, "high": 10}.get(urgency, 5),
+                    duration=duration or {"low": 3, "normal": 5, "high": 10}.get(urgency, 5),
                     threaded=True,
                 )
         except Exception as e:

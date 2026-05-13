@@ -14,19 +14,22 @@ from core.thread_db import get_connection
 logger = logging.getLogger(__name__)
 
 
-def query_pc_index(query: str, type: str = None):
+def query_pc_index(query: str, type: str = None) -> dict:  # noqa: A002
     if not PC_INDEX_DB.exists():
-        return [{"error": "PC index not initialized."}]
+        return {"success": False, "error": "PC index not initialized.", "results": []}
 
     results = []
-    q = f"%{query.lower()}%"
+    # Strip common extensions so "OpenCode.exe" matches "OpenCode"
+    clean = query.lower().replace(".exe", "").replace(".lnk", "").replace(".msi", "")
+    q = f"%{clean}%"
 
     try:
         conn = get_connection(PC_INDEX_DB, timeout=2.0)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
     except Exception as e:
-        return [{"error": f"DB read error: {e}"}]
+        return {"success": False, "error": f"DB read error: {e}", "results": []}
+    
 
     try:
         if type in (None, "app"):
@@ -110,4 +113,4 @@ def query_pc_index(query: str, type: str = None):
         logger.error(f"query_pc_index error: {e}")
 
     logger.info(f"query_pc_index('{query}', type={type}) -> {len(results)} results")
-    return results
+    return {"success": True, "results": results, "count": len(results), "query": query}

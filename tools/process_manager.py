@@ -6,6 +6,15 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Use PlatformAbstraction for cross-platform process operations.
+# Falls back to direct psutil if the abstraction isn't available.
+try:
+    from core.platform_abstraction import PlatformAbstraction
+    _platform = PlatformAbstraction()
+    _HAS_PLATFORM = True
+except Exception:
+    _HAS_PLATFORM = False
+
 
 def process_manager(
     action: str,
@@ -28,6 +37,15 @@ def process_manager(
     try:
         # ── list ─────────────────────────────────────────────────────────────
         if action == "list":
+            # Prefer platform abstraction for cross-platform support
+            if _HAS_PLATFORM:
+                try:
+                    raw = _platform.list_processes()
+                    return {"success": True, "processes": raw[:50], "count": min(len(raw), 50), "action": "list"}
+                except Exception:
+                    pass
+
+            # Fallback to direct psutil
             processes = []
             for proc in psutil.process_iter(
                 ["name", "pid", "status", "memory_info", "cpu_percent"]
@@ -69,6 +87,13 @@ def process_manager(
                 }
             killed = []
             if pid is not None:
+                if _HAS_PLATFORM:
+                    try:
+                        if _platform.kill_process(pid):
+                            killed.append(pid)
+                            return {"success": True, "killed": killed, "action": "kill"}
+                    except Exception:
+                        pass
                 try:
                     psutil.Process(pid).kill()
                     killed.append(pid)
@@ -79,7 +104,15 @@ def process_manager(
                         "success": False,
                         "error": f"Access denied killing pid={pid}",
                     }
-            else:
+            if name:
+                if pid is not None:
+                    logger.info("Both pid and name provided to kill — verifying name matches pid before falling back to name")
+                    try:
+                        proc = psutil.Process(pid)
+                        if name.lower() not in (proc.name() or "").lower():
+                            logger.warning(f"pid={pid} name '{proc.name()}' does not match '{name}' — killing by name too")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
                 killed = _kill_by_name(name, psutil)
             return {"success": True, "killed": killed, "action": "kill"}
 
@@ -132,12 +165,14 @@ def process_manager(
                         "pid": pids[0],
                         "action": "wait_for",
                     }
-                # Non-blocking wait on Windows with message pumping
                 if sys.platform == "win32":
                     import pythoncom
                     grace_end = time.monotonic() + 0.5
+                    pumped = 0
                     while time.monotonic() < grace_end:
-                        pythoncom.PumpWaitingMessages()
+                        if pumped % 10 == 0:
+                            pythoncom.PumpWaitingMessages()
+                        pumped += 1
                         time.sleep(0.05)
                 else:
                     time.sleep(0.5)
