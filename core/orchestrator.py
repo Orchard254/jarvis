@@ -126,6 +126,21 @@ class Orchestrator:
             except Exception as _sr_exc:
                 logger.warning(f"Self-reflection unavailable: {_sr_exc}")
 
+        # ── Prompt optimizer (A/B testing for prompts) ────────────────────
+        self._prompt_optimizer = None
+        if getattr(settings, "ENABLE_PROMPT_OPTIMIZATION", False):
+            try:
+                from core.prompt_optimizer import PromptOptimizer
+                self._prompt_optimizer = PromptOptimizer()
+                # Register the planner prompt as baseline
+                from brain.planner import _PLANNER_PROMPT
+                self._prompt_optimizer.register_prompt(
+                    "planner", _PLANNER_PROMPT, is_baseline=True
+                )
+                logger.info("Prompt optimizer enabled (A/B testing)")
+            except Exception as _po_exc:
+                logger.warning(f"Prompt optimizer unavailable: {_po_exc}")
+
         # ── Checkpoint manager (resumable autonomous tasks) ──────────────
         self._checkpoint_mgr = None
         try:
