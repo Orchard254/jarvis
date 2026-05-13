@@ -40,12 +40,15 @@ TOOL_SCHEMAS = [
             "name": "screen",
             "description": (
                 "Perceive the screen. Actions: "
-                "'capture' (screenshot, returns base64 image), "
-                "'find' (locate UI element by visible text using Windows UIA — most reliable, no OCR), "
+                "'capture' (screenshot; set grid=true for coordinate grid overlay), "
+                "'find' (locate UI element by visible text using Windows UIA — most reliable, no OCR; "
+                "falls back to vision+grid for apps UIA can't see like Chrome web content), "
                 "'tree' (get UIA accessibility tree of all interactive elements with names and bounds), "
+                "'elements' (list ALL interactive elements with coordinates — merges UIA + vision; "
+                "best for exploring an unfamiliar app or when you don't know the element's name), "
                 "'query' (ask vision model about screen content), "
                 "'ocr' (read visible text from a region). "
-                "Prefer 'find' over 'query' for locating buttons/text fields — UIA is deterministic. "
+                "Prefer 'find' for clicking known elements. Use 'elements' to discover what's clickable. "
                 "Do NOT use for sending keyboard/mouse input — use input() instead. "
                 "Do NOT use for launching apps — use window(open) instead."
             ),
@@ -54,7 +57,7 @@ TOOL_SCHEMAS = [
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["capture", "find", "tree", "query", "ocr"],
+                        "enum": ["capture", "find", "tree", "elements", "query", "ocr"],
                         "description": "What to do",
                     },
                     "text": {
@@ -83,7 +86,15 @@ TOOL_SCHEMAS = [
                     },
                     "max_depth": {
                         "type": "integer",
-                        "description": "Max depth for 'tree' action (default 3)",
+                        "description": "Max depth for 'tree'/'elements' action (default 3)",
+                    },
+                    "grid": {
+                        "type": "boolean",
+                        "description": "Overlay coordinate grid on screenshot (for 'capture' action, default false)",
+                    },
+                    "grid_size": {
+                        "type": "integer",
+                        "description": "Grid cell size in pixels (default 100, only with grid=true)",
                     },
                 },
                 "required": ["action"],
@@ -201,6 +212,9 @@ TOOL_SCHEMAS = [
             "name": "browser",
             "description": (
                 "Control a web browser for interactive browsing. "
+                "Auto-connects to existing Chrome via CDP (port 9222) if available — "
+                "this controls the user's actual browser, not a separate one. "
+                "Falls back to launching a new Chrome if CDP is unavailable. "
                 "Actions: 'navigate' (go to URL, auto-launches browser), "
                 "'click' (click element by CSS selector), "
                 "'type' (type text into field by selector), "

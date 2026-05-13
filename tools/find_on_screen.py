@@ -89,6 +89,15 @@ def find_on_screen(
             }
 
     # ── 3. Ask vision LLM to locate the element ──────────────────────────────
+    # Take a grid-annotated screenshot for better coordinate precision
+    grid_b64 = None
+    try:
+        grid_shot = capture_screen(region=region_arg, grid=True, grid_size=80)
+        if grid_shot.get("success"):
+            grid_b64 = grid_shot["image_b64"]
+    except Exception:
+        pass
+
     try:
         import requests
         from settings import LLM_TIMEOUT, LLM_VISION_MODEL, OLLAMA_API_KEY
@@ -99,8 +108,19 @@ def find_on_screen(
             'If only one, return a single object (not an array). '
         ) if multiple else ""
 
+        grid_instruction = ""
+        use_image = image_b64
+        if grid_b64:
+            use_image = grid_b64
+            grid_instruction = (
+                "The screenshot has a coordinate grid overlay. "
+                "Each cell is 80x80 pixels, labeled col,row. "
+                "Use the grid to give precise pixel coordinates. "
+            )
+
         prompt = (
             f'Look at this screenshot carefully. Find the UI element described as: "{description}". '
+            f'{grid_instruction}'
             f'{multiple_instruction}'
             "Respond with ONLY a JSON object (no markdown, no explanation): "
             '{"found": true, "x": <center_x_pixels>, "y": <center_y_pixels>, '
@@ -117,7 +137,7 @@ def find_on_screen(
                 {
                     "role": "user",
                     "content": prompt,
-                    "images": [image_b64],
+                    "images": [use_image],
                 }
             ],
             "stream": False,

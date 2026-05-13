@@ -165,6 +165,39 @@ def _ensure_alive():
     _do_launch(30000)
 
 
+def _try_connect_cdp() -> bool:
+    """Try connecting to an existing Chrome instance via CDP.
+
+    Chrome must be started with --remote-debugging-port=9222 for this to work.
+    This is preferred because it controls the user's actual browser session
+    rather than launching a separate isolated instance.
+    """
+    global _playwright, _browser, _page
+    try:
+        import requests as _req
+        # Check if CDP endpoint is reachable
+        resp = _req.get("http://localhost:9222/json/version", timeout=2)
+        if resp.status_code != 200:
+            return False
+
+        if _playwright is None:
+            _playwright = sync_playwright().__enter__()
+
+        _browser = _playwright.chromium.connect_over_cdp("http://localhost:9222")
+        contexts = _browser.contexts
+        if contexts and contexts[0].pages:
+            _page = contexts[0].pages[0]
+        else:
+            ctx = _browser.new_context() if not contexts else contexts[0]
+            _page = ctx.new_page()
+
+        logger.info("browser: connected to existing Chrome via CDP (port 9222)")
+        return True
+    except Exception as e:
+        logger.debug(f"CDP connection failed: {e}")
+        return False
+
+
 def _do_launch(timeout: int = 30000):
     global _playwright, _browser, _page
     if _browser is not None:
@@ -172,6 +205,14 @@ def _do_launch(timeout: int = 30000):
             return  # alive — reuse existing session
         logger.warning("browser: existing session is dead — relaunching")
         _do_close()  # clean up stale globals before fresh launch
+
+    # Try CDP first (connects to user's existing Chrome)
+    if _try_connect_cdp():
+        if _page:
+            _page.set_default_timeout(timeout)
+        return
+
+    # Fallback: launch a new Chrome instance
     _playwright = sync_playwright().__enter__()
     # Use system Chrome instead of bundled Chromium
     # channel="chrome" launches the user's installed Chrome browser
