@@ -319,6 +319,19 @@ def test_direct_dispatch_browser_url():
     pytest.fail("No pattern matched URL navigation")
 
 
+def test_direct_dispatch_open_url_routes_to_browser():
+    """'open https://...' should route to browser, not window."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("open https://google.com")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
+            return
+    pytest.fail("No pattern matched 'open https://google.com'")
+
+
 # ── Tool Result Cache Tests ──────────────────────────────────────────────────
 
 def test_cache_is_cacheable_read_only_tool():

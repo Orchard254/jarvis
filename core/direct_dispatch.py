@@ -26,7 +26,7 @@ def _register(pattern: str, tool: str, description: str):
 
 # ── Window management ────────────────────────────────────────────────────────
 _register(
-    r"^(?:open|launch|start)\s+(.+)$",
+    r"^(?:open|launch|start)\s+(?!https?://)(.+)$",
     "window_open",
     "Open/launch an application",
 )
@@ -111,12 +111,24 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
     elif action_key == "volume_set":
         try:
             level = int(target)
+            level = max(0, min(100, level))
+            ps_script = (
+                f"Add-Type -TypeDefinition '"
+                f"using System.Runtime.InteropServices; "
+                f"public class Vol {{ "
+                f"[DllImport(\"winmm.dll\")] "
+                f"public static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume); "
+                f"}}'; "
+                f"$v = [math]::Round({level} / 100 * 65535); "
+                f"$pair = $v -bor ($v -shl 16); "
+                f"[Vol]::waveOutSetVolume([IntPtr]::Zero, $pair); "
+                f"Write-Output 'Volume set to {level}%'"
+            )
             return {"tool": "exec", "args": {
                 "action": "run",
-                "code": f"import subprocess; subprocess.run("
-                        f"['powershell', '-c', '(New-Object -ComObject WScript.Shell)"
-                        f".SendKeys([char]173)'], capture_output=True); "
-                        f"print('Volume set to {level}%')",
+                "code": f"import subprocess; r = subprocess.run("
+                        f"['powershell', '-c', \"{ps_script}\"], "
+                        f"capture_output=True, text=True); print(r.stdout.strip())",
             }}
         except ValueError:
             return None
