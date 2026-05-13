@@ -117,22 +117,43 @@ signal.signal(signal.SIGTERM, handle_exit)
 def main():
     logger.info("JARVIS Starting...")
 
-    # Strict startup checks
+    # ── First-run setup ──────────────────────────────────────────────────
     env_path = Path(__file__).parent / ".env"
     if not env_path.exists():
-        print("\n❌ ERROR: .env file not found!")
-        print("    Please copy .env.example to .env and configure it.")
-        sys.exit(1)
+        example_path = Path(__file__).parent / ".env.example"
+        if example_path.exists():
+            print("\n📋 First run detected — creating .env from .env.example ...")
+            import shutil
+            shutil.copy(example_path, env_path)
+            print("    Created .env — please edit it with your settings.")
+        else:
+            print("\n❌ ERROR: .env file not found!")
+            print("    Please copy .env.example to .env and configure it.")
+            sys.exit(1)
 
     from settings import OLLAMA_API_KEY
 
     leaked_pattern = "b3ad7ee1e4614eee89cb85dcfe1451d1.4a-cPAqHQnD-OHBwj9qHbg8d"
-    if OLLAMA_API_KEY == leaked_pattern:
-        print("\n⚠️  WARNING: You're using a leaked placeholder OLLAMA_API_KEY!")
-        print(
-            "    Please update your .env file with your actual API key from https://ollama.com/settings/api-keys"
-        )
-        print("    Continuing with placeholder (limited functionality)...\n")
+    if not OLLAMA_API_KEY or OLLAMA_API_KEY == leaked_pattern:
+        print("\n" + "=" * 60)
+        print("  JARVIS — API Key Setup Required")
+        print("=" * 60)
+        if OLLAMA_API_KEY == leaked_pattern:
+            print("  ⚠  You're using a leaked placeholder key.")
+        else:
+            print("  No OLLAMA_API_KEY configured.")
+        print()
+        print("  To get your API key:")
+        print("    1. Go to https://ollama.com/settings/api-keys")
+        print("    2. Create a new API key")
+        print("    3. Add it to your .env file:")
+        print("       OLLAMA_API_KEY=your_key_here")
+        print()
+        print("  For local-only mode (no cloud), set:")
+        print("    OLLAMA_MODE=local")
+        print("    OLLAMA_LOCAL_URL=http://localhost:11434/api/chat")
+        print("=" * 60)
+        print("  Continuing with limited functionality...\n")
 
     # ── Startup health check ───────────────────────────────────────────────
     from core.health_check import run_all as run_health_check
