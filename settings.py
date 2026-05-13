@@ -153,6 +153,13 @@ VERIFICATION_MODE = get_env_str("VERIFICATION_MODE", "state_first")
 VERIFICATION_TIMEOUT = get_env_int("VERIFICATION_TIMEOUT", 3)
 MAX_VERIFICATION_RETRIES = get_env_int("MAX_VERIFICATION_RETRIES", 2)
 
+# ── Browser Automation ──────────────────────────────────
+# Preferred browser for launching. Options: "brave", "opera", "firefox", "chrome", "auto"
+# "auto" tries: Brave → Opera → Firefox → Chrome (first found wins)
+BROWSER_PREFERRED = get_env_str("BROWSER_PREFERRED", "auto")
+# CDP port for connecting to a running browser instance
+BROWSER_CDP_PORT = get_env_int("BROWSER_CDP_PORT", 9222)
+
 # ── PC Indexer ─────────────────────────────────────────
 INDEX_REFRESH_APPS = get_env_int("INDEX_REFRESH_APPS", 14400)
 INDEX_REFRESH_FILES = get_env_int("INDEX_REFRESH_FILES", 7200)

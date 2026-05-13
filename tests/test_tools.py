@@ -459,3 +459,35 @@ def test_browser_cdp_function_exists():
         assert callable(_try_connect_cdp)
     except ImportError:
         pytest.skip("Playwright not installed")
+
+
+def test_browser_multi_browser_functions_exist():
+    """Browser module should have multi-browser launch helpers."""
+    try:
+        from tools.browser import (
+            _find_browser_exe, _launch_firefox,
+            _launch_chromium_browser, _AUTO_ORDER, _BROWSER_PATHS,
+        )
+        assert callable(_find_browser_exe)
+        assert callable(_launch_firefox)
+        assert callable(_launch_chromium_browser)
+        assert "brave" in _AUTO_ORDER
+        assert "opera" in _AUTO_ORDER
+        assert "firefox" in _AUTO_ORDER
+        assert "chrome" in _AUTO_ORDER
+        for name in _AUTO_ORDER:
+            assert name in _BROWSER_PATHS
+    except ImportError:
+        pytest.skip("Playwright not installed")
+
+
+def test_browser_settings_exist():
+    """Settings should have browser preference and CDP port."""
+    try:
+        from settings import BROWSER_PREFERRED, BROWSER_CDP_PORT
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("settings deps (dotenv) not installed")
+    assert isinstance(BROWSER_PREFERRED, str)
+    assert BROWSER_PREFERRED in ("brave", "opera", "firefox", "chrome", "auto")
+    assert isinstance(BROWSER_CDP_PORT, int)
+    assert BROWSER_CDP_PORT > 0

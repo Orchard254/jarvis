@@ -7,7 +7,7 @@
 | `screen` | See the screen: capture (screenshot, grid=true for coordinate overlay), find (UIA element lookup + vision fallback), tree (UI tree), elements (list ALL interactive elements from UIA + vision), query (vision Q&A), ocr (read text) |
 | `input` | Send input: click (mouse), type (keyboard), hotkey (shortcuts like ctrl+c), scroll, drag |
 | `window` | Manage apps/windows: open (launch or focus if running), close, focus, list, minimize, maximize, state (live desktop snapshot) |
-| `browser` | Interactive web via Playwright (auto-connects to existing Chrome via CDP port 9222): navigate, click, type, read_page, screenshot, scroll |
+| `browser` | Interactive web via Playwright — supports Brave, Opera, Firefox, Chrome. Auto-connects via CDP (port 9222), or launches preferred browser (set BROWSER_PREFERRED): navigate, click, type, read_page, screenshot, scroll |
 | `exec` | Code execution + file I/O: run (Python/PowerShell), read file, write file |
 | `memory` | Persistent facts: store, recall, search |
 
@@ -18,13 +18,18 @@
 3. **Unknown/complex apps**: Call `screen(elements)` to list all clickable elements with coordinates. Then `input(click, x=..., y=...)` to interact.
 4. **When nothing else works**: `screen(capture, grid=true)` → `screen(query, question="where is the X button?")` → `input(click, x=..., y=...)`.
 
-## CDP Browser Connection
+## Browser Configuration
 
-To connect `browser()` to your existing Chrome (instead of launching a separate one):
+Set `BROWSER_PREFERRED` env var to your browser of choice: `brave`, `opera`, `firefox`, `chrome`, or `auto` (default — tries Brave → Opera → Firefox → Chrome).
+
+To connect `browser()` to your existing browser (instead of launching a new one), start it with remote debugging:
 ```
+brave.exe --remote-debugging-port=9222
+opera.exe --remote-debugging-port=9222
 chrome.exe --remote-debugging-port=9222
+firefox.exe -start-debugger-server 9222
 ```
-The browser tool auto-detects CDP on port 9222 and connects to your session.
+The browser tool auto-detects CDP on port 9222 (configurable via `BROWSER_CDP_PORT`).
 
 ## Anti-Patterns
 

@@ -48,7 +48,7 @@ Tool names are plain. NEVER prefix with "functions." or "tools.".
    App/window + desktop. Actions: open (launch app — checks if running first, focuses if so), close, focus, list, minimize, maximize, state (live desktop snapshot of windows/processes).
 
 4. browser(action, url, selector, text)
-   Web browser via Playwright. Auto-connects to existing Chrome via CDP if available. Actions: navigate, click, type, read_page, screenshot, scroll.
+   Web browser via Playwright. Supports Brave, Opera, Firefox, Chrome. Auto-connects to running browser via CDP, or launches preferred (set BROWSER_PREFERRED). Actions: navigate, click, type, read_page, screenshot, scroll.
 
 5. exec(action, ...)
    Code + files (escape hatch). Actions: run (Python/PowerShell), read (file), write (file).

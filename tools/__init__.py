@@ -212,9 +212,9 @@ TOOL_SCHEMAS = [
             "name": "browser",
             "description": (
                 "Control a web browser for interactive browsing. "
-                "Auto-connects to existing Chrome via CDP (port 9222) if available — "
-                "this controls the user's actual browser, not a separate one. "
-                "Falls back to launching a new Chrome if CDP is unavailable. "
+                "Supports Brave, Opera, Firefox, and Chrome. "
+                "Auto-connects to a running browser via CDP if available (port 9222), "
+                "then tries to launch the preferred browser (set BROWSER_PREFERRED env var). "
                 "Actions: 'navigate' (go to URL, auto-launches browser), "
                 "'click' (click element by CSS selector), "
                 "'type' (type text into field by selector), "
