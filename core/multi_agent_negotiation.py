@@ -574,7 +574,7 @@ class MultiAgentCoordinator:
                 allocations.append(allocation)
                 self._allocations[subtask['id']] = allocation
         
-        # Step 3: Monitor execution (placeholder)
+        # Step 3: Monitor execution
         results = await self._monitor_execution(allocations)
         
         # Step 4: Aggregate results
@@ -586,8 +586,13 @@ class MultiAgentCoordinator:
     
     def _decompose_task(self, task_id: str, description: str,
                         requirements: Dict) -> List[Dict]:
-        """Decompose a task into subtasks."""
-        # Placeholder: in production, use LLM for intelligent decomposition
+        """Decompose a task into subtasks. Uses LLM when available, else splits by capability."""
+        # Try LLM-based decomposition
+        llm_subtasks = self._llm_decompose(task_id, description, requirements)
+        if llm_subtasks:
+            return llm_subtasks
+
+        # Fallback: split by required capabilities
         required_caps = requirements.get('required_capabilities', ['general'])
         
         subtasks = []
@@ -610,6 +615,47 @@ class MultiAgentCoordinator:
         logger.info(f"Decomposed task {task_id} into {len(subtasks)} subtasks")
         return subtasks
     
+    def _llm_decompose(self, task_id: str, description: str,
+                       requirements: Dict) -> Optional[List[Dict]]:
+        """Use LLM to intelligently decompose a task into subtasks."""
+        try:
+            from brain.ollama_client import chat
+            import json as _json
+        except ImportError:
+            return None
+
+        caps = requirements.get('required_capabilities', [])
+        prompt = (
+            f"Decompose this task into subtasks:\n"
+            f"Task: {description}\n"
+            f"Available capabilities: {', '.join(caps) if caps else 'general'}\n\n"
+            f"Respond with ONLY a JSON array of subtasks:\n"
+            '[{"description": "...", "required_capability": "..."}]'
+        )
+        try:
+            result = chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2, max_retries=1,
+            )
+            text = result.get("content", "")
+            start = text.find("[")
+            end = text.rfind("]") + 1
+            if start < 0 or end <= start:
+                return None
+            parsed = _json.loads(text[start:end])
+            subtasks = []
+            for i, item in enumerate(parsed):
+                subtasks.append({
+                    'id': f"{task_id}_sub_{i}",
+                    'description': item.get('description', ''),
+                    'required_capability': item.get('required_capability', 'general'),
+                    'parent_task': task_id,
+                })
+            return subtasks if subtasks else None
+        except Exception as e:
+            logger.debug(f"LLM task decomposition failed: {e}")
+            return None
+
     def _allocate_subtask(self, subtask: Dict) -> Optional[TaskAllocation]:
         """Allocate a subtask to an agent via auction."""
         required_cap = subtask.get('required_capability', 'general')

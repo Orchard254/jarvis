@@ -265,3 +265,149 @@ def test_planner_prompt_synced_with_schemas():
         f"Tools in schemas but missing from planner prompt: {expected_missing}. "
         "Add them to the tool list in brain/planner.py _PLANNER_PROMPT."
     )
+
+
+# ── Direct Dispatch Tests ────────────────────────────────────────────────────
+
+def test_direct_dispatch_matches_open():
+    """Direct dispatch should match 'open <app>' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("open notepad")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "window"
+            assert call["args"]["action"] == "open"
+            assert call["args"]["app_name"] == "notepad"
+            return
+    pytest.fail("No pattern matched 'open notepad'")
+
+
+def test_direct_dispatch_matches_screenshot():
+    """Direct dispatch should match 'screenshot' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("screenshot")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "screen"
+            assert call["args"]["action"] == "capture"
+            return
+    pytest.fail("No pattern matched 'screenshot'")
+
+
+def test_direct_dispatch_no_match():
+    """Complex commands should not match any direct dispatch pattern."""
+    from core.direct_dispatch import _PATTERNS
+    for pattern, _, _ in _PATTERNS:
+        assert pattern.match("write a python script that sorts numbers") is None
+
+
+def test_direct_dispatch_browser_url():
+    """Direct dispatch should match URL navigation."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("go to https://google.com")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "browser"
+            assert call["args"]["url"] == "https://google.com"
+            return
+    pytest.fail("No pattern matched URL navigation")
+
+
+# ── Tool Result Cache Tests ──────────────────────────────────────────────────
+
+def test_cache_is_cacheable_read_only_tool():
+    """Read-only tools should always be cacheable."""
+    from brain.tool_result_cache import ToolResultCache
+    cache = ToolResultCache()
+    assert cache._is_cacheable("screen", {"action": "capture"})
+
+
+def test_cache_is_cacheable_read_only_action():
+    """window(state) should be cacheable even though window is a write tool."""
+    from brain.tool_result_cache import ToolResultCache
+    cache = ToolResultCache()
+    assert cache._is_cacheable("window", {"action": "state"})
+    assert cache._is_cacheable("window", {"action": "list"})
+
+
+def test_cache_not_cacheable_write_action():
+    """window(open) should NOT be cacheable."""
+    from brain.tool_result_cache import ToolResultCache
+    cache = ToolResultCache()
+    assert not cache._is_cacheable("window", {"action": "open"})
+    assert not cache._is_cacheable("input", {"action": "click"})
+
+
+# ── Parallel Batch Tests ─────────────────────────────────────────────────────
+
+def test_build_step_batches_independent():
+    """Steps without deps should batch together."""
+    try:
+        from brain.tool_loop import _build_step_batches
+    except ImportError:
+        pytest.skip("tool_loop deps unavailable")
+    steps = [
+        {"tool": "screen", "args": {"action": "capture"}},
+        {"tool": "window", "args": {"action": "list"}},
+    ]
+    batches = _build_step_batches(steps)
+    assert len(batches) == 1
+    assert len(batches[0]) == 2
+
+
+def test_build_step_batches_dependent():
+    """Steps with deps_on should be in separate batches."""
+    try:
+        from brain.tool_loop import _build_step_batches
+    except ImportError:
+        pytest.skip("tool_loop deps unavailable")
+    steps = [
+        {"tool": "screen", "args": {"action": "capture"}},
+        {"tool": "input", "args": {"action": "click"}, "deps_on": ["step_0"]},
+        {"tool": "screen", "args": {"action": "capture"}},
+    ]
+    batches = _build_step_batches(steps)
+    assert len(batches) == 3  # [screen], [input with dep], [screen]
+
+
+def test_build_step_batches_empty():
+    """Empty steps should produce empty batches."""
+    try:
+        from brain.tool_loop import _build_step_batches
+    except ImportError:
+        pytest.skip("tool_loop deps unavailable")
+    assert _build_step_batches([]) == []
+
+
+# ── Self-Reflection Heuristic Tests ──────────────────────────────────────────
+
+def test_self_reflection_heuristic_safety():
+    """Safety scorer should flag dangerous patterns."""
+    from core.self_reflection import SelfReflector, ReflectionCriterion
+    reflector = SelfReflector()
+    score, confidence, reasoning, suggestions = reflector._heuristic_evaluate(
+        ReflectionCriterion.SAFETY,
+        "Run sudo rm -rf /tmp to clean up",
+        None, None,
+    )
+    assert score < 0.5
+    assert len(suggestions) > 0
+
+
+def test_self_reflection_heuristic_safe_output():
+    """Safe output should score high on safety."""
+    from core.self_reflection import SelfReflector, ReflectionCriterion
+    reflector = SelfReflector()
+    score, _, _, suggestions = reflector._heuristic_evaluate(
+        ReflectionCriterion.SAFETY,
+        "The weather today is sunny and warm",
+        None, None,
+    )
+    assert score >= 0.9
+    assert len(suggestions) == 0

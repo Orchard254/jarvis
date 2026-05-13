@@ -4,6 +4,7 @@ Injects callbacks into tool_loop to maintain strict layer boundaries.
 """
 
 import logging
+import os
 import re
 import sys
 
@@ -125,6 +126,32 @@ class Orchestrator:
             except Exception as _sr_exc:
                 logger.warning(f"Self-reflection unavailable: {_sr_exc}")
 
+        # ── Prompt optimizer (A/B testing for prompts) ────────────────────
+        self._prompt_optimizer = None
+        if getattr(settings, "ENABLE_PROMPT_OPTIMIZATION", False):
+            try:
+                from core.prompt_optimizer import PromptOptimizer
+                self._prompt_optimizer = PromptOptimizer()
+                # Register the planner prompt as baseline
+                from brain.planner import _PLANNER_PROMPT
+                self._prompt_optimizer.register_prompt(
+                    "planner", _PLANNER_PROMPT, is_baseline=True
+                )
+                logger.info("Prompt optimizer enabled (A/B testing)")
+            except Exception as _po_exc:
+                logger.warning(f"Prompt optimizer unavailable: {_po_exc}")
+
+        # ── Checkpoint manager (resumable autonomous tasks) ──────────────
+        self._checkpoint_mgr = None
+        try:
+            from core.checkpoint_manager import CheckpointManager
+            self._checkpoint_mgr = CheckpointManager(
+                storage_path=os.path.join(getattr(settings, "DATA_DIR", "data"), "checkpoints")
+            )
+            logger.info("Checkpoint manager enabled")
+        except Exception as _cp_exc:
+            logger.warning(f"Checkpoint manager unavailable: {_cp_exc}")
+
         # ── Skill versioning ─────────────────────────────────────────────
         self._skill_versions = None
         if getattr(settings, "ENABLE_SKILL_VERSIONING", False):
@@ -168,6 +195,16 @@ class Orchestrator:
                     if not active:
                         return "No active tasks"
                     return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
+
+            # ── Direct dispatch (skip LLM for common patterns) ─────────────
+            try:
+                from core.direct_dispatch import try_direct_dispatch
+                direct_result = try_direct_dispatch(clean_input, self._execute_tool)
+                if direct_result is not None:
+                    logger.info("Command handled via direct dispatch")
+                    return direct_result
+            except Exception as _dd_exc:
+                logger.debug(f"Direct dispatch unavailable: {_dd_exc}")
 
             memory_context = ""
             if self._memory:
@@ -345,18 +382,21 @@ class Orchestrator:
                     pass
 
             # ── Implicit feedback: track retries and success ─────────────────
+            # Only call start_task if not already pending (preserves retry count
+            # across invocations). On failure, don't record_retry — the retry is
+            # detected when the user re-issues the same command.
             if self._implicit_feedback and result.get("tool_calls"):
                 task_key = clean_input[:40]
                 tool_names = [tc.get("tool", "") for tc in result.get("tool_calls", [])]
                 skill_name = tool_names[0] if tool_names else "unknown"
                 try:
-                    self._implicit_feedback.start_task(
-                        task_key, skill_name, {"input": clean_input[:80]}
-                    )
+                    pending = getattr(self._implicit_feedback, "pending_tasks", {})
+                    if task_key not in pending:
+                        self._implicit_feedback.start_task(
+                            task_key, skill_name, {"input": clean_input[:80]}
+                        )
                     if result.get("success"):
                         self._implicit_feedback.record_success(task_key)
-                    else:
-                        self._implicit_feedback.record_retry(task_key)
                 except Exception:
                     pass
 
@@ -393,7 +433,23 @@ class Orchestrator:
     def handle_autonomous(self, task_id: str, command: str, confidence: float) -> str:
         self._autonomous_threshold = settings.AUTONOMOUS_CONFIDENCE_THRESHOLD
         try:
-            return self.handle(command)
+            result = self.handle(command)
+            # Save checkpoint for resumability
+            if self._checkpoint_mgr:
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self._checkpoint_mgr.save_checkpoint(
+                        task_id=task_id,
+                        step_index=0,
+                        state={"command": command, "result": result[:500], "success": True},
+                        context={"confidence": confidence},
+                        force=True,
+                    ))
+                    loop.close()
+                except Exception as _cp_exc:
+                    logger.debug(f"Checkpoint save failed: {_cp_exc}")
+            return result
         finally:
             self._autonomous_threshold = None
 

@@ -294,10 +294,14 @@ class PromptOptimizer:
         return new_variants
     
     def _apply_mutation(self, template: str, mutation_type: str) -> str:
-        """Apply a specific mutation type to a template."""
-        # Placeholder mutations - production would use LLM
+        """Apply a mutation to a template, using LLM when available."""
+        # Try LLM-based mutation first
+        llm_result = self._llm_mutate(template, mutation_type)
+        if llm_result:
+            return llm_result
+
+        # Heuristic fallback
         if mutation_type == "rephrase":
-            # Add rephrasing prefix
             return f"Please consider carefully: {template}"
         elif mutation_type == "add_examples":
             return f"{template}\n\nExample format: Show your reasoning step by step."
@@ -308,13 +312,38 @@ class PromptOptimizer:
         elif mutation_type == "add_constraints":
             return f"{template}\n\nConstraints: Be accurate, cite sources when possible."
         elif mutation_type == "reorder_instructions":
-            # Simple reorder simulation
             parts = template.split('\n')
             if len(parts) > 1:
                 parts = [parts[-1]] + parts[:-1]
             return '\n'.join(parts)
         else:
             return template
+
+    def _llm_mutate(self, template: str, mutation_type: str) -> Optional[str]:
+        """Use LLM to intelligently mutate a prompt template."""
+        try:
+            from brain.ollama_client import chat
+        except ImportError:
+            return None
+
+        prompt = (
+            f"You are a prompt engineer. Apply a '{mutation_type}' mutation to this prompt template.\n"
+            f"Mutation types: rephrase (reword for clarity), add_examples (add worked examples), "
+            f"change_tone (make more concise/professional), adjust_length (make more detailed), "
+            f"add_constraints (add quality constraints), reorder_instructions (reorganize for flow).\n\n"
+            f"Original template:\n{template[:3000]}\n\n"
+            f"Provide ONLY the mutated template, nothing else."
+        )
+        try:
+            result = chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4, max_retries=1,
+            )
+            mutated = result.get("content", "").strip()
+            return mutated if mutated and mutated != template else None
+        except Exception as e:
+            logger.debug(f"LLM prompt mutation failed: {e}")
+            return None
     
     def run_optimization_round(self, prompt_id: str, eval_function: Callable[[str], float],
                                num_iterations: int = 10) -> OptimizationResult:
