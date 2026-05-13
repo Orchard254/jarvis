@@ -1,87 +1,260 @@
 
-"""Phase 2 tests — 9 primitives, safety sandbox, verification router."""
-import pytest, sys, os
+"""Tests for the 6-tool architecture — registry, schemas, facades, and integration."""
+import pytest, sys, os, re, json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools import TOOL_REGISTRY
-from safety import executor
-from verification import verifier
+from tools import TOOL_REGISTRY, TOOL_SCHEMAS
 
+# Tools that don't need "Do NOT" guidance (custom/third-party drop-ins)
 TOOLS_EXEMPT_FROM_GUIDANCE: set[str] = set()
 
-def test_all_tools_registered():
-    assert len(TOOL_REGISTRY) >= 8
-    assert "window" in TOOL_REGISTRY
-    assert "screen" in TOOL_REGISTRY
-    assert "system" in TOOL_REGISTRY
-    assert "browser" in TOOL_REGISTRY
-    assert "input" in TOOL_REGISTRY
-    assert "memory" in TOOL_REGISTRY
-    assert "exec" in TOOL_REGISTRY
-    assert "speak" in TOOL_REGISTRY
+# The 6 core tools
+CORE_TOOLS = {"screen", "input", "window", "browser", "exec", "memory"}
 
-def test_all_schemas_have_negative_guidance():
+
+# ── Registry & Schema Tests ───────────────────────────────────────────────────
+
+def test_core_tools_registered():
+    """All 6 core tools must be in the registry."""
+    for tool in CORE_TOOLS:
+        assert tool in TOOL_REGISTRY, f"Core tool '{tool}' missing from TOOL_REGISTRY"
+
+
+def test_removed_tools_not_registered():
+    """Old tools (system, speak) must NOT be in the registry."""
+    assert "system" not in TOOL_REGISTRY, "Removed tool 'system' should not be in registry"
+    assert "speak" not in TOOL_REGISTRY, "Removed tool 'speak' should not be in registry"
+
+
+def test_schema_count():
+    """Should have at least 6 schemas (core) plus any custom tools."""
+    schema_names = {s["function"]["name"] for s in TOOL_SCHEMAS}
+    assert CORE_TOOLS.issubset(schema_names), (
+        f"Missing schemas for: {CORE_TOOLS - schema_names}"
+    )
+
+
+def test_schemas_json_roundtrip():
+    """All schemas must cleanly serialize/deserialize as JSON."""
+    serialised = json.dumps(TOOL_SCHEMAS)
+    roundtrip = json.loads(serialised)
+    assert len(roundtrip) == len(TOOL_SCHEMAS)
+
+
+def test_schemas_have_required_fields():
+    """Every schema must have name, description, and parameters."""
+    for schema in TOOL_SCHEMAS:
+        fn = schema.get("function", {})
+        name = fn.get("name", "?")
+        assert "description" in fn, f"{name} missing description"
+        assert "parameters" in fn, f"{name} missing parameters"
+        assert "action" in fn["parameters"].get("properties", {}), (
+            f"{name} missing 'action' parameter"
+        )
+
+
+def test_schemas_have_negative_guidance():
     """Every tool description must tell the LLM when NOT to use it."""
-    import json, re
-    from tools import TOOL_SCHEMAS
-
     for schema in TOOL_SCHEMAS:
         fn = schema.get("function", {})
         name = fn.get("name", "?")
         desc = fn.get("description", "")
-
         if name in TOOLS_EXEMPT_FROM_GUIDANCE:
             continue
-
         has_do_not = bool(re.search(r"Do NOT\b", desc, re.IGNORECASE))
         assert has_do_not, (
-            f"Tool '{name}' is missing 'Do NOT' negative guidance "
-            f"in its description. Add at least one 'Do NOT use for X — use Y instead' sentence."
+            f"Tool '{name}' missing 'Do NOT' negative guidance in description."
         )
 
+
+def test_schema_actions_match_facades():
+    """Schema enum values must match what the facade functions accept."""
+    expected_actions = {
+        "screen": {"capture", "find", "tree", "query", "ocr"},
+        "input": {"click", "type", "hotkey", "scroll", "drag"},
+        "window": {"open", "close", "focus", "list", "minimize", "maximize", "state"},
+        "browser": {"navigate", "click", "type", "read_page", "screenshot", "scroll"},
+        "exec": {"run", "read", "write"},
+        "memory": {"store", "recall", "search"},
+    }
+    for schema in TOOL_SCHEMAS:
+        name = schema["function"]["name"]
+        if name not in expected_actions:
+            continue
+        action_prop = schema["function"]["parameters"]["properties"]["action"]
+        schema_actions = set(action_prop.get("enum", []))
+        assert schema_actions == expected_actions[name], (
+            f"Tool '{name}' schema actions {schema_actions} != expected {expected_actions[name]}"
+        )
+
+
+# ── Facade Dispatch Tests ─────────────────────────────────────────────────────
+
+def test_screen_unknown_action():
+    from tools.screen import screen
+    r = screen(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_screen_find_requires_text():
+    from tools.screen import screen
+    r = screen(action="find")
+    assert not r["success"]
+    assert "text required" in r["error"]
+
+
+def test_screen_query_requires_question():
+    from tools.screen import screen
+    r = screen(action="query")
+    assert not r["success"]
+    assert "question required" in r["error"]
+
+
+def test_input_unknown_action():
+    from tools.input import input as input_tool
+    r = input_tool(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_input_type_requires_text():
+    from tools.input import input as input_tool
+    r = input_tool(action="type")
+    assert not r["success"]
+    assert "text required" in r["error"]
+
+
+def test_input_click_requires_target():
+    from tools.input import input as input_tool
+    r = input_tool(action="click")
+    assert not r["success"]
+    assert "target_text or x,y" in r["error"]
+
+
+def test_input_hotkey_requires_keys():
+    from tools.input import input as input_tool
+    r = input_tool(action="hotkey")
+    assert not r["success"]
+    assert "keys required" in r["error"]
+
+
+def test_input_drag_requires_coords():
+    from tools.input import input as input_tool
+    r = input_tool(action="drag")
+    assert not r["success"]
+    assert "required for drag" in r["error"]
+
+
+def test_window_unknown_action():
+    from tools.window import window
+    r = window(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_window_open_requires_app_name():
+    from tools.window import window
+    r = window(action="open")
+    assert not r["success"]
+    assert "app_name required" in r["error"]
+
+
+def test_window_close_requires_title():
+    from tools.window import window
+    r = window(action="close")
+    assert not r["success"]
+    assert "window_title required" in r["error"]
+
+
+def test_window_focus_requires_title():
+    from tools.window import window
+    r = window(action="focus")
+    assert not r["success"]
+    assert "window_title required" in r["error"]
+
+
+def test_exec_unknown_action():
+    from tools.exec import exec as exec_tool
+    r = exec_tool(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_exec_run_requires_code():
+    from tools.exec import exec as exec_tool
+    r = exec_tool(action="run")
+    assert not r["success"]
+    assert "code required" in r["error"]
+
+
+def test_exec_read_requires_path():
+    from tools.exec import exec as exec_tool
+    r = exec_tool(action="read")
+    assert not r["success"]
+    assert "path required" in r["error"]
+
+
+def test_exec_write_requires_path_and_content():
+    from tools.exec import exec as exec_tool
+    r = exec_tool(action="write")
+    assert not r["success"]
+    assert "path and content required" in r["error"]
+
+
+def test_memory_unknown_action():
+    from tools.mem import memory
+    r = memory(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_browser_unknown_action():
+    from tools.browser import browser
+    r = browser(action="nonexistent")
+    assert not r["success"]
+    assert "Unknown" in r["error"]
+
+
+def test_browser_navigate_requires_url():
+    from tools.browser import browser
+    r = browser(action="navigate")
+    assert not r["success"]
+    assert "URL required" in r["error"]
+
+
+# ── Code Execution Tests ──────────────────────────────────────────────────────
+
 def test_execute_code_safe():
-    from tools.execute_code import execute_code
+    try:
+        from tools.execute_code import execute_code
+    except ImportError:
+        pytest.skip("execute_code dependencies not installed")
     r = execute_code("print('hello')")
     assert r["success"] and "hello" in r["output"]
 
+
 def test_execute_code_blocks_import():
-    from tools.execute_code import execute_code
+    try:
+        from tools.execute_code import execute_code
+    except ImportError:
+        pytest.skip("execute_code dependencies not installed")
     r = execute_code("import socket; print('blocked')")
-    # Import blocking is enforced by the safety executor layer;
-    # direct calls execute the code. Confirm the code ran.
     assert r["success"]
     assert "blocked" in r.get("output", "")
 
-def test_capture_screen_detects_valid():
-    from tools.capture_screen import capture_screen
-    r = capture_screen()
-    assert r["success"] and "width" in r and "height" in r
 
-def test_safety_executor_runs():
-    from tools.notify_user import notify_user
-    r = executor.execute("notify_user", notify_user, {"message":"test", "urgency":"low"})
-    assert r["success"]
-
-def test_verification_router():
-    from tools.execute_code import execute_code
-    res = execute_code("import time; time.sleep(0.1)")
-    report = verifier.verify_action("execute_code", res, expected="success")
-    assert report["status"] in ("CONFIRMED", "INCONCLUSIVE")
+# ── Planner Sync Test ─────────────────────────────────────────────────────────
 
 def test_planner_prompt_synced_with_schemas():
     """Every schema tool must appear in the planner prompt and vice versa."""
-    import re
-    from pathlib import Path
-
     planner = (Path(__file__).parent.parent / "brain" / "planner.py").read_text(encoding="utf-8")
     start = planner.find("_PLANNER_PROMPT")
     end = planner.find("def _build_system_context")
     prompt = planner[start:end]
 
     tools_in_prompt = set(re.findall(r"^\d+\.\s+(\w+)\(", prompt, re.MULTILINE))
-
-    from tools import TOOL_SCHEMAS
     schema_tools = {s["function"]["name"] for s in TOOL_SCHEMAS}
 
     # Custom runtime tools are expected to be missing from the static planner prompt
