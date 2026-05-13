@@ -444,9 +444,9 @@ def run(
             if tool_log:
                 tool_log[-1]["verification"] = verification.get("status", "")
 
-            # Invalidate cache on write operations
+            # Invalidate cache on write operations (skip read-only actions)
             from brain.tool_result_cache import ToolResultCache
-            if name in ToolResultCache.WRITE_TOOLS:
+            if name in ToolResultCache.WRITE_TOOLS and not cache._is_cacheable(name, args):
                 cache.invalidate_tool(name)
                 # Also invalidate related read caches
                 if name in ("write_file", "file_ops"):

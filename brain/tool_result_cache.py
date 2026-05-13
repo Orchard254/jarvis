@@ -69,6 +69,12 @@ class ToolResultCache:
         "screen",
     })
 
+    # (tool, action) pairs that are read-only even when the tool itself has write actions
+    READ_ONLY_ACTIONS = frozenset({
+        ("window", "state"),
+        ("window", "list"),
+    })
+
     # Tools that should invalidate related cache entries
     WRITE_TOOLS = frozenset({
         "write_file",
@@ -99,6 +105,13 @@ class ToolResultCache:
     def _get_lock(self):
         return self._lock  # Always initialized in __init__ — no lazy init needed
 
+    def _is_cacheable(self, tool_name: str, args: dict) -> bool:
+        """Check if a tool call is cacheable (read-only tool or read-only action)."""
+        if tool_name in self.READ_ONLY_TOOLS:
+            return True
+        action = args.get("action", "")
+        return (tool_name, action) in self.READ_ONLY_ACTIONS
+
     def _make_key(self, tool_name: str, args: dict) -> str:
         """
         Generate a deterministic cache key from tool name and arguments.
@@ -120,7 +133,7 @@ class ToolResultCache:
         Returns:
             Cached result dict if found and not expired, None otherwise
         """
-        if tool_name not in self.READ_ONLY_TOOLS:
+        if not self._is_cacheable(tool_name, args):
             return None
 
         key = self._make_key(tool_name, args)
@@ -161,7 +174,7 @@ class ToolResultCache:
         Returns:
             True if cached successfully, False if tool is not cacheable
         """
-        if tool_name not in self.READ_ONLY_TOOLS:
+        if not self._is_cacheable(tool_name, args):
             return False
 
         if not result.get("success"):
