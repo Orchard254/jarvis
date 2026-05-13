@@ -71,7 +71,7 @@ def test_schemas_have_negative_guidance():
 def test_schema_actions_match_facades():
     """Schema enum values must match what the facade functions accept."""
     expected_actions = {
-        "screen": {"capture", "find", "tree", "query", "ocr"},
+        "screen": {"capture", "find", "tree", "elements", "query", "ocr"},
         "input": {"click", "type", "hotkey", "scroll", "drag"},
         "window": {"open", "close", "focus", "list", "minimize", "maximize", "state"},
         "browser": {"navigate", "click", "type", "read_page", "screenshot", "scroll"},
@@ -424,3 +424,38 @@ def test_self_reflection_heuristic_safe_output():
     )
     assert score >= 0.9
     assert len(suggestions) == 0
+
+
+# ── Screen Elements Action Tests ─────────────────────────────────────────────
+
+def test_screen_elements_returns_structure():
+    """screen(elements) should return the expected dict structure."""
+    from tools.screen import screen
+    result = screen(action="elements")
+    assert "success" in result
+    assert "elements" in result
+    assert "sources" in result
+    assert "count" in result
+    assert isinstance(result["elements"], list)
+
+
+def test_screen_capture_grid_param():
+    """screen(capture) should accept grid parameter without error."""
+    from tools.screen import screen
+    # Can't actually capture on non-Windows, but we can verify the
+    # function signature accepts grid params without TypeError
+    import inspect
+    sig = inspect.signature(screen)
+    assert "grid" in sig.parameters
+    assert "grid_size" in sig.parameters
+
+
+# ── Browser CDP Tests ────────────────────────────────────────────────────────
+
+def test_browser_cdp_function_exists():
+    """Browser module should have CDP connection function."""
+    try:
+        from tools.browser import _try_connect_cdp
+        assert callable(_try_connect_cdp)
+    except ImportError:
+        pytest.skip("Playwright not installed")

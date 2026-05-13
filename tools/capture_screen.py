@@ -1,12 +1,12 @@
 """
 Primitive: capture_screen(region=None, monitor=None, window_title=None, cursor=False, format="png")
 Detects black/UAC screens, resizes to limit token bloat.
-Supports multi-monitor setups, per-window capture, and cursor overlay.
+Supports multi-monitor setups, per-window capture, cursor overlay, and grid overlay.
 """
 import base64
 import io
 import logging
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from settings import MAX_SCREENSHOTS_IN_CONTEXT
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,49 @@ def _overlay_cursor(img: Image.Image) -> Image.Image:
     return img
 
 
+def _overlay_grid(img: Image.Image, grid_size: int = 100) -> Image.Image:
+    """Draw a numbered coordinate grid over the screenshot.
+
+    The grid helps the LLM reference precise screen locations by number.
+    Each cell is labeled with its (col, row) index. Grid lines are drawn
+    semi-transparently so the underlying content stays visible.
+    """
+    overlay = img.copy()
+    draw = ImageDraw.Draw(overlay)
+    w, h = img.size
+
+    # Load a small font for labels
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Draw vertical and horizontal lines
+    col = 0
+    for x in range(0, w, grid_size):
+        draw.line([(x, 0), (x, h)], fill=(255, 0, 0, 128), width=1)
+        col += 1
+    row = 0
+    for y in range(0, h, grid_size):
+        draw.line([(0, y), (w, y)], fill=(255, 0, 0, 128), width=1)
+        row += 1
+
+    # Label each cell with coordinates
+    col_idx = 0
+    for x in range(0, w, grid_size):
+        row_idx = 0
+        for y in range(0, h, grid_size):
+            label = f"{col_idx},{row_idx}"
+            # Background for readability
+            bbox = draw.textbbox((x + 2, y + 1), label, font=font)
+            draw.rectangle(bbox, fill=(0, 0, 0, 180))
+            draw.text((x + 2, y + 1), label, fill=(255, 255, 0), font=font)
+            row_idx += 1
+        col_idx += 1
+
+    return overlay
+
+
 def capture_screen(
     region: tuple = None,
     monitor: int = None,
@@ -163,6 +206,8 @@ def capture_screen(
     img_format: str = "png",
     quality: int = 85,
     active: bool = False,
+    grid: bool = False,
+    grid_size: int = 100,
 ) -> dict:
     """
     Capture screen and return base64 encoded image.
@@ -226,6 +271,10 @@ def capture_screen(
         if cursor:
             img = _overlay_cursor(img)
 
+        # ── Grid overlay ─────────────────────────────────────────────────────
+        if grid:
+            img = _overlay_grid(img, grid_size)
+
         # ── Resize to limit token bloat ──────────────────────────────────────
         max_dim = 1280
         if img.width > max_dim or img.height > max_dim:
@@ -249,6 +298,8 @@ def capture_screen(
             "monitor": monitor if monitor is not None else 0,
             "format": img_format,
             "cursor_overlay": cursor,
+            "grid_overlay": grid,
+            "grid_size": grid_size if grid else None,
         }
     except Exception as e:
         logger.error(f"capture_screen failed: {e}")
