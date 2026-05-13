@@ -101,34 +101,33 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
     if action_key == "window_open":
         return {"tool": "window", "args": {"action": "open", "app_name": target}}
     elif action_key == "window_close":
-        return {"tool": "window", "args": {"action": "close", "title": target}}
+        return {"tool": "window", "args": {"action": "close", "window_title": target}}
     elif action_key == "window_minimize":
-        return {"tool": "window", "args": {"action": "minimize", "title": target}}
+        return {"tool": "window", "args": {"action": "minimize", "window_title": target}}
     elif action_key == "window_maximize":
-        return {"tool": "window", "args": {"action": "maximize", "title": target}}
+        return {"tool": "window", "args": {"action": "maximize", "window_title": target}}
     elif action_key == "window_focus":
-        return {"tool": "window", "args": {"action": "focus", "title": target}}
+        return {"tool": "window", "args": {"action": "focus", "window_title": target}}
     elif action_key == "volume_set":
         try:
             level = int(target)
             level = max(0, min(100, level))
-            ps_script = (
-                f"Add-Type -TypeDefinition '"
-                f"using System.Runtime.InteropServices; "
-                f"public class Vol {{ "
-                f"[DllImport(\"winmm.dll\")] "
-                f"public static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume); "
-                f"}}'; "
+            ps_code = (
+                "Add-Type -TypeDefinition '"
+                "using System.Runtime.InteropServices; "
+                "public class Vol { "
+                '[DllImport("winmm.dll")] '
+                "public static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume); "
+                "}'; "
                 f"$v = [math]::Round({level} / 100 * 65535); "
-                f"$pair = $v -bor ($v -shl 16); "
-                f"[Vol]::waveOutSetVolume([IntPtr]::Zero, $pair); "
+                "$pair = $v -bor ($v -shl 16); "
+                "[Vol]::waveOutSetVolume([IntPtr]::Zero, $pair); "
                 f"Write-Output 'Volume set to {level}%'"
             )
             return {"tool": "exec", "args": {
                 "action": "run",
-                "code": f"import subprocess; r = subprocess.run("
-                        f"['powershell', '-c', \"{ps_script}\"], "
-                        f"capture_output=True, text=True); print(r.stdout.strip())",
+                "code": ps_code,
+                "language": "powershell",
             }}
         except ValueError:
             return None
