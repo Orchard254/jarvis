@@ -286,6 +286,11 @@ AUTONOMOUS_REQUIRE_APPROVAL = {
     # Destructive bulk operations are caught by the task queue approval gate.
 }
 
+# ── Advanced Modules (off by default) ──────────────────
+ENABLE_SELF_REFLECTION = get_env_bool("ENABLE_SELF_REFLECTION", False)
+ENABLE_IMPLICIT_FEEDBACK = get_env_bool("ENABLE_IMPLICIT_FEEDBACK", True)
+ENABLE_SKILL_VERSIONING = get_env_bool("ENABLE_SKILL_VERSIONING", True)
+
 # ── Optional Integrations ──────────────────────────────
 WEATHER_API_KEY = get_env_str("WEATHER_API_KEY", "")
 NEWS_API_KEY = get_env_str("NEWS_API_KEY", "")
