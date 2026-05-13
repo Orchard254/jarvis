@@ -229,6 +229,7 @@ def _try_connect_cdp(port: int = None) -> bool:
         from settings import BROWSER_CDP_PORT
         port = BROWSER_CDP_PORT
 
+    pw_was_none = _playwright is None
     try:
         import requests as _req
         resp = _req.get(f"http://localhost:{port}/json/version", timeout=2)
@@ -251,6 +252,15 @@ def _try_connect_cdp(port: int = None) -> bool:
         return True
     except Exception as e:
         logger.debug(f"CDP connection on port {port} failed: {e}")
+        # Clean up Playwright if we created it during this attempt
+        if pw_was_none and _playwright is not None:
+            try:
+                _playwright.__exit__(None, None, None)
+            except Exception:
+                pass
+            _playwright = None
+        _browser = None
+        _page = None
         return False
 
 

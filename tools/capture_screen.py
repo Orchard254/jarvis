@@ -159,10 +159,11 @@ def _overlay_grid(img: Image.Image, grid_size: int = 100) -> Image.Image:
     """Draw a numbered coordinate grid over the screenshot.
 
     The grid helps the LLM reference precise screen locations by number.
-    Each cell is labeled with its (col, row) index. Grid lines are drawn
-    semi-transparently so the underlying content stays visible.
+    Each cell is labeled with its (col, row) index. Grid lines and label
+    backgrounds are semi-transparent via RGBA compositing.
     """
-    overlay = img.copy()
+    base = img.convert("RGBA")
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     w, h = img.size
 
@@ -172,15 +173,11 @@ def _overlay_grid(img: Image.Image, grid_size: int = 100) -> Image.Image:
     except Exception:
         font = ImageFont.load_default()
 
-    # Draw vertical and horizontal lines
-    col = 0
+    # Draw vertical and horizontal lines (semi-transparent red)
     for x in range(0, w, grid_size):
         draw.line([(x, 0), (x, h)], fill=(255, 0, 0, 128), width=1)
-        col += 1
-    row = 0
     for y in range(0, h, grid_size):
         draw.line([(0, y), (w, y)], fill=(255, 0, 0, 128), width=1)
-        row += 1
 
     # Label each cell with coordinates
     col_idx = 0
@@ -188,14 +185,14 @@ def _overlay_grid(img: Image.Image, grid_size: int = 100) -> Image.Image:
         row_idx = 0
         for y in range(0, h, grid_size):
             label = f"{col_idx},{row_idx}"
-            # Background for readability
             bbox = draw.textbbox((x + 2, y + 1), label, font=font)
-            draw.rectangle(bbox, fill=(0, 0, 0, 180))
-            draw.text((x + 2, y + 1), label, fill=(255, 255, 0), font=font)
+            draw.rectangle(bbox, fill=(0, 0, 0, 160))
+            draw.text((x + 2, y + 1), label, fill=(255, 255, 0, 255), font=font)
             row_idx += 1
         col_idx += 1
 
-    return overlay
+    result = Image.alpha_composite(base, overlay)
+    return result.convert("RGB")
 
 
 def capture_screen(
@@ -271,14 +268,14 @@ def capture_screen(
         if cursor:
             img = _overlay_cursor(img)
 
-        # ── Grid overlay ─────────────────────────────────────────────────────
-        if grid:
-            img = _overlay_grid(img, grid_size)
-
         # ── Resize to limit token bloat ──────────────────────────────────────
         max_dim = 1280
         if img.width > max_dim or img.height > max_dim:
             img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        # ── Grid overlay (applied AFTER resize so cell sizes are accurate) ───
+        if grid:
+            img = _overlay_grid(img, grid_size)
 
         # ── Encode ───────────────────────────────────────────────────────────
         buffer = io.BytesIO()
