@@ -2,6 +2,10 @@
 
 > **All tools in this file have been implemented (Phase 3).**
 > See the individual files and `tools/__init__.py`.
+>
+> **Note (post-consolidation):** The 6-tool consolidation removed `watch_screen`
+> as a standalone action. The LLM now polls with `screen(capture)` + `screen(query)`
+> instead. The underlying `watch_screen.py` primitive still exists for direct import.
 
 ## ✅ ask_user — `tools/ask_user.py`
 - tkinter dialog (free-text or button choices) + console fallback.
