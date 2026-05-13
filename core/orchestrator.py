@@ -104,6 +104,37 @@ class Orchestrator:
                 logger.debug(f"Could not load memory context: {_e}")
 
         self._feedback = FeedbackCollector(storage_path=str(settings.DATA_DIR / "feedback"))
+
+        # ── Implicit feedback loop (retry/abandon detection) ─────────────
+        self._implicit_feedback = None
+        if getattr(settings, "ENABLE_IMPLICIT_FEEDBACK", False):
+            try:
+                from core.feedback_loop import get_collector as get_implicit
+                self._implicit_feedback = get_implicit()
+                logger.info("Implicit feedback loop enabled")
+            except Exception as _fb_exc:
+                logger.warning(f"Implicit feedback loop unavailable: {_fb_exc}")
+
+        # ── Self-reflection (opt-in, off by default) ─────────────────────
+        self._reflector = None
+        if getattr(settings, "ENABLE_SELF_REFLECTION", False):
+            try:
+                from core.self_reflection import SelfReflector
+                self._reflector = SelfReflector()
+                logger.info("Self-reflection enabled")
+            except Exception as _sr_exc:
+                logger.warning(f"Self-reflection unavailable: {_sr_exc}")
+
+        # ── Skill versioning ─────────────────────────────────────────────
+        self._skill_versions = None
+        if getattr(settings, "ENABLE_SKILL_VERSIONING", False):
+            try:
+                from core.skill_versioning import VersionRegistry
+                self._skill_versions = VersionRegistry()
+                logger.info("Skill versioning enabled")
+            except Exception as _sv_exc:
+                logger.warning(f"Skill versioning unavailable: {_sv_exc}")
+
         logger.info("Orchestrator initialized with full pipeline wiring and Skill Store")
 
     def handle(self, user_input: str) -> str:
@@ -244,10 +275,19 @@ class Orchestrator:
 
             response = result.get("response", "Done.")
 
-            # ── Self-reflection disabled ─────────────────────────────────────
-            # Heuristic self-reflection was removed because it always scored
-            # ~0.38 with no actionable improvements — pure CPU waste.
-            # Re-enable with a real LLM-based critique when needed.
+            # ── Self-reflection (opt-in via ENABLE_SELF_REFLECTION) ────────
+            if self._reflector and result.get("success"):
+                try:
+                    reflection = self._reflector.reflect(
+                        task_id=clean_input[:40],
+                        output=response,
+                        user_intent=clean_input,
+                    )
+                    if reflection and reflection.revised_output:
+                        response = reflection.revised_output
+                        logger.info(f"Self-reflection revised response (score: {reflection.overall_score:.2f})")
+                except Exception as _ref_exc:
+                    logger.debug(f"Self-reflection skipped: {_ref_exc}")
 
             with self._handle_lock:
                 self._last_tool_calls = result.get("tool_calls", [])
@@ -301,6 +341,22 @@ class Orchestrator:
                             "plan_executed": result.get("plan_executed", False),
                         },
                     )
+                except Exception:
+                    pass
+
+            # ── Implicit feedback: track retries and success ─────────────────
+            if self._implicit_feedback and result.get("tool_calls"):
+                task_key = clean_input[:40]
+                tool_names = [tc.get("tool", "") for tc in result.get("tool_calls", [])]
+                skill_name = tool_names[0] if tool_names else "unknown"
+                try:
+                    self._implicit_feedback.start_task(
+                        task_key, skill_name, {"input": clean_input[:80]}
+                    )
+                    if result.get("success"):
+                        self._implicit_feedback.record_success(task_key)
+                    else:
+                        self._implicit_feedback.record_retry(task_key)
                 except Exception:
                     pass
 

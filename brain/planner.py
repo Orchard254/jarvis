@@ -39,31 +39,25 @@ Output ONLY valid JSON. No other text.
 Tool names are plain. NEVER prefix with "functions." or "tools.".
 
 1. screen(action, ...)
-   Unified perception. Actions: capture (screenshot), find (locate UI element by text via UIA), tree (UI tree), query (ask vision model), watch (monitor), ocr (read text).
+   Perception. Actions: capture (screenshot), find (locate UI element by text via UIA), tree (UI tree), query (ask vision model), ocr (read text).
 
 2. input(action, ...)
-   Mouse+keyboard. Actions: click, type, hotkey, scroll, drag, move.
+   Mouse+keyboard. Actions: click, type, hotkey, scroll, drag.
 
 3. window(action, ...)
-   App/window management. Actions: open (launch app — checks if running first, focuses if so), close, focus, list, info, minimize, maximize, restore, resize, move.
+   App/window + desktop. Actions: open (launch app — checks if running first, focuses if so), close, focus, list, minimize, maximize, state (live desktop snapshot of windows/processes).
 
-4. system(action, ...)
-   Live state. Actions: state (running windows/processes), search_app (find installed app), search_file (find file), hardware (CPU/RAM/disk).
+4. browser(action, url, selector, text)
+   Web browser via Playwright. Actions: navigate, click, type, read_page, screenshot, scroll.
 
-5. browser(action, url, selector, text)
-   Web browser via Playwright. Actions: launch, navigate, click, type, read_page, screenshot, close, close_tab, new_tab, get_tabs, switch_tab, back, forward, get_url, scroll, refresh, wait_for.
+5. exec(action, ...)
+   Code + files (escape hatch). Actions: run (Python/PowerShell), read (file), write (file).
 
-6. memory(action, key, value, command, when)
-   Memory + scheduling. Actions: store, recall, forget, search, summary, schedule, cancel, list.
-
-7. exec(action, ...)
-   Code + files (last resort). Actions: run (Python/PowerShell), read (file), write (file), clipboard, notify, search_web, fetch (URL).
-
-8. speak(action, ...)
-   Voice I/O. Actions: speak (TTS), ask (dialog), listen (microphone).
+6. memory(action, key, value)
+   Persistent facts. Actions: store, recall, search.
 
 === GUIDELINES ===
-1. Check system(state) first if you need to know what's running before planning.
+1. Check window(state) first if you need to know what's running before planning.
 2. For "open <app>": window(open) handles everything — checks running, focuses, or launches.
 3. For finding UI elements: screen(find) uses UIA — deterministic, no OCR.
 4. For clicking: use screen(find, click=true) or input(click).
@@ -75,9 +69,7 @@ Tool names are plain. NEVER prefix with "functions." or "tools.".
 
 === COMMON FAILURES TO AVOID ===
 1. window(open) already handles "is it running? focus it" — do NOT add separate check steps.
-2. window(open) already finds the exe path — do NOT call system(search_app) before window(open).
-3. exec(run) is a last resort — prefer dedicated tools (window, screen, browser, input).
-4. For notifications: speak(speak) reads aloud, exec(notify) shows silent toast. Pick the right one.
+2. exec(run) is a last resort — prefer dedicated tools (window, screen, browser, input).
 """
 
 

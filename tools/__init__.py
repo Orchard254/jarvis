@@ -209,7 +209,8 @@ TOOL_SCHEMAS = [
                 "'scroll' (scroll down the page). "
                 "For tab management use input(hotkey) — e.g. 'ctrl+t', 'ctrl+w', 'ctrl+tab'. "
                 "For back/forward use input(hotkey) — 'alt+left', 'alt+right'. "
-                "For refresh use input(hotkey) — 'f5'."
+                "For refresh use input(hotkey) — 'f5'. "
+                "Do NOT use for desktop app interaction — use screen() and input() instead."
             ),
             "parameters": {
                 "type": "object",
