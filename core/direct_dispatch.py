@@ -46,7 +46,7 @@ _register(
     "Maximize a window",
 )
 _register(
-    r"^(?:focus|switch to|go to)\s+(.+)$",
+    r"^(?:focus|switch to|go to)\s+(?!https?://)(.+)$",
     "window_focus",
     "Focus/switch to a window",
 )
