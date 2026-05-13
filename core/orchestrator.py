@@ -4,6 +4,7 @@ Injects callbacks into tool_loop to maintain strict layer boundaries.
 """
 
 import logging
+import os
 import re
 import sys
 
@@ -124,6 +125,17 @@ class Orchestrator:
                 logger.info("Self-reflection enabled")
             except Exception as _sr_exc:
                 logger.warning(f"Self-reflection unavailable: {_sr_exc}")
+
+        # ── Checkpoint manager (resumable autonomous tasks) ──────────────
+        self._checkpoint_mgr = None
+        try:
+            from core.checkpoint_manager import CheckpointManager
+            self._checkpoint_mgr = CheckpointManager(
+                storage_path=os.path.join(getattr(settings, "DATA_DIR", "data"), "checkpoints")
+            )
+            logger.info("Checkpoint manager enabled")
+        except Exception as _cp_exc:
+            logger.warning(f"Checkpoint manager unavailable: {_cp_exc}")
 
         # ── Skill versioning ─────────────────────────────────────────────
         self._skill_versions = None
@@ -393,7 +405,23 @@ class Orchestrator:
     def handle_autonomous(self, task_id: str, command: str, confidence: float) -> str:
         self._autonomous_threshold = settings.AUTONOMOUS_CONFIDENCE_THRESHOLD
         try:
-            return self.handle(command)
+            result = self.handle(command)
+            # Save checkpoint for resumability
+            if self._checkpoint_mgr:
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self._checkpoint_mgr.save_checkpoint(
+                        task_id=task_id,
+                        step_index=0,
+                        state={"command": command, "result": result[:500], "success": True},
+                        context={"confidence": confidence},
+                        force=True,
+                    ))
+                    loop.close()
+                except Exception as _cp_exc:
+                    logger.debug(f"Checkpoint save failed: {_cp_exc}")
+            return result
         finally:
             self._autonomous_threshold = None
 
