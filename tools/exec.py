@@ -1,9 +1,9 @@
 """
-Unified execution and system operations tool.
-Actions: run, read, write, clipboard, notify, search_web, fetch
+Unified execution tool.
+Actions: run, read, write
 
-Consolidates code execution, file operations, and utility calls
-into a single tool accessed via execute_code imports.
+The LLM's escape hatch — run Python/PowerShell code and manage files.
+For anything not covered by dedicated tools, use exec(run).
 """
 
 from __future__ import annotations
@@ -20,10 +20,6 @@ def exec(
     language: str = "python",
     path: str | None = None,
     content: str | None = None,
-    message: str | None = None,
-    urgency: str = "low",
-    query: str | None = None,
-    url: str | None = None,
     background: bool = False,
     timeout: int | None = None,
 ) -> dict:
@@ -33,14 +29,6 @@ def exec(
         return _read_file(path)
     elif action == "write":
         return _write_file(path, content)
-    elif action == "clipboard":
-        return _clipboard()
-    elif action == "notify":
-        return _notify(message, urgency)
-    elif action == "search_web":
-        return _search_web(query)
-    elif action == "fetch":
-        return _fetch_url(url)
     return {"success": False, "error": f"Unknown exec action: {action}"}
 
 
@@ -77,41 +65,3 @@ def _write_file(path: str | None, content: str | None) -> dict:
         return write_file(path=path, content=content)
     except Exception as e:
         return {"success": False, "error": f"Write file failed: {e}"}
-
-
-def _clipboard() -> dict:
-    try:
-        from tools.clipboard_tool import clipboard
-        return clipboard()
-    except Exception as e:
-        return {"success": False, "error": f"Clipboard failed: {e}"}
-
-
-def _notify(message: str | None, urgency: str) -> dict:
-    if not message:
-        return {"success": False, "error": "message required for notify action"}
-    try:
-        from tools.notify_user import notify_user
-        return notify_user(message=message, urgency=urgency)
-    except Exception as e:
-        return {"success": False, "error": f"Notify failed: {e}"}
-
-
-def _search_web(query: str | None) -> dict:
-    if not query:
-        return {"success": False, "error": "query required for search_web action"}
-    try:
-        from tools.search_web import search_web
-        return search_web(query)
-    except Exception as e:
-        return {"success": False, "error": f"Web search failed: {e}"}
-
-
-def _fetch_url(url: str | None) -> dict:
-    if not url:
-        return {"success": False, "error": "url required for fetch action"}
-    try:
-        from tools.fetch_url import fetch_url
-        return fetch_url(url)
-    except Exception as e:
-        return {"success": False, "error": f"Fetch URL failed: {e}"}

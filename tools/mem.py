@@ -1,6 +1,6 @@
 """
-Unified memory and scheduling tool.
-Actions: store, recall, forget, search, summary, schedule, cancel, list
+Unified memory tool.
+Actions: store, recall, search
 """
 
 from __future__ import annotations
@@ -16,15 +16,10 @@ def memory(
     key: str | None = None,
     value: Any = None,
     query: str | None = None,
-    command: str | None = None,
-    when: str | None = None,
-    task_id: str | None = None,
     limit: int = 10,
 ) -> dict:
-    if action in ("store", "recall", "forget", "search", "summary"):
+    if action in ("store", "recall", "search"):
         return _memory_op(action, key, value, query, limit)
-    elif action in ("schedule", "cancel", "list"):
-        return _schedule_op(action, command, when, task_id)
     return {"success": False, "error": f"Unknown memory action: {action}"}
 
 
@@ -43,20 +38,3 @@ def _memory_op(
         return memory_tool(**kwargs)
     except Exception as e:
         return {"success": False, "error": f"Memory {action} failed: {e}"}
-
-
-def _schedule_op(
-    action: str, command: str | None, when: str | None, task_id: str | None,
-) -> dict:
-    try:
-        from tools.schedule_tool import schedule as schedule_tool
-        kwargs = {"action": action}
-        if command:
-            kwargs["command"] = command
-        if when:
-            kwargs["when"] = when
-        if task_id:
-            kwargs["task_id"] = task_id
-        return schedule_tool(**kwargs)
-    except Exception as e:
-        return {"success": False, "error": f"Schedule {action} failed: {e}"}

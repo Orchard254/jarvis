@@ -30,11 +30,9 @@ _TOOL_CONFIDENCE: dict[str, float] = {
     "screen": 0.90,
     "input": 0.80,
     "window": 0.85,
-    "system": 0.95,
     "browser": 0.75,
     "memory": 0.85,
     "exec": 0.80,
-    "speak": 0.80,
 }
 
 logger = logging.getLogger(__name__)
@@ -175,8 +173,8 @@ class Orchestrator:
                 # Ground the planner in live system state
                 live_state = ""
                 try:
-                    from tools.system import system
-                    state_result = system(action="state")
+                    from tools.window import window
+                    state_result = window(action="state")
                     if state_result.get("success"):
                         parts = []
                         windows = state_result.get("windows", [])

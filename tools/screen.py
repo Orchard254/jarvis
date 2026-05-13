@@ -1,6 +1,6 @@
 """
 Unified perception tool.
-Actions: capture, find, tree, query, watch, ocr
+Actions: capture, find, tree, query, ocr
 
 Uses Windows UIA for deterministic element finding (no OCR fragility)
 and falls back to vision model / OCR when UIA is insufficient.
@@ -8,9 +8,7 @@ and falls back to vision model / OCR when UIA is insufficient.
 
 from __future__ import annotations
 
-import json
 import logging
-import time
 from typing import Any
 
 from tools import uia_utils
@@ -22,11 +20,9 @@ def screen(
     action: str = "capture",
     text: str | None = None,
     question: str | None = None,
-    condition: str | None = None,
     region: dict | None = None,
     window_title: str | None = None,
-    timeout_seconds: int = 30,
-    check_interval: int = 5,
+    timeout_seconds: int = 5,
     click: bool = False,
     max_depth: int = 3,
 ) -> dict:
@@ -38,8 +34,6 @@ def screen(
         return _tree(window_title, max_depth)
     elif action == "query":
         return _query(question, region)
-    elif action == "watch":
-        return _watch(condition, timeout_seconds, check_interval, region)
     elif action == "ocr":
         return _ocr(region)
     return {"success": False, "error": f"Unknown screen action: {action}"}
@@ -94,21 +88,6 @@ def _query(question: str | None, region: dict | None) -> dict:
     except Exception as e:
         return {"success": False, "error": f"Vision query failed: {e}"}
 
-
-def _watch(condition: str | None, timeout: int, interval: int, region: dict | None) -> dict:
-    """Monitor screen until condition is met or timeout."""
-    if not condition:
-        return {"success": False, "error": "condition required for watch action"}
-    try:
-        from tools.watch_screen import watch_screen
-        return watch_screen(
-            condition=condition,
-            timeout_seconds=timeout,
-            check_interval=interval,
-            region=region,
-        )
-    except Exception as e:
-        return {"success": False, "error": f"Watch failed: {e}"}
 
 
 def _ocr(region: dict | None) -> dict:
