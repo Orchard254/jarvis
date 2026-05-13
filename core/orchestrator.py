@@ -199,7 +199,7 @@ class Orchestrator:
             # ── Direct dispatch (skip LLM for common patterns) ─────────────
             try:
                 from core.direct_dispatch import try_direct_dispatch
-                direct_result = try_direct_dispatch(clean_input, self._execute_tool)
+                direct_result = try_direct_dispatch(clean_input, self._execute_wrapper)
                 if direct_result is not None:
                     logger.info("Command handled via direct dispatch")
                     return direct_result
