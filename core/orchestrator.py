@@ -181,6 +181,16 @@ class Orchestrator:
                         return "No active tasks"
                     return "\n".join([f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active])
 
+            # ── Direct dispatch (skip LLM for common patterns) ─────────────
+            try:
+                from core.direct_dispatch import try_direct_dispatch
+                direct_result = try_direct_dispatch(clean_input, self._execute_tool)
+                if direct_result is not None:
+                    logger.info("Command handled via direct dispatch")
+                    return direct_result
+            except Exception as _dd_exc:
+                logger.debug(f"Direct dispatch unavailable: {_dd_exc}")
+
             memory_context = ""
             if self._memory:
                 memory_context = self._memory.get_context_summary()
