@@ -87,6 +87,29 @@ def _execute_step(
 
 
 
+def _build_step_batches(steps: list[dict]) -> list[list[dict]]:
+    """Group plan steps into sequential batches. Steps with no deps_on
+    field (or deps_on=[]) that are adjacent can run in parallel."""
+    batches: list[list[dict]] = []
+    current_batch: list[dict] = []
+
+    for step in steps:
+        has_deps = bool(step.get("deps_on"))
+        if has_deps:
+            # Dependent step must run alone after previous batch
+            if current_batch:
+                batches.append(current_batch)
+                current_batch = []
+            batches.append([step])
+        else:
+            current_batch.append(step)
+
+    if current_batch:
+        batches.append(current_batch)
+
+    return batches if batches else [[s] for s in steps]
+
+
 def run_with_plan(
     plan: dict,
     user_input: str,
@@ -116,27 +139,61 @@ def run_with_plan(
     all_succeeded = True
     failed_step = None
 
-    for step_idx, step in enumerate(steps):
-        name = step["tool"]
-        if name not in _valid_tool_names:
-            logger.warning(f"Unknown tool '{name}' — aborting plan")
+    # Group steps into batches: steps sharing the same batch_with key
+    # or independent steps (no deps) can run in parallel.
+    batches = _build_step_batches(steps)
+
+    for batch in batches:
+        # Validate all tools in batch
+        invalid = [s for s in batch if s["tool"] not in _valid_tool_names]
+        if invalid:
+            logger.warning(f"Unknown tool '{invalid[0]['tool']}' — aborting plan")
             all_succeeded = False
-            failed_step = step
+            failed_step = invalid[0]
             break
 
-        step_result = _execute_step(
-            step, execute_fn, verify_fn, cache,
-            tool_log, pc_state_fn, user_input,
-        )
-
-        if not step_result["result"].get("success"):
-            all_succeeded = False
-            failed_step = step
-            logger.warning(
-                f"Plan step {step_idx} failed: {name} "
-                f"({step_result['result'].get('error', 'unknown')})"
+        if len(batch) == 1:
+            # Single step — run inline (no thread overhead)
+            step_result = _execute_step(
+                batch[0], execute_fn, verify_fn, cache,
+                tool_log, pc_state_fn, user_input,
             )
-            break
+            if not step_result["result"].get("success"):
+                all_succeeded = False
+                failed_step = batch[0]
+                logger.warning(f"Plan step failed: {batch[0]['tool']}")
+                break
+        else:
+            # Multiple independent steps — run in parallel
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            batch_results = {}
+            with ThreadPoolExecutor(max_workers=min(len(batch), 4)) as pool:
+                futures = {}
+                for step in batch:
+                    step_tool_log = []
+                    f = pool.submit(
+                        _execute_step, step, execute_fn, verify_fn,
+                        cache, step_tool_log, pc_state_fn, user_input,
+                    )
+                    futures[f] = (step, step_tool_log)
+
+                for f in as_completed(futures):
+                    step, step_log = futures[f]
+                    try:
+                        sr = f.result()
+                        tool_log.extend(step_log)
+                        batch_results[step["tool"]] = sr
+                        if not sr["result"].get("success"):
+                            all_succeeded = False
+                            failed_step = step
+                            logger.warning(f"Parallel step failed: {step['tool']}")
+                    except Exception as exc:
+                        all_succeeded = False
+                        failed_step = step
+                        logger.error(f"Parallel step exception: {step['tool']}: {exc}")
+
+            if not all_succeeded:
+                break
 
     if all_succeeded:
         return {
