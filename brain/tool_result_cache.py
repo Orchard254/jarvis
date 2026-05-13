@@ -67,7 +67,6 @@ class ToolResultCache:
         "capture_screen",
         "find_on_screen",
         "screen",
-        "system",
     })
 
     # Tools that should invalidate related cache entries

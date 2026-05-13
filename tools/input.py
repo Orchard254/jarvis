@@ -1,6 +1,6 @@
 """
 Unified input tool (keyboard + mouse).
-Actions: click, type, hotkey, scroll, drag, move
+Actions: click, type, hotkey, scroll, drag
 """
 
 from __future__ import annotations
@@ -36,8 +36,6 @@ def input(
         return _scroll(direction, clicks)
     elif action == "drag":
         return _drag(from_x, from_y, to_x, to_y)
-    elif action == "move":
-        return _move(x, y)
     return {"success": False, "error": f"Unknown input action: {action}"}
 
 
@@ -113,12 +111,4 @@ def _drag(from_x: int | None, from_y: int | None, to_x: int | None, to_y: int | 
         return {"success": False, "error": f"Drag failed: {e}"}
 
 
-def _move(x: int | None, y: int | None) -> dict:
-    if None in (x, y):
-        return {"success": False, "error": "x and y required for move action"}
-    try:
-        import pyautogui
-        pyautogui.moveTo(x, y)
-        return {"success": True, "x": x, "y": y}
-    except Exception as e:
-        return {"success": False, "error": f"Move to ({x},{y}) failed: {e}"}
+

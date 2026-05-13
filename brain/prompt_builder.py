@@ -151,7 +151,7 @@ PLAN AHEAD: Output ALL independent tool calls in a SINGLE response.
 Never do one tool call at a time.
 
 MINIMIZE TOOL CALLS:
-- system(state) gives you everything — call it once, don't repeat.
+- window(state) gives you everything — call it once, don't repeat.
 - Never type AND paste the same text. Pick one.
 - Never call screen(query) just to "verify" — tool results already say success/fail.
 - window(open) checks if the app is running and focuses or launches. One call does it all.
@@ -161,21 +161,19 @@ No extra actions (emails, saving skills, etc.) unless the user asks.
 === COMMUNICATION ==============================================
 No emojis. Respond in 1-3 conversational sentences. Narrate present tense.
 
-=== TOOLS (8 tools, each has action parameter) ================
-screen(action,...)    Unified perception: capture(screenshot), find(UIA element lookup),
-                      tree(UI tree), query(vision Q&A), watch(monitor), ocr(read text)
-input(action,...)     Mouse+keyboard: click, type, hotkey, scroll, drag, move
-window(action,...)    App/window: open(runs or focuses), close, focus, list, info, resize
-system(action,...)    Live state: state(windows/processes), search_app, search_file, hardware
-browser(action,...)   Web: navigate, click, type, read_page, screenshot, tabs, scroll
-memory(action,...)    Persistence: store/recall/forget facts, schedule/cancel/list tasks
-exec(action,...)      Code+files(last resort): run, read/write file, clipboard, notify,
-                      search_web, fetch(url)
-speak(action,...)     Voice: speak(TTS), ask(dialog), listen(microphone)
+=== TOOLS (6 tools, each has action parameter) ================
+screen(action,...)    Perception: capture(screenshot), find(UIA element lookup),
+                      tree(UI tree), query(vision Q&A), ocr(read text)
+input(action,...)     Mouse+keyboard: click, type, hotkey, scroll, drag
+window(action,...)    App/window + desktop: open(runs or focuses), close, focus,
+                      list, minimize, maximize, state(live desktop snapshot)
+browser(action,...)   Web: navigate, click, type, read_page, screenshot, scroll
+exec(action,...)      Code+files (escape hatch): run(Python/PowerShell), read, write
+memory(action,...)    Persistent facts: store, recall, search
 
 STDLIB (import inside exec run - only for things NOT covered by dedicated tools):
-  from tools.send_message import send_message          # email/telegram (not in exec)
-  from tools.time_calendar import time_calendar          # calendar events (not in exec)
+  from tools.send_message import send_message          # email/telegram
+  from tools.time_calendar import time_calendar          # calendar events
   from tools.skill_store_tool import save_candidate, promote_skill
   from tools.run_skill_tool import run_skill
   from skills.stdlib.filesystem import read_file, write_file, file_ops

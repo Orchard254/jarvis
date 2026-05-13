@@ -538,7 +538,7 @@ def run(
             # ── Pre-execution state snapshot for failed tools ─────────────────
             # When a tool fails, include a snapshot of current PC state to help
             # the LLM diagnose what went wrong and choose a better approach.
-            if not result.get("success") and name not in ("read_pc_state", "system") and pc_state_fn is not None:
+            if not result.get("success") and name not in ("read_pc_state", "window") and pc_state_fn is not None:
                 try:
                     state_snapshot = pc_state_fn()
                     if state_snapshot.get("success"):
