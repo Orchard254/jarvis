@@ -65,9 +65,9 @@ def _execute_step(
     if tool_log:
         tool_log[-1]["verification"] = verification.get("status", "")
 
-    # Invalidate cache on writes
+    # Invalidate cache on writes (skip read-only actions like window(state))
     from brain.tool_result_cache import ToolResultCache
-    if name in ToolResultCache.WRITE_TOOLS:
+    if name in ToolResultCache.WRITE_TOOLS and not cache._is_cacheable(name, args):
         cache.invalidate_tool(name)
 
     # State snapshot on failure

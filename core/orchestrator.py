@@ -382,18 +382,21 @@ class Orchestrator:
                     pass
 
             # ── Implicit feedback: track retries and success ─────────────────
+            # Only call start_task if not already pending (preserves retry count
+            # across invocations). On failure, don't record_retry — the retry is
+            # detected when the user re-issues the same command.
             if self._implicit_feedback and result.get("tool_calls"):
                 task_key = clean_input[:40]
                 tool_names = [tc.get("tool", "") for tc in result.get("tool_calls", [])]
                 skill_name = tool_names[0] if tool_names else "unknown"
                 try:
-                    self._implicit_feedback.start_task(
-                        task_key, skill_name, {"input": clean_input[:80]}
-                    )
+                    pending = getattr(self._implicit_feedback, "pending_tasks", {})
+                    if task_key not in pending:
+                        self._implicit_feedback.start_task(
+                            task_key, skill_name, {"input": clean_input[:80]}
+                        )
                     if result.get("success"):
                         self._implicit_feedback.record_success(task_key)
-                    else:
-                        self._implicit_feedback.record_retry(task_key)
                 except Exception:
                     pass
 
