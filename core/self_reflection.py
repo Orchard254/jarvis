@@ -176,160 +176,156 @@ class SelfReflector:
     
     def _score_output(self, output: str, context: Optional[Dict],
                       user_intent: Optional[str]) -> List[ReflectionScore]:
-        """
-        Score output against enabled criteria.
-        
-        In production, this would use LLM-based evaluation.
-        Here we use heuristic-based scoring as a placeholder.
-        """
+        """Score output against enabled criteria using LLM or heuristic fallback."""
+        # Try LLM-based scoring first
+        llm_scores = self._llm_score_output(output, context, user_intent)
+        if llm_scores:
+            return llm_scores
+
+        # Heuristic fallback
         scores = []
-        
         for criterion in self._enabled_criteria:
-            score, confidence, reasoning, suggestions = self._evaluate_criterion(
+            score, confidence, reasoning, suggestions = self._heuristic_evaluate(
                 criterion, output, context, user_intent
             )
             scores.append(ReflectionScore(
-                criterion=criterion,
-                score=score,
-                confidence=confidence,
-                reasoning=reasoning,
-                suggestions=suggestions
+                criterion=criterion, score=score, confidence=confidence,
+                reasoning=reasoning, suggestions=suggestions
             ))
-        
         return scores
-    
-    def _evaluate_criterion(self, criterion: ReflectionCriterion, output: str,
+
+    def _llm_score_output(self, output: str, context: Optional[Dict],
+                          user_intent: Optional[str]) -> Optional[List[ReflectionScore]]:
+        """Use the LLM to evaluate output quality. Returns None on failure."""
+        try:
+            from brain.ollama_client import chat
+        except ImportError:
+            return None
+
+        criteria_names = [c.value for c in self._enabled_criteria]
+        prompt = (
+            "You are a quality evaluator. Score the following agent output on each criterion.\n"
+            f"User intent: {user_intent or 'unknown'}\n"
+            f"Criteria: {', '.join(criteria_names)}\n\n"
+            f"Agent output:\n{output[:2000]}\n\n"
+            "Respond with ONLY valid JSON — an array of objects, one per criterion:\n"
+            '[{"criterion": "...", "score": 0.0-1.0, "reasoning": "...", "suggestions": ["..."]}]'
+        )
+        try:
+            result = chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1, max_retries=1,
+            )
+            import json as _json
+            text = result.get("content", "")
+            # Extract JSON array from response
+            start = text.find("[")
+            end = text.rfind("]") + 1
+            if start < 0 or end <= start:
+                return None
+            parsed = _json.loads(text[start:end])
+            scores = []
+            for item in parsed:
+                crit_name = item.get("criterion", "")
+                try:
+                    criterion = ReflectionCriterion(crit_name)
+                except ValueError:
+                    continue
+                scores.append(ReflectionScore(
+                    criterion=criterion,
+                    score=max(0.0, min(1.0, float(item.get("score", 0.5)))),
+                    confidence=0.85,
+                    reasoning=str(item.get("reasoning", "")),
+                    suggestions=item.get("suggestions", []),
+                ))
+            return scores if scores else None
+        except Exception as e:
+            logger.debug(f"LLM reflection scoring failed: {e}")
+            return None
+
+    def _heuristic_evaluate(self, criterion: ReflectionCriterion, output: str,
                             context: Optional[Dict], user_intent: Optional[str]
                             ) -> Tuple[float, float, str, List[str]]:
-        """
-        Evaluate output against a single criterion.
-        
-        Returns: (score, confidence, reasoning, suggestions)
-        """
+        """Heuristic fallback scoring when LLM is unavailable."""
         suggestions = []
-        
+
         if criterion == ReflectionCriterion.ACCURACY:
-            # Placeholder: check for uncertainty markers
             uncertainty_phrases = ["might", "could be", "possibly", "i think", "perhaps"]
             count = sum(1 for phrase in uncertainty_phrases if phrase.lower() in output.lower())
             score = max(0.5, 1.0 - (count * 0.1))
-            confidence = 0.6
-            reasoning = f"Found {count} uncertainty markers in output"
-            if count > 2:
-                suggestions.append("Reduce hedging language for more confident statements")
-        
+            return score, 0.4, f"Found {count} uncertainty markers", \
+                ["Reduce hedging language"] if count > 2 else []
+
         elif criterion == ReflectionCriterion.COMPLETENESS:
-            # Placeholder: check output length and structure
             word_count = len(output.split())
-            has_structure = any(marker in output for marker in ["**", "##", "-", "1.", "```"])
+            has_structure = any(m in output for m in ["**", "##", "-", "1.", "```"])
             score = min(1.0, word_count / 100) * (1.2 if has_structure else 1.0)
-            score = min(score, 1.0)
-            confidence = 0.5
-            reasoning = f"Output has {word_count} words, {'has' if has_structure else 'lacks'} structure"
-            if word_count < 50:
-                suggestions.append("Consider expanding with more detail")
-            if not has_structure:
-                suggestions.append("Add formatting (lists, headers, code blocks) for clarity")
-        
+            return min(score, 1.0), 0.4, f"{word_count} words", \
+                ["Consider expanding with more detail"] if word_count < 50 else []
+
         elif criterion == ReflectionCriterion.CLARITY:
-            # Placeholder: check sentence complexity
             sentences = output.replace('!', '.').replace('?', '.').split('.')
-            avg_length = sum(len(s.split()) for s in sentences if s.strip()) / max(len(sentences), 1)
-            score = max(0.5, 1.0 - max(0, (avg_length - 20) * 0.02))
-            confidence = 0.5
-            reasoning = f"Average sentence length: {avg_length:.1f} words"
-            if avg_length > 25:
-                suggestions.append("Break down long sentences for better readability")
-        
+            avg_len = sum(len(s.split()) for s in sentences if s.strip()) / max(len(sentences), 1)
+            score = max(0.5, 1.0 - max(0, (avg_len - 20) * 0.02))
+            return score, 0.4, f"Avg sentence length: {avg_len:.1f} words", \
+                ["Break down long sentences"] if avg_len > 25 else []
+
         elif criterion == ReflectionCriterion.EFFICIENCY:
-            # Placeholder: check for redundancy
             words = output.lower().split()
             unique_ratio = len(set(words)) / max(len(words), 1)
-            score = min(1.0, unique_ratio + 0.2)
-            confidence = 0.4
-            reasoning = f"Unique word ratio: {unique_ratio:.2f}"
-            if unique_ratio < 0.5:
-                suggestions.append("Reduce repetition of words and phrases")
-        
+            return min(1.0, unique_ratio + 0.2), 0.3, f"Unique word ratio: {unique_ratio:.2f}", \
+                ["Reduce repetition"] if unique_ratio < 0.5 else []
+
         elif criterion == ReflectionCriterion.SAFETY:
-            # Placeholder: basic safety check
-            risky_patterns = ["delete", "drop", "rm -rf", "sudo", "password", "secret"]
-            found_risky = [p for p in risky_patterns if p in output.lower()]
-            score = 0.3 if found_risky else 1.0
-            confidence = 0.7
-            reasoning = f"{'Found risky patterns' if found_risky else 'No obvious safety concerns'}: {found_risky}"
-            if found_risky:
-                suggestions.append("Review potentially dangerous operations and add warnings")
-        
+            risky = [p for p in ["delete", "drop", "rm -rf", "sudo", "password", "secret"]
+                     if p in output.lower()]
+            return (0.3 if risky else 1.0), 0.6, \
+                f"Risky patterns: {risky}" if risky else "No safety concerns", \
+                ["Review dangerous operations"] if risky else []
+
         elif criterion == ReflectionCriterion.RELEVANCE:
-            # Placeholder: check keyword overlap with user intent
             if user_intent:
                 intent_words = set(user_intent.lower().split())
                 output_words = set(output.lower().split())
                 overlap = len(intent_words & output_words) / max(len(intent_words), 1)
-                score = min(1.0, overlap * 2 + 0.3)
-                confidence = 0.5
-                reasoning = f"Keyword overlap with intent: {overlap:.2f}"
-                if overlap < 0.3:
-                    suggestions.append("Ensure response directly addresses user's query")
-            else:
-                score = 0.7
-                confidence = 0.3
-                reasoning = "No user intent provided for relevance comparison"
-        
+                return min(1.0, overlap * 2 + 0.3), 0.4, f"Keyword overlap: {overlap:.2f}", \
+                    ["Address user's query more directly"] if overlap < 0.3 else []
+            return 0.7, 0.3, "No user intent provided", []
+
         elif criterion == ReflectionCriterion.CONSISTENCY:
-            # Placeholder: check for contradictions
-            contradictions = ["however", "but", "although", "on the other hand"]
-            count = sum(1 for c in contradictions if c.lower() in output.lower())
-            # Some contrast is good, too much might indicate inconsistency
+            count = sum(1 for c in ["however", "but", "although", "on the other hand"]
+                        if c.lower() in output.lower())
             score = 0.9 if 0 < count < 5 else (0.6 if count >= 5 else 0.7)
-            confidence = 0.4
-            reasoning = f"Found {count} contrast markers"
-            if count >= 5:
-                suggestions.append("Review for potential contradictions or unclear positioning")
-        
-        return score, confidence, reasoning, suggestions
+            return score, 0.3, f"{count} contrast markers", \
+                ["Review for contradictions"] if count >= 5 else []
+
+        return 0.5, 0.2, "Unknown criterion", []
     
     def _generate_revision(self, output: str, scores: List[ReflectionScore],
                            context: Optional[Dict], user_intent: Optional[str]) -> Optional[str]:
-        """
-        Generate a revised version based on reflection scores.
-        
-        In production, this would use the LLM to rewrite.
-        """
-        if not self.llm_client:
-            return None
-        
-        # Collect all suggestions
-        all_suggestions = []
-        for score in scores:
-            all_suggestions.extend(score.suggestions)
-        
+        """Generate a revised version using the LLM based on reflection scores."""
+        all_suggestions = [s for score in scores for s in score.suggestions]
         if not all_suggestions:
             return None
-        
-        # Build revision prompt
+
         improvement_areas = ", ".join(set(s.criterion.value for s in scores if s.suggestions))
-        
-        prompt = f"""Please revise the following output to address these issues:
-
-Issues to fix:
-{chr(10).join('- ' + s for s in all_suggestions)}
-
-Focus areas: {improvement_areas}
-
-Original output:
-{output}
-
-Provide only the revised output:"""
-        
+        prompt = (
+            f"Revise this agent output to fix these issues:\n"
+            f"{chr(10).join('- ' + s for s in all_suggestions)}\n\n"
+            f"Focus areas: {improvement_areas}\n\n"
+            f"Original output:\n{output}\n\n"
+            f"Provide ONLY the revised output, nothing else."
+        )
         try:
-            # This would call the actual LLM in production
-            # revised = self.llm_client.generate(prompt)
-            logger.debug(f"Would generate revision with prompt length: {len(prompt)}")
-            return None  # Placeholder
+            from brain.ollama_client import chat
+            result = chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2, max_retries=1,
+            )
+            revised = result.get("content", "").strip()
+            return revised if revised and revised != output else None
         except Exception as e:
-            logger.error(f"Error generating revision: {e}")
+            logger.debug(f"Revision generation failed: {e}")
             return None
     
     def get_reflection_history(self, task_id: Optional[str] = None) -> Dict[str, List[ReflectionResult]]:

@@ -202,13 +202,30 @@ class CodeGenerator:
         if cache_key in self._generated_code_cache:
             return self._generated_code_cache[cache_key]
         
-        if not self.llm_client:
-            # Generate template code without LLM
-            code = self._generate_template_code(name, signature, requirements)
-        else:
-            # Use LLM for code generation (placeholder)
+        # Try LLM-based code generation first
+        code = None
+        try:
+            from brain.ollama_client import chat
             prompt = self._build_code_generation_prompt(name, signature, requirements, examples)
-            # code = self.llm_client.generate(prompt)
+            result = chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2, max_retries=1,
+            )
+            generated = result.get("content", "").strip()
+            # Extract code block if wrapped in markdown
+            if "```python" in generated:
+                generated = generated.split("```python", 1)[1].split("```", 1)[0].strip()
+            elif "```" in generated:
+                generated = generated.split("```", 1)[1].split("```", 1)[0].strip()
+            if generated:
+                valid, _ = self.validate_code(generated)
+                if valid:
+                    code = generated
+                    logger.info(f"LLM generated valid code for skill '{name}'")
+        except Exception as e:
+            logger.debug(f"LLM code generation failed for '{name}': {e}")
+
+        if code is None:
             code = self._generate_template_code(name, signature, requirements)
         
         self._generated_code_cache[cache_key] = code
@@ -245,10 +262,8 @@ def {name}({params_def}) -> {signature.return_type}:
     Returns:
         {signature.return_type}
     """
-    # TODO: Implement logic based on requirements
-    # Requirements: {requirements}
-    
-    # Example implementation placeholder
+    # Auto-generated template — implement logic per requirements:
+    # {requirements}
     result = {{}}
     
     # Process inputs
@@ -526,8 +541,8 @@ class DynamicSkillSynthesizer:
                     if_eval = op.get('if_true', [])
                     else_eval = op.get('if_false', [])
                     
-                    # Evaluate condition (simplified)
-                    condition_met = True  # Placeholder
+                    # Evaluate condition against current context
+                    condition_met = bool(context.get(condition)) if condition else True
                     sub_ops = if_eval if condition_met else else_eval
                     
                     for sub_op in sub_ops:
