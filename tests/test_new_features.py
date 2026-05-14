@@ -173,13 +173,6 @@ class TestPlatformAbstraction:
         p = PlatformAbstraction()
         assert p is not None
 
-    def test_process_manager_lists_processes(self):
-        from tools.process_manager import process_manager
-        r = process_manager(action="list")
-        assert r.get("success")
-        assert "processes" in r
-        assert r["count"] > 0
-
     def test_control_window_lists_windows(self):
         from tools.control_window import list_windows
         r = list_windows()

@@ -1,13 +1,13 @@
-"""skills.stdlib.system — processes, system settings, app launch/install."""
-import logging
+"""skills.stdlib.system — volume and brightness control.
 
-from tools.process_manager import process_manager
-from tools.system_settings import system_settings
-from tools.install_app import install_app
+Other system tasks (process management, system settings, app install) should
+be handled by the LLM writing PowerShell/Python code via exec(run).
+"""
+import logging
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["process_manager", "system_settings", "install_app", "volume_mute_then_set", "brightness_set_robust"]
+__all__ = ["volume_mute_then_set", "brightness_set_robust"]
 
 
 def volume_mute_then_set(target_level: int) -> dict:

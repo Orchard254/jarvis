@@ -209,11 +209,11 @@ memory(action,...)    Persistent facts: store(key+value), recall(key), search(qu
 "search google for cats" → browser(action="navigate", url="https://www.google.com/search?q=cats")
 "press ctrl+s"           → input(action="hotkey", keys="ctrl+s")
 
-STDLIB (import inside exec run — LAST RESORT only, prefer screen/input/window/browser):
-  from skills.stdlib.system import process_manager, system_settings, install_app
-  from skills.stdlib.filesystem import read_file, write_file, file_ops
-  from skills.stdlib.web import search_web, fetch_url
-  from skills.stdlib.messaging import send_email, send_telegram
+STDLIB (import inside exec run — LAST RESORT, prefer screen/input/window/browser):
+  from skills.stdlib.system import volume_mute_then_set, brightness_set_robust
+  from skills.stdlib.messaging import notify
+For everything else (process management, file ops, web fetch, email, etc.)
+write the code yourself — you're a 120B parameter model, you know how.
 
 === BACKGROUND TASKS ==========================================
 For long operations: exec(action="run", background=True, code="...") returns a PID.

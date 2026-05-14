@@ -100,11 +100,7 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
         general = [
             v for v in all_insights
             if not any(t in v.lower() for t in [
-                "read_pc_state", "execute_code", "vision_query",
-                "capture_screen", "control_window", "control_input", "find_on_screen",
-                "file_ops", "web_search", "notify_user",
-                "ask_user", "schedule", "memory", "speak",
-                "browser",
+                "screen", "input", "window", "browser", "exec", "memory",
             ])
         ]
         return general[-max_insights:] if general else all_insights[-max_insights:]
@@ -125,11 +121,7 @@ def get_relevant_insights(suggested_tools: list[str], max_insights: int = 3) -> 
         # OR if it doesn't mention any specific tool (general advice)
         mentions_tools = any(
             t in insight_lower
-            for t in ["read_pc_state", "execute_code", "vision_query",
-                     "capture_screen", "control_window", "control_input", "find_on_screen",
-                     "file_ops", "web_search", "notify_user", "time_calendar",
-                     "ask_user", "schedule", "memory", "speak",
-                     "browser"]
+            for t in ["screen", "input", "window", "browser", "exec", "memory"]
         )
 
         if not mentions_tools or tools_in_insight:
