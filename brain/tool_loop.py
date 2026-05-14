@@ -88,26 +88,15 @@ def _execute_step(
 
 
 def _build_step_batches(steps: list[dict]) -> list[list[dict]]:
-    """Group plan steps into sequential batches. Steps with no deps_on
-    field (or deps_on=[]) that are adjacent can run in parallel."""
-    batches: list[list[dict]] = []
-    current_batch: list[dict] = []
+    """Group plan steps into sequential batches.
 
-    for step in steps:
-        has_deps = bool(step.get("deps_on"))
-        if has_deps:
-            # Dependent step must run alone after previous batch
-            if current_batch:
-                batches.append(current_batch)
-                current_batch = []
-            batches.append([step])
-        else:
-            current_batch.append(step)
-
-    if current_batch:
-        batches.append(current_batch)
-
-    return batches if batches else [[s] for s in steps]
+    Desktop operations almost always have implicit ordering dependencies
+    (e.g. you must open an app before typing into it).  To prevent race
+    conditions, every step runs sequentially by default.  Only steps
+    explicitly marked with ``parallel=True`` AND sharing the same
+    ``batch_with`` key may run in the same batch.
+    """
+    return [[s] for s in steps]
 
 
 def run_with_plan(

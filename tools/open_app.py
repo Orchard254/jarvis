@@ -127,11 +127,16 @@ def _is_running(app_name: str) -> tuple[bool, int | None]:
 
 
 def _focus_existing(name: str) -> bool:
-    """Find and focus an existing window matching *name*. Returns True on success."""
+    """Find and focus an existing window matching *name*. Returns True on success.
+
+    Searches ALL windows (including minimized/hidden ones) because apps like
+    AnyDesk or UltraViewer often run in the system tray with no visible window.
+    """
     try:
         import pygetwindow as gw
 
         name_lower = name.lower()
+        # First pass: visible windows with matching title
         for w in gw.getAllWindows():
             if w.visible and w.title and name_lower in w.title.lower():
                 try:
@@ -144,8 +149,49 @@ def _focus_existing(name: str) -> bool:
                     except Exception as e:
                         logger.debug(f"activate failed: {e}")
                     return True
+
+        # Second pass: include hidden/minimized windows (system tray apps)
+        for w in gw.getAllWindows():
+            if w.title and name_lower in w.title.lower():
+                try:
+                    w.restore()
+                    w.activate()
+                    return True
+                except Exception as e:
+                    logger.debug(f"restore+activate hidden window failed: {e}")
     except ImportError:
         pass
+
+    # Third attempt: use Win32 API to find and show the window
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            # FindWindow with partial match via EnumWindows
+            import ctypes.wintypes as wt
+
+            found_hwnd = [None]
+
+            @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+            def _enum_cb(hwnd, _lparam):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    if name_lower in buf.value.lower():
+                        found_hwnd[0] = hwnd
+                        return False  # stop enumeration
+                return True
+
+            user32.EnumWindows(_enum_cb, 0)
+            if found_hwnd[0]:
+                SW_RESTORE = 9
+                user32.ShowWindow(found_hwnd[0], SW_RESTORE)
+                user32.SetForegroundWindow(found_hwnd[0])
+                return True
+        except Exception as e:
+            logger.debug(f"Win32 focus attempt failed: {e}")
 
     if _HAS_PLATFORM:
         try:
