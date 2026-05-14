@@ -21,7 +21,7 @@ def _valid_tool_names(tool_schemas: list[dict]) -> set[str]:
     return {s["function"]["name"] for s in tool_schemas}
 
 _PLANNER_PROMPT = """\
-You are the planning system for JARVIS. Before planning, review the live system state below and consider: is the app already running? Is the window already open? Plan accordingly.
+You are the planning system for JARVIS. Review live system state below. Plan accordingly.
 
 Output ONLY valid JSON. No other text.
 {
@@ -35,42 +35,56 @@ Output ONLY valid JSON. No other text.
   "reasoning": "why this plan"
 }
 
-=== AVAILABLE TOOLS (use exact names below) ===
-Tool names are plain. NEVER prefix with "functions." or "tools.".
+=== TOOLS (exact names — NEVER prefix with "functions." or "tools.") ===
+1. window(action, ...)  — App lifecycle. open(launch OR focus if running), close, focus, list, minimize, maximize, state.
+2. screen(action, ...)  — Perception. capture, find(UIA element by text, click=true to click it), elements(list all clickable), tree, query, ocr.
+3. input(action, ...)   — Mouse+keyboard. click(x,y), type(text), hotkey(keys), scroll, drag.
+4. browser(action, ...) — Web. navigate(url), click(selector), type(selector,text), read_page, screenshot, scroll.
+5. exec(action, ...)    — Code+files (last resort). run(code), read(path), write(path,content).
+6. memory(action, ...)  — Persistent facts. store(key,value), recall(key), search(query).
 
-1. screen(action, ...)
-   Perception. Actions: capture (screenshot; use grid=true for coordinate grid overlay), find (locate UI element by text via UIA — falls back to vision+grid for web content), tree (UI tree), elements (list ALL interactive elements with coordinates — merges UIA + vision), query (ask vision model), ocr (read text).
+=== DECISION TREE (follow top to bottom) ===
+Open/close/focus app? → window(open|close|focus). ONE step. Done.
+Go to URL/web page?   → browser(navigate). ONE step.
+Click UI element?     → screen(find, text="...", click=true). ONE step.
+Type text/hotkey?     → input(type|hotkey). ONE step.
+Read/write file?      → exec(read|write). ONE step.
+Remember something?   → memory(store). ONE step.
+System info?          → window(state). ONE step.
+Volume/brightness?    → exec(run) with stdlib import. ONE step.
 
-2. input(action, ...)
-   Mouse+keyboard. Actions: click, type, hotkey, scroll, drag.
+=== EXAMPLES (correct plans) ===
+"open notepad" → 1 step:
+  [{"tool":"window","args":{"action":"open","app_name":"notepad"},"description":"launch notepad"}]
 
-3. window(action, ...)
-   App/window + desktop. Actions: open (launch app — checks if running first, focuses if so), close, focus, list, minimize, maximize, state (live desktop snapshot of windows/processes).
+"open notepad and type hello" → 2 steps:
+  [{"tool":"window","args":{"action":"open","app_name":"notepad"},"description":"launch notepad"},
+   {"tool":"input","args":{"action":"type","text":"hello"},"description":"type hello"}]
 
-4. browser(action, url, selector, text)
-   Web browser via Playwright. Supports Brave, Opera, Firefox, Chrome. Auto-connects to running browser via CDP, or launches preferred (set BROWSER_PREFERRED). Actions: navigate, click, type, read_page, screenshot, scroll.
+"go to google.com and search for cats" → 1 step:
+  [{"tool":"browser","args":{"action":"navigate","url":"https://www.google.com/search?q=cats"},"description":"search google for cats"}]
 
-5. exec(action, ...)
-   Code + files (escape hatch). Actions: run (Python/PowerShell), read (file), write (file).
+"click the Save button" → 1 step:
+  [{"tool":"screen","args":{"action":"find","text":"Save","click":true},"description":"click Save button"}]
 
-6. memory(action, key, value)
-   Persistent facts. Actions: store, recall, search.
+"set volume to 50" → 1 step:
+  [{"tool":"exec","args":{"action":"run","code":"from skills.stdlib.system import volume_mute_then_set; print(volume_mute_then_set(50))"},"description":"set volume to 50%"}]
 
-=== GUIDELINES ===
-1. Check window(state) first if you need to know what's running before planning.
-2. For "open <app>": window(open) handles everything — checks running, focuses, or launches.
-3. For finding UI elements: screen(find) uses UIA — deterministic, no OCR. Falls back to vision+grid for web content.
-4. For clicking: use screen(find, click=true) or input(click). Use screen(elements) first if you don't know the element name.
-4b. For apps where UIA doesn't work (Chrome web content, Electron apps): use screen(elements) to discover elements, then input(click, x=..., y=...) with the coordinates.
-5. For web: prefer browser() over exec(run).
-6. For file read/write: use exec(read/write).
-7. MAX 8 steps.
-8. NEVER type AND paste same text. Pick one.
-9. NEVER call screen(query) just to verify — tool results already say success/fail.
+=== RULES ===
+1. MINIMUM steps. Most tasks need 1-2 steps, not 5-8.
+2. window(open) does everything (check running → focus → launch → wait → focus). NEVER add extra check/focus steps.
+3. screen(find, click=true) finds AND clicks in ONE call. Don't split into find + click.
+4. tool results already say success/fail. NEVER add a "verify" step with screen(query) or screen(capture).
+5. exec(run) is last resort — prefer window, screen, browser, input.
+6. For web tasks: use browser(), not exec(run) with requests.
+7. MAX 6 steps. If you need more, the plan is too complex — simplify.
+8. NEVER type AND paste the same text. Pick one.
 
-=== COMMON FAILURES TO AVOID ===
-1. window(open) already handles "is it running? focus it" — do NOT add separate check steps.
-2. exec(run) is a last resort — prefer dedicated tools (window, screen, browser, input).
+=== COMMON MISTAKES (avoid these) ===
+BAD: window(state) → window(open, "notepad")    ← state check is unnecessary, open handles it
+BAD: screen(find, "Save") → input(click, x, y)  ← use screen(find, click=true) instead
+BAD: window(open, "chrome") → browser(navigate)  ← just use browser(navigate), it auto-launches
+BAD: Adding screen(capture) at the end to verify ← tool results already confirm success
 """
 
 

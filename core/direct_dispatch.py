@@ -85,11 +85,49 @@ _register(
     "Read a file",
 )
 
+# ── Type text ─────────────────────────────────────────────────────────────────
+_register(
+    r"^(?:type|write|enter)\s+[\"'](.+)[\"']$",
+    "type_text",
+    "Type text",
+)
+
+# ── Keyboard shortcuts ───────────────────────────────────────────────────────
+_register(
+    r"^(?:press|hit|send)\s+((?:ctrl|alt|shift|win|super|f\d+|enter|escape|tab|delete|backspace|space|home|end|pageup|pagedown|volumeup|volumedown|volumemute)(?:\+(?:ctrl|alt|shift|win|super|[a-z0-9]|f\d+|enter|escape|tab|delete|backspace|space))*)\s*$",
+    "hotkey",
+    "Press keyboard shortcut",
+)
+
 # ── System state ─────────────────────────────────────────────────────────────
 _register(
-    r"^(?:what(?:'s| is) running|list (?:windows|apps)|show (?:windows|apps))$",
+    r"^(?:what(?:'s| is) running|list (?:windows|apps)|show (?:windows|apps)|show desktop)$",
     "window_list",
     "List running windows",
+)
+
+# ── System info ──────────────────────────────────────────────────────────────
+_register(
+    r"^(?:what(?:'s| is) the )?(?:time|date|day)(?:\?)?$",
+    "time_check",
+    "Check time/date",
+)
+_register(
+    r"^(?:what(?:'s| is)(?:\s+the)? |check |show )?(?:system ?info|system ?status|hardware|ram|cpu|memory|disk ?space|battery)\s*(?:\?)?$",
+    "system_info",
+    "Check system info",
+)
+
+# ── Volume with words ────────────────────────────────────────────────────────
+_register(
+    r"^(?:turn\s+)?(?:volume\s+)?(?:up|louder)$",
+    "volume_up",
+    "Increase volume",
+)
+_register(
+    r"^(?:turn\s+)?(?:volume\s+)?(?:down|quieter|softer)$",
+    "volume_down",
+    "Decrease volume",
 )
 
 
@@ -144,6 +182,21 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
         return {"tool": "exec", "args": {"action": "read", "path": target}}
     elif action_key == "window_list":
         return {"tool": "window", "args": {"action": "list"}}
+    elif action_key == "type_text":
+        return {"tool": "input", "args": {"action": "type", "text": target}}
+    elif action_key == "hotkey":
+        return {"tool": "input", "args": {"action": "hotkey", "keys": target.lower()}}
+    elif action_key == "time_check":
+        return {"tool": "exec", "args": {
+            "action": "run",
+            "code": "import datetime; now = datetime.datetime.now(); print(f'{now:%A, %B %d, %Y at %I:%M %p}')",
+        }}
+    elif action_key == "system_info":
+        return {"tool": "window", "args": {"action": "state"}}
+    elif action_key == "volume_up":
+        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumeup"}}
+    elif action_key == "volume_down":
+        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumedown"}}
 
     return None
 
