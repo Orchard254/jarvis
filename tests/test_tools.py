@@ -305,31 +305,18 @@ def test_direct_dispatch_no_match():
         assert pattern.match("write a python script that sorts numbers") is None
 
 
-def test_direct_dispatch_browser_url():
-    """Direct dispatch should match URL navigation."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
+def test_direct_dispatch_url_falls_through():
+    """URLs should NOT match direct dispatch — let the LLM handle them."""
+    from core.direct_dispatch import _PATTERNS
     for pattern, action_key, _ in _PATTERNS:
         m = pattern.match("go to https://google.com")
-        if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "browser"
-            assert call["args"]["url"] == "https://google.com"
-            return
-    pytest.fail("No pattern matched URL navigation")
+        if m and action_key.startswith("window"):
+            pytest.fail("URL should not match a window pattern")
 
-
-def test_direct_dispatch_open_url_routes_to_browser():
-    """'open https://...' should route to browser, not window."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
     for pattern, action_key, _ in _PATTERNS:
         m = pattern.match("open https://google.com")
-        if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
-            return
-    pytest.fail("No pattern matched 'open https://google.com'")
+        if m and action_key == "window_open":
+            pytest.fail("URL should not match window_open")
 
 
 def test_direct_dispatch_hotkey():
@@ -347,19 +334,13 @@ def test_direct_dispatch_hotkey():
     pytest.fail("No pattern matched 'press ctrl+s'")
 
 
-def test_direct_dispatch_type_text():
-    """Direct dispatch should match 'type \"hello\"' pattern."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
+def test_direct_dispatch_type_falls_through():
+    """'type' commands should NOT match direct dispatch — let the LLM handle them."""
+    from core.direct_dispatch import _PATTERNS
     for pattern, action_key, _ in _PATTERNS:
         m = pattern.match('type "hello world"')
         if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "input"
-            assert call["args"]["action"] == "type"
-            assert call["args"]["text"] == "hello world"
-            return
-    pytest.fail("No pattern matched 'type \"hello world\"'")
+            pytest.fail("type command should fall through to LLM")
 
 
 def test_direct_dispatch_volume_up():
@@ -376,20 +357,6 @@ def test_direct_dispatch_volume_up():
     pytest.fail("No pattern matched 'volume up'")
 
 
-def test_direct_dispatch_search():
-    """Direct dispatch should match 'search for cats' pattern."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
-    for pattern, action_key, _ in _PATTERNS:
-        m = pattern.match("search for cats")
-        if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "browser"
-            assert "cats" in call["args"]["url"]
-            return
-    pytest.fail("No pattern matched 'search for cats'")
-
-
 def test_direct_dispatch_compound_falls_through():
     """'open notepad and type hello' should NOT match direct dispatch."""
     from core.direct_dispatch import _PATTERNS
@@ -399,31 +366,22 @@ def test_direct_dispatch_compound_falls_through():
             pytest.fail("Compound command should not match window_open")
 
 
-def test_direct_dispatch_bare_domain():
-    """'go to google.com' should route to browser, not window focus."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
+def test_direct_dispatch_search_falls_through():
+    """'search for cats' should NOT match direct dispatch — let LLM handle it."""
+    from core.direct_dispatch import _PATTERNS
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("search for cats")
+        if m:
+            pytest.fail("search command should fall through to LLM")
+
+
+def test_direct_dispatch_go_to_falls_through():
+    """'go to google.com' should NOT match direct dispatch — let LLM handle it."""
+    from core.direct_dispatch import _PATTERNS
     for pattern, action_key, _ in _PATTERNS:
         m = pattern.match("go to google.com")
         if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
-            assert "google.com" in call["args"]["url"]
-            return
-    pytest.fail("No pattern matched 'go to google.com'")
-
-
-def test_direct_dispatch_go_to_youtube():
-    """'go to youtube.com' should route to browser."""
-    from core.direct_dispatch import _PATTERNS, _build_tool_call
-    for pattern, action_key, _ in _PATTERNS:
-        m = pattern.match("go to youtube.com")
-        if m:
-            call = _build_tool_call(action_key, m)
-            assert call is not None
-            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
-            return
-    pytest.fail("No pattern matched 'go to youtube.com'")
+            pytest.fail("'go to' should fall through to LLM")
 
 
 # ── Tool Result Cache Tests ──────────────────────────────────────────────────

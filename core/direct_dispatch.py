@@ -1,8 +1,16 @@
 """
-Direct dispatch for common commands that don't need LLM planning.
+Direct dispatch for trivial single-action commands.
 
-Pattern-matches frequent user intents and maps them directly to tool calls,
-bypassing the full LLM loop for ~10x latency reduction on simple commands.
+Only handles commands that are 100% unambiguous and can never be misrouted:
+  - "open <app>"  (single word app names only, no compound sentences)
+  - "close/minimize/maximize <window>"
+  - "screenshot"
+  - volume controls
+  - "press <shortcut>"
+  - "mute" / "unmute"
+  - time/date checks
+
+Everything else goes to the LLM — it has the knowledge to figure it out.
 
 Returns None when no pattern matches → falls through to the LLM planner.
 """
@@ -13,9 +21,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Each pattern: (compiled_regex, handler_function_name)
-# Handlers return a dict with {"tool": ..., "args": ...} for single-step execution.
-
 _PATTERNS: list[tuple[re.Pattern, str, str]] = []
 
 
@@ -24,45 +29,30 @@ def _register(pattern: str, tool: str, description: str):
     _PATTERNS.append((re.compile(pattern, re.IGNORECASE), tool, description))
 
 
-# ── Browser navigation (MUST come before window patterns so URLs are caught first)
-_register(
-    r"^(?:go to|open|navigate to|browse)\s+(https?://\S+)$",
-    "browser_navigate",
-    "Navigate to URL",
-)
-# "go to X.com" or "go to X.org" etc. — bare domain without scheme
-_register(
-    r"^(?:go to|navigate to|browse)\s+(\S+\.(?:com|org|net|io|dev|edu|gov|co|me|app|ai|info|biz|us|uk|xyz|site|online|tech|store|cloud)\S*)$",
-    "browser_navigate_bare",
-    "Navigate to URL",
-)
-
 # ── Window management ────────────────────────────────────────────────────────
-# Reject compound commands containing " and " — those need the LLM planner.
+# Only match simple "open <appname>" — single app name (1-3 words, no
+# conjunctions like "and", "then", "to", "in").  Anything more complex
+# goes to the LLM.
+_APP_NAME = r"((?:(?!\b(?:and|then|to|in|on|with|for)\b)[a-zA-Z0-9_\-])+(?:\s+(?:(?!\b(?:and|then|to|in|on|with|for)\b)[a-zA-Z0-9_\-])+){0,2})"
 _register(
-    r"^(?:open|launch|start)\s+(?!https?://)((?:(?!\band\b).)+)$",
+    rf"^(?:open|launch|start)\s+{_APP_NAME}$",
     "window_open",
     "Open/launch an application",
 )
 _register(
-    r"^(?:close|quit|exit)\s+((?:(?!\band\b).)+)$",
+    rf"^(?:close|quit|exit)\s+{_APP_NAME}$",
     "window_close",
     "Close a window/application",
 )
 _register(
-    r"^(?:minimize)\s+((?:(?!\band\b).)+)$",
+    rf"^minimize\s+{_APP_NAME}$",
     "window_minimize",
     "Minimize a window",
 )
 _register(
-    r"^(?:maximize)\s+((?:(?!\band\b).)+)$",
+    rf"^maximize\s+{_APP_NAME}$",
     "window_maximize",
     "Maximize a window",
-)
-_register(
-    r"^(?:focus|switch to|activate)\s+((?:(?!\band\b).)+)$",
-    "window_focus",
-    "Focus/switch to a window",
 )
 
 # ── Volume ────────────────────────────────────────────────────────────────────
@@ -72,61 +62,6 @@ _register(
     "Set system volume",
 )
 _register(r"^(?:mute|unmute)(?:\s+audio)?$", "volume_toggle", "Mute/unmute")
-
-# ── Screenshots ──────────────────────────────────────────────────────────────
-_register(
-    r"^(?:take\s+a?\s*)?screenshot$",
-    "screen_capture",
-    "Take a screenshot",
-)
-
-_register(
-    r"^(?:search|google|look up|search for)\s+(.+)$",
-    "browser_search",
-    "Web search",
-)
-
-# ── File operations ──────────────────────────────────────────────────────────
-_register(
-    r"^(?:read|show|cat|display)\s+(?:file\s+)?(.+)$",
-    "file_read",
-    "Read a file",
-)
-
-# ── Type text ─────────────────────────────────────────────────────────────────
-_register(
-    r"^(?:type|write|enter)\s+[\"'](.+)[\"']$",
-    "type_text",
-    "Type text",
-)
-
-# ── Keyboard shortcuts ───────────────────────────────────────────────────────
-_register(
-    r"^(?:press|hit|send)\s+((?:ctrl|alt|shift|win|super|f\d+|enter|escape|tab|delete|backspace|space|home|end|pageup|pagedown|volumeup|volumedown|volumemute)(?:\+(?:ctrl|alt|shift|win|super|[a-z0-9]|f\d+|enter|escape|tab|delete|backspace|space))*)\s*$",
-    "hotkey",
-    "Press keyboard shortcut",
-)
-
-# ── System state ─────────────────────────────────────────────────────────────
-_register(
-    r"^(?:what(?:'s| is) running|list (?:windows|apps)|show (?:windows|apps)|show desktop)$",
-    "window_list",
-    "List running windows",
-)
-
-# ── System info ──────────────────────────────────────────────────────────────
-_register(
-    r"^(?:what(?:'s| is) the )?(?:time|date|day)(?:\?)?$",
-    "time_check",
-    "Check time/date",
-)
-_register(
-    r"^(?:what(?:'s| is)(?:\s+the)? |check |show )?(?:system ?info|system ?status|hardware|ram|cpu|memory|disk ?space|battery)\s*(?:\?)?$",
-    "system_info",
-    "Check system info",
-)
-
-# ── Volume with words ────────────────────────────────────────────────────────
 _register(
     r"^(?:turn\s+)?(?:volume\s+)?(?:up|louder)$",
     "volume_up",
@@ -136,6 +71,27 @@ _register(
     r"^(?:turn\s+)?(?:volume\s+)?(?:down|quieter|softer)$",
     "volume_down",
     "Decrease volume",
+)
+
+# ── Screenshots ──────────────────────────────────────────────────────────────
+_register(
+    r"^(?:take\s+a?\s*)?screenshot$",
+    "screen_capture",
+    "Take a screenshot",
+)
+
+# ── Keyboard shortcuts ───────────────────────────────────────────────────────
+_register(
+    r"^(?:press|hit)\s+((?:ctrl|alt|shift|win|super|f\d+|enter|escape|tab|delete|backspace|space|home|end|pageup|pagedown|volumeup|volumedown|volumemute)(?:\+(?:ctrl|alt|shift|win|super|[a-z0-9]|f\d+|enter|escape|tab|delete|backspace|space))*)\s*$",
+    "hotkey",
+    "Press keyboard shortcut",
+)
+
+# ── Time/date ────────────────────────────────────────────────────────────────
+_register(
+    r"^(?:what(?:'s| is) the )?(?:time|date|day)(?:\?)?$",
+    "time_check",
+    "Check time/date",
 )
 
 
@@ -152,11 +108,6 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
         return {"tool": "window", "args": {"action": "minimize", "window_title": target}}
     elif action_key == "window_maximize":
         return {"tool": "window", "args": {"action": "maximize", "window_title": target}}
-    elif action_key == "window_focus":
-        return {"tool": "window", "args": {"action": "focus", "window_title": target}}
-    elif action_key == "browser_navigate_bare":
-        url = target if target.startswith("http") else f"https://{target}"
-        return {"tool": "browser", "args": {"action": "navigate", "url": url}}
     elif action_key == "volume_set":
         try:
             level = int(target)
@@ -182,19 +133,12 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
             return None
     elif action_key == "volume_toggle":
         return {"tool": "input", "args": {"action": "hotkey", "keys": "volumemute"}}
+    elif action_key == "volume_up":
+        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumeup"}}
+    elif action_key == "volume_down":
+        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumedown"}}
     elif action_key == "screen_capture":
         return {"tool": "screen", "args": {"action": "capture"}}
-    elif action_key == "browser_navigate":
-        return {"tool": "browser", "args": {"action": "navigate", "url": target}}
-    elif action_key == "browser_search":
-        url = f"https://www.google.com/search?q={target.replace(' ', '+')}"
-        return {"tool": "browser", "args": {"action": "navigate", "url": url}}
-    elif action_key == "file_read":
-        return {"tool": "exec", "args": {"action": "read", "path": target}}
-    elif action_key == "window_list":
-        return {"tool": "window", "args": {"action": "list"}}
-    elif action_key == "type_text":
-        return {"tool": "input", "args": {"action": "type", "text": target}}
     elif action_key == "hotkey":
         return {"tool": "input", "args": {"action": "hotkey", "keys": target.lower()}}
     elif action_key == "time_check":
@@ -202,12 +146,6 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
             "action": "run",
             "code": "import datetime; now = datetime.datetime.now(); print(f'{now:%A, %B %d, %Y at %I:%M %p}')",
         }}
-    elif action_key == "system_info":
-        return {"tool": "window", "args": {"action": "state"}}
-    elif action_key == "volume_up":
-        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumeup"}}
-    elif action_key == "volume_down":
-        return {"tool": "input", "args": {"action": "hotkey", "keys": "volumedown"}}
 
     return None
 
