@@ -143,7 +143,7 @@ def _require_page():
         )
 
 
-def _ensure_alive():
+def _ensure_alive(timeout: int = 30000):
     """Re-launch if browser or page is dead. Call before every action."""
     global _playwright, _browser, _page
     if _browser is not None:
@@ -162,28 +162,84 @@ def _ensure_alive():
         except Exception:
             logger.warning("browser: existing session is dead — relaunching")
             _do_close()
-    _do_launch(30000)
+    _do_launch(timeout)
 
 
-def _try_connect_cdp() -> bool:
-    """Try connecting to an existing Chrome instance via CDP.
+# ── Multi-browser support ────────────────────────────────────────────────────
+# Browser executable paths on Windows (checked in order for "auto" preference)
+_BROWSER_PATHS = {
+    "brave": [
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+    ],
+    "opera": [
+        r"C:\Users\{user}\AppData\Local\Programs\Opera\opera.exe",
+        r"C:\Program Files\Opera\opera.exe",
+        r"C:\Program Files (x86)\Opera\opera.exe",
+    ],
+    "firefox": [
+        r"C:\Program Files\Mozilla Firefox\firefox.exe",
+        r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+    ],
+    "chrome": [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ],
+}
 
-    Chrome must be started with --remote-debugging-port=9222 for this to work.
-    This is preferred because it controls the user's actual browser session
-    rather than launching a separate isolated instance.
+# Browsers that support Chromium CDP (Playwright connect_over_cdp)
+_CHROMIUM_BROWSERS = {"brave", "opera", "chrome"}
+
+# Order for "auto" preference
+_AUTO_ORDER = ["brave", "opera", "firefox", "chrome"]
+
+
+def _find_browser_exe(browser_name: str) -> str | None:
+    """Find the executable path for a browser on the system."""
+    import os
+    paths = _BROWSER_PATHS.get(browser_name, [])
+    username = os.environ.get("USERNAME", os.environ.get("USER", ""))
+    for path in paths:
+        resolved = path.replace("{user}", username)
+        if os.path.isfile(resolved):
+            return resolved
+    # Try shutil.which as fallback (works if browser is on PATH)
+    import shutil
+    exe_names = {
+        "brave": ["brave", "brave-browser"],
+        "opera": ["opera"],
+        "firefox": ["firefox"],
+        "chrome": ["chrome", "google-chrome", "google-chrome-stable"],
+    }
+    for name in exe_names.get(browser_name, [browser_name]):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def _try_connect_cdp(port: int = None) -> bool:
+    """Try connecting to a running browser via CDP.
+
+    Works with any Chromium-based browser (Chrome, Brave, Opera, Edge)
+    started with --remote-debugging-port=<port>.
     """
     global _playwright, _browser, _page
+    if port is None:
+        from settings import BROWSER_CDP_PORT
+        port = BROWSER_CDP_PORT
+
+    pw_was_none = _playwright is None
     try:
         import requests as _req
-        # Check if CDP endpoint is reachable
-        resp = _req.get("http://localhost:9222/json/version", timeout=2)
+        resp = _req.get(f"http://localhost:{port}/json/version", timeout=2)
         if resp.status_code != 200:
             return False
 
         if _playwright is None:
             _playwright = sync_playwright().__enter__()
 
-        _browser = _playwright.chromium.connect_over_cdp("http://localhost:9222")
+        _browser = _playwright.chromium.connect_over_cdp(f"http://localhost:{port}")
         contexts = _browser.contexts
         if contexts and contexts[0].pages:
             _page = contexts[0].pages[0]
@@ -191,10 +247,84 @@ def _try_connect_cdp() -> bool:
             ctx = _browser.new_context() if not contexts else contexts[0]
             _page = ctx.new_page()
 
-        logger.info("browser: connected to existing Chrome via CDP (port 9222)")
+        browser_info = resp.json().get("Browser", "unknown")
+        logger.info(f"browser: connected via CDP port {port} ({browser_info})")
         return True
     except Exception as e:
-        logger.debug(f"CDP connection failed: {e}")
+        logger.debug(f"CDP connection on port {port} failed: {e}")
+        # Clean up Playwright if we created it during this attempt
+        if pw_was_none and _playwright is not None:
+            try:
+                _playwright.__exit__(None, None, None)
+            except Exception:
+                pass
+            _playwright = None
+        _browser = None
+        _page = None
+        return False
+
+
+def _launch_firefox(timeout: int = 30000) -> bool:
+    """Launch Firefox with Playwright (uses its own protocol, not CDP)."""
+    global _playwright, _browser, _page
+    try:
+        if _playwright is None:
+            _playwright = sync_playwright().__enter__()
+        _browser = _playwright.firefox.launch(headless=False)
+        _page = _browser.new_page()
+        _page.set_default_timeout(timeout)
+        logger.info("browser: launched Firefox via Playwright")
+        return True
+    except Exception as e:
+        logger.debug(f"Firefox launch failed: {e}")
+        if _browser is not None:
+            try:
+                _browser.close()
+            except Exception:
+                pass
+            _browser = None
+            _page = None
+        return False
+
+
+def _launch_chromium_browser(browser_name: str, timeout: int = 30000) -> bool:
+    """Launch a Chromium-based browser (Brave, Opera, Chrome) via Playwright."""
+    global _playwright, _browser, _page
+
+    # Playwright channel mapping
+    channel_map = {
+        "chrome": "chrome",
+        "brave": None,  # no built-in channel — use executable_path
+        "opera": None,
+    }
+
+    try:
+        if _playwright is None:
+            _playwright = sync_playwright().__enter__()
+
+        channel = channel_map.get(browser_name)
+        if channel:
+            _browser = _playwright.chromium.launch(headless=False, channel=channel)
+        else:
+            exe = _find_browser_exe(browser_name)
+            if not exe:
+                return False
+            _browser = _playwright.chromium.launch(
+                headless=False, executable_path=exe,
+            )
+        _page = _browser.new_page()
+        _page.set_default_timeout(timeout)
+        logger.info(f"browser: launched {browser_name}")
+        return True
+    except Exception as e:
+        logger.debug(f"{browser_name} launch failed: {e}")
+        if _browser is not None:
+            try:
+                _browser.close()
+            except Exception:
+                pass
+            _browser = None
+            _page = None
         return False
 
 
@@ -206,19 +336,36 @@ def _do_launch(timeout: int = 30000):
         logger.warning("browser: existing session is dead — relaunching")
         _do_close()  # clean up stale globals before fresh launch
 
-    # Try CDP first (connects to user's existing Chrome)
+    from settings import BROWSER_PREFERRED
+
+    # 1. Try CDP first (connects to user's existing browser)
     if _try_connect_cdp():
         if _page:
             _page.set_default_timeout(timeout)
         return
 
-    # Fallback: launch a new Chrome instance
-    _playwright = sync_playwright().__enter__()
-    # Use system Chrome instead of bundled Chromium
-    # channel="chrome" launches the user's installed Chrome browser
-    _browser = _playwright.chromium.launch(headless=False, channel="chrome")
+    # 2. Launch preferred or auto-detected browser
+    pref = BROWSER_PREFERRED.lower().strip()
+    if pref == "auto":
+        order = _AUTO_ORDER
+    else:
+        # Put preferred first, then fall through others
+        order = [pref] + [b for b in _AUTO_ORDER if b != pref]
+
+    for name in order:
+        if name == "firefox":
+            if _launch_firefox(timeout):
+                return
+        elif _launch_chromium_browser(name, timeout):
+            return
+
+    # 3. Last resort: bundled Chromium
+    if _playwright is None:
+        _playwright = sync_playwright().__enter__()
+    _browser = _playwright.chromium.launch(headless=False)
     _page = _browser.new_page()
     _page.set_default_timeout(timeout)
+    logger.info("browser: launched bundled Chromium (no system browser found)")
 
 
 def _do_close():
