@@ -61,19 +61,38 @@ def _type(text: str | None, window_title: str | None = None) -> dict:
         import pyautogui
 
         # Focus the target window before typing
+        focused_title = None
         if window_title:
+            found = False
             try:
                 import pygetwindow as gw
                 for w in gw.getAllWindows():
                     if w.visible and window_title.lower() in (w.title or "").lower():
                         w.activate()
                         time.sleep(0.3)
+                        found = True
+                        focused_title = w.title
                         break
             except Exception as e:
-                logger.debug(f"sleep failed: {e}")
+                logger.debug(f"window focus failed: {e}")
+
+            if not found:
+                return {
+                    "success": False,
+                    "error": f"Cannot type: window '{window_title}' not found. Open the app first.",
+                }
+
+        # Report which window will receive the text
+        if not focused_title:
+            try:
+                import pygetwindow as gw
+                active = gw.getActiveWindow()
+                focused_title = active.title if active else "unknown"
+            except Exception:
+                focused_title = "unknown"
 
         pyautogui.write(text, interval=0.03)
-        return {"success": True, "chars": len(text)}
+        return {"success": True, "chars": len(text), "typed_into": focused_title}
     except Exception as e:
         return {"success": False, "error": f"Type failed: {e}"}
 

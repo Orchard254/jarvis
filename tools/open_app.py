@@ -223,8 +223,8 @@ def open_app(app_name: str) -> dict:
             logger.info(msg)
             return {"success": True, "pid": existing_pid, "action": "focused"}
         logger.warning(f"{msg} — but could not focus window")
-        return {"success": True, "pid": existing_pid, "action": "running_no_focus",
-                "warning": "App is running but no visible window found to focus"}
+        return {"success": False, "pid": existing_pid, "action": "running_no_focus",
+                "error": f"'{app_name}' is running but no visible window could be focused"}
 
     # ── Step 2: Not running — resolve path and launch ────────────────────────
     exe_path = _find_exe_in_index(app_name)
@@ -314,9 +314,9 @@ def open_app(app_name: str) -> dict:
     if not window_seen:
         logger.warning(f"{msg} — no window appeared")
         return {
-            "success": True,
+            "success": False,
             "pid": pid,
-            "warning": f"Process '{app_name}' started but no visible window appeared within timeout",
+            "error": f"Process '{app_name}' started but no visible window appeared — may be in system tray",
             "action": "launched_no_window",
         }
 

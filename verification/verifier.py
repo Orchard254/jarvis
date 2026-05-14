@@ -23,6 +23,18 @@ def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
             "summary": result.get("error") or f"{tool_name} failed.",
         }
 
+    # Check for partial success / warnings that indicate the task didn't fully complete
+    warning = result.get("warning", "")
+    action = result.get("action", "")
+
+    # Window tool: "running but no focus" or "launched but no window" are NOT success
+    if tool_name == "window" and action in ("running_no_focus", "launched_no_window"):
+        return {
+            "status": "FAILED",
+            "method": "action_check",
+            "summary": result.get("error") or warning or f"Window operation incomplete: {action}",
+        }
+
     # For execute_code/exec, cross-check the output AND log for silent failures
     if tool_name in ("execute_code", "exec"):
         # Check tool output for failure signals (e.g., "ERROR:" from launch script)
