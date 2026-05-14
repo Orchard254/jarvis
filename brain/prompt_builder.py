@@ -201,15 +201,15 @@ memory(action,...)    Persistent facts: store(key+value), recall(key), search(qu
 "go to google.com"       → browser(action="navigate", url="https://google.com")
 "click the Save button"  → screen(action="find", text="Save", click=true)
 "type hello world"       → input(action="type", text="hello world")
-"set volume to 50"       → exec(action="run", code="from skills.stdlib.system import volume_mute_then_set; print(volume_mute_then_set(50))")
+"set volume to 50"       → input(action="hotkey", keys="volumeup")  (use media keys, NOT PowerShell/Python scripts)
+"volume up"              → input(action="hotkey", keys="volumeup")
 "create a file test.txt" → exec(action="write", path="C:\\Users\\{{user}}\\Desktop\\test.txt", content="")
 "what apps are running"  → window(action="state")
 "remember my name is X"  → memory(action="store", key="user_name", value="X")
 "search google for cats" → browser(action="navigate", url="https://www.google.com/search?q=cats")
 "press ctrl+s"           → input(action="hotkey", keys="ctrl+s")
 
-STDLIB (import inside exec run — only for things NOT covered by dedicated tools):
-  from skills.stdlib.system import volume_mute_then_set, brightness_set_robust
+STDLIB (import inside exec run — LAST RESORT only, prefer screen/input/window/browser):
   from skills.stdlib.system import process_manager, system_settings, install_app
   from skills.stdlib.filesystem import read_file, write_file, file_ops
   from skills.stdlib.web import search_web, fetch_url

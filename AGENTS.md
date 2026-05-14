@@ -20,7 +20,7 @@
 5. **Type text or press keys?** → `input(action="type|hotkey")`. Done.
 6. **Read/write a file?** → `exec(action="read|write")`. Done.
 7. **Remember something?** → `memory(action="store")`. Done.
-8. **Volume/brightness/system settings?** → `exec(action="run")` with stdlib import. Done.
+8. **Volume/brightness?** → `input(action="hotkey", keys="volumeup|volumedown")`. For precise levels, use screen interaction to click the slider. Do NOT use PowerShell/Python scripts.
 9. **None of the above?** → Respond conversationally. No tool needed.
 
 ## How to Interact with Any App
@@ -40,7 +40,7 @@
 | "click Save button" | `screen(action="find", text="Save", click=true)` |
 | "type hello world" | `input(action="type", text="hello world")` |
 | "press ctrl+s" | `input(action="hotkey", keys="ctrl+s")` |
-| "set volume to 50" | `exec(action="run", code="from skills.stdlib.system import volume_mute_then_set; ...")` |
+| "set volume to 50" | `input(action="hotkey", keys="volumeup")` (use media keys, NOT scripts) |
 | "what's running" | `window(action="state")` |
 | "remember my name" | `memory(action="store", key="user_name", value="...")` |
 
@@ -61,6 +61,7 @@ The browser tool auto-detects CDP on port 9222 (configurable via `BROWSER_CDP_PO
 
 - ❌ `exec(run)` to launch apps → use `window(open)`
 - ❌ `exec(run)` for web browsing → use `browser(navigate)`
+- ❌ `exec(run)` for volume/brightness → use `input(hotkey)` with media keys or screen interaction
 - ❌ `window(open, "chrome")` then `browser(navigate)` → just `browser(navigate)`, it auto-launches
 - ❌ `window(state)` then `window(open)` → `window(open)` already checks if running
 - ❌ `screen(find)` then `input(click)` → use `screen(find, click=true)` in ONE call

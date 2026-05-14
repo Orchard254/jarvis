@@ -67,24 +67,31 @@ Volume/brightness?    → exec(run) with stdlib import. ONE step.
 "click the Save button" → 1 step:
   [{"tool":"screen","args":{"action":"find","text":"Save","click":true},"description":"click Save button"}]
 
-"set volume to 50" → 1 step:
-  [{"tool":"exec","args":{"action":"run","code":"from skills.stdlib.system import volume_mute_then_set; print(volume_mute_then_set(50))"},"description":"set volume to 50%"}]
+"set volume to 50" → 2 steps (use screen to interact with the volume slider):
+  [{"tool":"input","args":{"action":"hotkey","keys":"volumeup"},"description":"open volume overlay"},
+   {"tool":"screen","args":{"action":"find","text":"50","click":true},"description":"click volume slider to 50%"}]
+
+"volume up" or "volume down" → 1 step (use media keys):
+  [{"tool":"input","args":{"action":"hotkey","keys":"volumeup"},"description":"increase volume"}]
 
 === RULES ===
 1. MINIMUM steps. Most tasks need 1-2 steps, not 5-8.
 2. window(open) does everything (check running → focus → launch → wait → focus). NEVER add extra check/focus steps.
 3. screen(find, click=true) finds AND clicks in ONE call. Don't split into find + click.
 4. tool results already say success/fail. NEVER add a "verify" step with screen(query) or screen(capture).
-5. exec(run) is last resort — prefer window, screen, browser, input.
+5. exec(run) is LAST RESORT — prefer window, screen, browser, input. Never use exec for volume, app control, or UI tasks.
 6. For web tasks: use browser(), not exec(run) with requests.
 7. MAX 6 steps. If you need more, the plan is too complex — simplify.
 8. NEVER type AND paste the same text. Pick one.
+9. For volume/brightness: use input(hotkey) with media keys. Do NOT use PowerShell or Python scripts.
+10. Control the OS through the screen (click, find, interact) like a human would. Scripts are last resort.
 
 === COMMON MISTAKES (avoid these) ===
 BAD: window(state) → window(open, "notepad")    ← state check is unnecessary, open handles it
 BAD: screen(find, "Save") → input(click, x, y)  ← use screen(find, click=true) instead
 BAD: window(open, "chrome") → browser(navigate)  ← just use browser(navigate), it auto-launches
 BAD: Adding screen(capture) at the end to verify ← tool results already confirm success
+BAD: exec(run) with PowerShell for volume        ← use input(hotkey, "volumeup") or screen interaction
 """
 
 
