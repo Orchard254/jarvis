@@ -332,6 +332,64 @@ def test_direct_dispatch_open_url_routes_to_browser():
     pytest.fail("No pattern matched 'open https://google.com'")
 
 
+def test_direct_dispatch_hotkey():
+    """Direct dispatch should match 'press ctrl+s' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("press ctrl+s")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "input"
+            assert call["args"]["action"] == "hotkey"
+            assert call["args"]["keys"] == "ctrl+s"
+            return
+    pytest.fail("No pattern matched 'press ctrl+s'")
+
+
+def test_direct_dispatch_type_text():
+    """Direct dispatch should match 'type \"hello\"' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match('type "hello world"')
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "input"
+            assert call["args"]["action"] == "type"
+            assert call["args"]["text"] == "hello world"
+            return
+    pytest.fail("No pattern matched 'type \"hello world\"'")
+
+
+def test_direct_dispatch_volume_up():
+    """Direct dispatch should match 'volume up' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("volume up")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "input"
+            assert call["args"]["keys"] == "volumeup"
+            return
+    pytest.fail("No pattern matched 'volume up'")
+
+
+def test_direct_dispatch_search():
+    """Direct dispatch should match 'search for cats' pattern."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("search for cats")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "browser"
+            assert "cats" in call["args"]["url"]
+            return
+    pytest.fail("No pattern matched 'search for cats'")
+
+
 # ── Tool Result Cache Tests ──────────────────────────────────────────────────
 
 def test_cache_is_cacheable_read_only_tool():
