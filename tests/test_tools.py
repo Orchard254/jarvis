@@ -390,6 +390,42 @@ def test_direct_dispatch_search():
     pytest.fail("No pattern matched 'search for cats'")
 
 
+def test_direct_dispatch_compound_falls_through():
+    """'open notepad and type hello' should NOT match direct dispatch."""
+    from core.direct_dispatch import _PATTERNS
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("open notepad and type hello world")
+        if m and action_key == "window_open":
+            pytest.fail("Compound command should not match window_open")
+
+
+def test_direct_dispatch_bare_domain():
+    """'go to google.com' should route to browser, not window focus."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("go to google.com")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
+            assert "google.com" in call["args"]["url"]
+            return
+    pytest.fail("No pattern matched 'go to google.com'")
+
+
+def test_direct_dispatch_go_to_youtube():
+    """'go to youtube.com' should route to browser."""
+    from core.direct_dispatch import _PATTERNS, _build_tool_call
+    for pattern, action_key, _ in _PATTERNS:
+        m = pattern.match("go to youtube.com")
+        if m:
+            call = _build_tool_call(action_key, m)
+            assert call is not None
+            assert call["tool"] == "browser", f"Expected browser but got {call['tool']}"
+            return
+    pytest.fail("No pattern matched 'go to youtube.com'")
+
+
 # ── Tool Result Cache Tests ──────────────────────────────────────────────────
 
 def test_cache_is_cacheable_read_only_tool():
