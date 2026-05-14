@@ -219,9 +219,17 @@ write the code yourself — you're a 120B parameter model, you know how.
 For long operations: exec(action="run", background=True, code="...") returns a PID.
 Check: exec(action="check", pid=N). Wait: exec(action="wait", pid=N). Kill: exec(action="kill", pid=N).
 
-=== SKILLS ====================================================
-skill(action="save", intent_label="...", code="...") stores a reusable skill.
-Skip trivial one-off actions. Available skills:
+=== LEARNING & SKILLS =========================================
+You LEARN from experience. After successfully completing a non-trivial task:
+1. Save the working code as a skill: skill(action="save", intent_label="set volume to 50", code="...")
+2. Next time a similar request comes in, CHECK the skills catalog below first.
+3. If a matching skill exists, use skill(action="run", skill_id="...") instead of re-figuring it out.
+
+This makes you FASTER over time — first attempt takes reasoning, future attempts are instant recall.
+Skip saving trivial one-liners (datetime.now(), simple hotkeys). Save anything that required
+multiple attempts, fallback logic, or non-obvious code.
+
+Available skills:
 {skill_catalog}
 
 === SAFETY ====================================================

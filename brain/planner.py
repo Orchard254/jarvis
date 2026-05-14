@@ -79,12 +79,13 @@ Volume/brightness?    → exec(run) with stdlib import. ONE step.
 2. window(open) does everything (check running → focus → launch → wait → focus). NEVER add extra check/focus steps.
 3. screen(find, click=true) finds AND clicks in ONE call. Don't split into find + click.
 4. tool results already say success/fail. NEVER add a "verify" step with screen(query) or screen(capture).
-5. exec(run) is LAST RESORT — prefer window, screen, browser, input. Never use exec for volume, app control, or UI tasks.
+5. exec(run) is LAST RESORT — prefer window, screen, browser, input. You can write any code you need.
 6. For web tasks: use browser(), not exec(run) with requests.
 7. MAX 6 steps. If you need more, the plan is too complex — simplify.
 8. NEVER type AND paste the same text. Pick one.
-9. For volume/brightness: use input(hotkey) with media keys. Do NOT use PowerShell or Python scripts.
+9. For volume/brightness: use input(hotkey) with media keys or screen interaction with the slider.
 10. Control the OS through the screen (click, find, interact) like a human would. Scripts are last resort.
+11. CHECK MEMORY first — if you solved this before, recall and reuse the solution.
 
 === COMMON MISTAKES (avoid these) ===
 BAD: window(state) → window(open, "notepad")    ← state check is unnecessary, open handles it
