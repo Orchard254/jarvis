@@ -143,7 +143,7 @@ def _require_page():
         )
 
 
-def _ensure_alive():
+def _ensure_alive(timeout: int = 30000):
     """Re-launch if browser or page is dead. Call before every action."""
     global _playwright, _browser, _page
     if _browser is not None:
@@ -162,7 +162,7 @@ def _ensure_alive():
         except Exception:
             logger.warning("browser: existing session is dead — relaunching")
             _do_close()
-    _do_launch(30000)
+    _do_launch(timeout)
 
 
 # ── Multi-browser support ────────────────────────────────────────────────────
@@ -277,6 +277,13 @@ def _launch_firefox(timeout: int = 30000) -> bool:
         return True
     except Exception as e:
         logger.debug(f"Firefox launch failed: {e}")
+        if _browser is not None:
+            try:
+                _browser.close()
+            except Exception:
+                pass
+            _browser = None
+            _page = None
         return False
 
 
@@ -311,6 +318,13 @@ def _launch_chromium_browser(browser_name: str, timeout: int = 30000) -> bool:
         return True
     except Exception as e:
         logger.debug(f"{browser_name} launch failed: {e}")
+        if _browser is not None:
+            try:
+                _browser.close()
+            except Exception:
+                pass
+            _browser = None
+            _page = None
         return False
 
 
