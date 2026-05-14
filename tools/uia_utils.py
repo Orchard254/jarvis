@@ -142,8 +142,8 @@ def get_element(
             try:
                 if _safe(cached, "Name", "") == text:
                     return _control_to_dict(cached)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"_control_to_dict failed: {e}")
 
     deadline = time.time() + timeout
     last_error = None
@@ -185,8 +185,8 @@ def _search_uia(root, text, automation_id, class_name):
             found = uia.FindControl(root, _compare)
             if found is not None:
                 return found, found_name
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"FindControl failed: {e}")
 
     found_control, found_name = _search_manual(root, text, automation_id, class_name, depth=0)
     return found_control, found_name
@@ -218,15 +218,15 @@ def _search_manual(control, text, automation_id, class_name, depth=0):
         if _matches(control, text, automation_id, class_name):
             name = _safe(control, "Name", "") or ""
             return control, name
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"_safe failed: {e}")
     try:
         for child in control.GetChildren():
             result, name = _search_manual(child, text, automation_id, class_name, depth + 1)
             if result:
                 return result, name
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"_search_manual failed: {e}")
     return None, None
 
 
@@ -314,8 +314,8 @@ def _do_click(element_info: dict) -> dict:
             import pyautogui
             pyautogui.click(cx, cy)
             return {"success": True, "method": "pyautogui", "clicked": name}
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"click failed: {e}")
 
     return {"success": False, "error": f"Could not click '{name}'"}
 
@@ -350,8 +350,8 @@ def get_tree(window_title: str | None = None, max_depth: int = 3) -> dict:
             try:
                 for child in control.GetChildren():
                     items.extend(_walk(child, depth + 1))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"extend failed: {e}")
         return items
 
     elements = _walk(root)

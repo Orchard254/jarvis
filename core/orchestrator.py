@@ -216,8 +216,8 @@ class Orchestrator:
                     ltm_context = self._long_term_memory.get_relevant_context(clean_input, max_memories=3)
                     if ltm_context:
                         memory_context = (memory_context + "\n" + ltm_context) if memory_context else ltm_context
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Long-term memory retrieval failed: {e}")
 
             with self._handle_lock:
                 history_snapshot = list(self._history)
@@ -235,8 +235,8 @@ class Orchestrator:
                         planner_insights = self._memory.get_preference("planner_lessons", "")
                         if planner_insights:
                             plan_history_context += "\n[Planning lessons learned from past failures]:\n" + str(planner_insights)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to load planner lessons: {e}")
 
                 # Ground the planner in live system state
                 live_state = ""
@@ -257,8 +257,8 @@ class Orchestrator:
                             parts.append(f"Focused: {focused}")
                         if parts:
                             live_state = " === LIVE STATE ===\n" + "\n".join(parts)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Live state snapshot failed: {e}")
 
                 try:
                     plan = build_plan(
@@ -307,8 +307,8 @@ class Orchestrator:
                     updated = "\n".join(updated.split("\n")[-5:])  # keep last 5
                     self._memory.set_preference("planner_lessons", updated)
                     logger.info(f"Planner lesson stored: {lesson}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to store planner lesson: {e}")
 
             response = result.get("response", "Done.")
 
@@ -361,8 +361,8 @@ class Orchestrator:
                         agent_response=response,
                         success=result.get("success", False),
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Long-term memory storage failed: {e}")
 
             # ── Record feedback for tool tasks ──────────────────────────────────
             if result.get("tool_calls"):
@@ -378,8 +378,8 @@ class Orchestrator:
                             "plan_executed": result.get("plan_executed", False),
                         },
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Feedback submission failed: {e}")
 
             # ── Implicit feedback: track retries and success ─────────────────
             # Only call start_task if not already pending (preserves retry count
@@ -397,8 +397,8 @@ class Orchestrator:
                         )
                     if result.get("success"):
                         self._implicit_feedback.record_success(task_key)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Implicit feedback tracking failed: {e}")
 
             with self._handle_lock:
                 self._history.append({"role": "user", "content": user_input})

@@ -43,8 +43,8 @@ def _get_clipboard() -> str:
                 return str(data)[:500] if data else ""
         finally:
             win32clipboard.CloseClipboard()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"CloseClipboard failed: {e}")
     return ""
 
 
@@ -69,8 +69,8 @@ def capture_state() -> dict:
                 focused_proc = psutil.Process(pid).name()
             except Exception:
                 focused_proc = "unknown"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Process failed: {e}")
 
     return {
         "captured_at": time.time(),

@@ -122,8 +122,8 @@ def _calibrate_once():
         with mic as source:
             _recognizer.adjust_for_ambient_noise(source, duration=0.5)
         logger.debug("STT: ambient noise calibrated once at init")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"debug failed: {e}")
 
 
 _calibrate_once()
@@ -238,5 +238,5 @@ def _whisper_fallback(audio) -> str:
         if tmp_path:
             try:
                 os.unlink(tmp_path)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"unlink failed: {e}")

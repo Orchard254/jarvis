@@ -42,8 +42,8 @@ def process_manager(
                 try:
                     raw = _platform.list_processes()
                     return {"success": True, "processes": raw[:50], "count": min(len(raw), 50), "action": "list"}
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"min failed: {e}")
 
             # Fallback to direct psutil
             processes = []
@@ -92,8 +92,8 @@ def process_manager(
                         if _platform.kill_process(pid):
                             killed.append(pid)
                             return {"success": True, "killed": killed, "action": "kill"}
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"append failed: {e}")
                 try:
                     psutil.Process(pid).kill()
                     killed.append(pid)

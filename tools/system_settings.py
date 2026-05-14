@@ -91,8 +91,8 @@ def _handle_volume(value) -> dict:
                     "value": int(value),
                     "action": "set",
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"int failed: {e}")
 
         return {
             "success": False,

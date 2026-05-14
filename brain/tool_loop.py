@@ -80,8 +80,8 @@ def _execute_step(
                     "open_windows_count": len(state.get("windows", [])),
                     "running_processes_count": len(state.get("processes", [])),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"len failed: {e}")
 
     return {"step": step, "result": result, "verification": verification}
 
@@ -604,8 +604,8 @@ def run(
                             "open_windows_count": len(state_snapshot.get("windows", [])),
                             "running_processes_count": len(state_snapshot.get("processes", [])),
                         }
-                except Exception:
-                    pass  # State snapshot unavailable — continue without it
+                except Exception as e:
+                    logger.debug(f"State snapshot unavailable: {e}")
 
             # Omit redundant CONFIRmed verification — the LLM already sees
             # success=True. Only send verification when it has useful info.

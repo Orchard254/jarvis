@@ -36,8 +36,8 @@ def verify_window_visible(title: str) -> bool:
                 if search_title in t:
                     found[0] = True
                     return 0  # stop enumeration early
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"GetWindowText failed: {e}")
         return 1  # keep going
 
     try:

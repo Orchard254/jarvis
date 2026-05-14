@@ -111,8 +111,8 @@ def get_raw_windows() -> list[dict]:
                 "process": proc_name,
                 "pid": pid,
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"int failed: {e}")
 
     win32gui.EnumWindows(callback, None)
     return results
@@ -181,8 +181,8 @@ def read_pc_state(**kwargs) -> dict:
                 focused_title = win32gui.GetWindowText(hwnd)
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
                 focused_proc = psutil.Process(pid).name()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Process failed: {e}")
 
         return {
             "success": True,

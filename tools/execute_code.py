@@ -164,8 +164,8 @@ def execute_code(
                 rc = proc.returncode
                 try:
                     os.unlink(info["temp_path"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"unlink failed: {e}")
             except subprocess.TimeoutExpired:
                 return {
                     "success": True,
