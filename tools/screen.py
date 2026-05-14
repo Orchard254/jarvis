@@ -164,8 +164,8 @@ def _elements(window_title: str | None, max_depth: int) -> dict:
                                     "center_x": rect.left + rect.width() // 2,
                                     "center_y": rect.top + rect.height() // 2,
                                 }
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"height failed: {e}")
 
                         elements.append({
                             "name": name,
@@ -178,8 +178,8 @@ def _elements(window_title: str | None, max_depth: int) -> dict:
                     if depth < max_depth:
                         for child in control.GetChildren():
                             _walk_interactive(child, depth + 1)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"_walk_interactive failed: {e}")
 
             _walk_interactive(root)
             sources_used.append("uia")

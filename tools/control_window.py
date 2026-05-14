@@ -48,8 +48,8 @@ def _wait_grace():
             try:
                 import pythoncom
                 pythoncom.PumpWaitingMessages()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"PumpWaitingMessages failed: {e}")
         pumped += 1
         _time.sleep(0.05)
 
@@ -76,8 +76,8 @@ def _find_hwnd(window_title: str, retries: int = 10, delay: float = 0.5):
                     if search_title in t:
                         hwnd_ref[0] = h
                         return 0
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"GetWindowText failed: {e}")
             return 1
 
         try:
@@ -250,8 +250,8 @@ def list_windows() -> dict:
         try:
             windows = _platform.get_windows()
             return {"success": True, "count": len(windows), "windows": windows}
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"len failed: {e}")
 
     # Fallback to direct win32 enumeration
     windows = []
@@ -276,8 +276,8 @@ def list_windows() -> dict:
                         "height": rect[3] - rect[1],
                         "process": process_name or "unknown",
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"append failed: {e}")
         return 1
 
     try:
@@ -463,8 +463,8 @@ def _force_focus(hwnd: int) -> bool:
         ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
         if win32gui.GetForegroundWindow() == hwnd:
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"GetForegroundWindow failed: {e}")
 
     try:
         # Method 2: Standard SetForegroundWindow + AttachThreadInput
@@ -477,8 +477,8 @@ def _force_focus(hwnd: int) -> bool:
         win32process.AttachThreadInput(tid_current, tid_target, False)
         if win32gui.GetForegroundWindow() == hwnd:
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"GetForegroundWindow failed: {e}")
 
     # Method 3: Minimize then restore — forces Windows to foreground the window
     try:

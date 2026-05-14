@@ -94,8 +94,8 @@ def _show_dialog(prompt: str, choices: list[str] | None, timeout_seconds: int,
         if own_root:
             try:
                 root.destroy()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"destroy failed: {e}")
 
     return result
 

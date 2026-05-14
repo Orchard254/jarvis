@@ -69,8 +69,8 @@ def _type(text: str | None, window_title: str | None = None) -> dict:
                         w.activate()
                         time.sleep(0.3)
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"sleep failed: {e}")
 
         pyautogui.write(text, interval=0.03)
         return {"success": True, "chars": len(text)}

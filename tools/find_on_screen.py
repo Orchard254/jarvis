@@ -95,8 +95,8 @@ def find_on_screen(
         grid_shot = capture_screen(region=region_arg, grid=True, grid_size=80)
         if grid_shot.get("success"):
             grid_b64 = grid_shot["image_b64"]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"get failed: {e}")
 
     try:
         import requests

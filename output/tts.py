@@ -153,20 +153,20 @@ def speak(text: str, blocking: bool = True) -> bool:
                     # Unload so Windows releases the file handle, then delete queued temps.
                     try:
                         pygame.mixer.music.unload()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"unload failed: {e}")
                     for p in list(_tmp_cleanup_queue):
                         try:
                             Path(p).unlink(missing_ok=True)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Path failed: {e}")
                     _tmp_cleanup_queue.clear()
                     # Non-blocking wait using pygame clock instead of time.sleep
                     _clock = pygame.time.Clock()
                     for _ in range(16):  # ~0.8s at 20Hz
                         _clock.tick(20)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"tick failed: {e}")
                 finally:
                     settings.IS_SPEAKING.clear()
 
@@ -274,12 +274,12 @@ def _speak_edge(text: str, blocking: bool) -> bool:
                 if _mixer_ready:
                     import pygame  # noqa: PLC0415
                     pygame.mixer.music.unload()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"unload failed: {e}")
             try:
                 Path(tmp_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Path failed: {e}")
         elif tmp_path:
             _tmp_cleanup_queue.append(tmp_path)
 

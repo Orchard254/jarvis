@@ -72,8 +72,8 @@ def _capture_window(window_title: str):
                         if search_title in t:
                             result[0] = h
                             return 0
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"GetWindowText failed: {e}")
                 return 1
             win32gui.EnumWindows(_cb, None)
             return result[0]

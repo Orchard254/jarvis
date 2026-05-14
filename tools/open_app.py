@@ -99,8 +99,8 @@ def _wait_for_window(name: str, timeout: float = 5.0) -> bool:
                 if w.visible and w.title:
                     if name_lower in w.title.lower():
                         return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"lower failed: {e}")
         time.sleep(0.3)
     return False
 
@@ -141,8 +141,8 @@ def _focus_existing(name: str) -> bool:
                     try:
                         w.restore()
                         w.activate()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"activate failed: {e}")
                     return True
     except ImportError:
         pass
@@ -150,8 +150,8 @@ def _focus_existing(name: str) -> bool:
     if _HAS_PLATFORM:
         try:
             return bool(_platform.focus_window(name))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"bool failed: {e}")
     return False
 
 
@@ -187,8 +187,8 @@ def open_app(app_name: str) -> dict:
             resolved = _platform.get_app_path(app_name)
             if resolved:
                 exe_path = resolved
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"get_app_path failed: {e}")
 
     if exe_path:
         exe_path = _resolve_to_exe(exe_path, app_name)
@@ -258,8 +258,8 @@ def open_app(app_name: str) -> dict:
     if _HAS_PLATFORM:
         try:
             _platform.focus_window(app_name)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"focus_window failed: {e}")
 
     msg = f"Launched '{app_name}'"
     if pid:

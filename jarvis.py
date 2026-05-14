@@ -97,8 +97,8 @@ try:
 
     _std_tqdm.close = _safe_tqdm_close
     del _std_tqdm
-except Exception:
-    pass
+except Exception as e:
+    logger.debug(f"_orig_tqdm_close failed: {e}")
 # ─────────────────────────────────────────────────────────────────────────────
 
 logger = logging.getLogger("jarvis")

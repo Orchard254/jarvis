@@ -92,8 +92,8 @@ $results | Select-Object -First {MAX_FILES_PER_SCAN} | ConvertTo-Json -Compress
                 }
                 for i in data
             ]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Path failed: {e}")
     return []
 
 

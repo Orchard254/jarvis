@@ -163,8 +163,8 @@ class Scheduler:
                         {"tool": e.get("tool"), "args": e.get("args"), "success": e.get("result", {}).get("success", False)}
                         for e in orch._last_tool_calls
                     ]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"get failed: {e}")
             update_task(task_id, "complete", result={"response": result}, action_log=action_log)
         except Exception as e:
             logger.error(f"scheduler: task '{task_id[:8]}' failed: {e}")

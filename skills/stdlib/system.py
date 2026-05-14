@@ -1,7 +1,11 @@
 """skills.stdlib.system — processes, system settings, app launch/install."""
+import logging
+
 from tools.process_manager import process_manager
 from tools.system_settings import system_settings
 from tools.install_app import install_app
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["process_manager", "system_settings", "install_app", "volume_mute_then_set", "brightness_set_robust"]
 
@@ -38,8 +42,8 @@ def volume_mute_then_set(target_level: int) -> dict:
             "value": target_level,
             "message": f"Volume set to {target_level}% via Windows Core Audio.",
         }
-    except Exception:
-        pass  # pycaw unavailable — fall through to keypress method
+    except Exception as e:
+        logger.debug(f"pycaw volume control unavailable: {e}")
 
     # ── Method 2: keypress simulation (fallback) ──────────────────────────────
     import pyautogui
@@ -110,8 +114,8 @@ def brightness_set_robust(target_level: int) -> dict:
                 "previous_value": current,
                 "message": f"Brightness set to {target_level}% using screen_brightness_control library."
             }
-    except Exception:
-        pass  # Fall through to next method
+    except Exception as e:
+        logger.debug(f"screen_brightness_control failed: {e}")
     
     # Method 2: WMI PowerShell (Windows native)
     try:
@@ -135,8 +139,8 @@ def brightness_set_robust(target_level: int) -> dict:
                 "value": target_level,
                 "message": f"Brightness set to {target_level}% using WMI PowerShell."
             }
-    except Exception:
-        pass  # Fall through to next method
+    except Exception as e:
+        logger.debug(f"WMI PowerShell brightness failed: {e}")
     
     # Method 3: Keyboard simulation (ultimate fallback)
     try:

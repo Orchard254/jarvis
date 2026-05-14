@@ -207,8 +207,8 @@ class WindowsBackend:
                     "width": w.width,
                     "height": w.height,
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"getActiveWindow failed: {e}")
         return None
     
     def focus_window(self, title_pattern: str) -> bool:
@@ -492,8 +492,8 @@ class LinuxBackend:
                     "width": geom.width,
                     "height": geom.height,
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"get_geometry failed: {e}")
         return None
     
     def focus_window(self, title_pattern: str) -> bool:
@@ -635,8 +635,8 @@ class LinuxBackend:
             result = subprocess.run(['which', app_name], capture_output=True, text=True)
             if result.returncode == 0:
                 return result.stdout.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"strip failed: {e}")
         
         # Search installed apps
         apps = self.find_installed_apps()
@@ -676,8 +676,8 @@ class LinuxBackend:
         if self.pyautogui:
             try:
                 return self.pyautogui.size()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"size failed: {e}")
         # Fallback: use xrandr
         try:
             import subprocess
@@ -690,8 +690,8 @@ class LinuxBackend:
                             res = part.split('+')[0]
                             w, h = map(int, res.split('x'))
                             return (w, h)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"return failed: {e}")
         return (1920, 1080)
     
     def get_os_version(self) -> str:
@@ -700,8 +700,8 @@ class LinuxBackend:
                 for line in f:
                     if line.startswith('PRETTY_NAME='):
                         return line.split('=')[1].strip().strip('"')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"split failed: {e}")
         return f"Linux {platform.release()}"
     
     def get_username(self) -> str:
@@ -862,8 +862,8 @@ class MacOSBackend:
         if self.pyautogui:
             try:
                 return self.pyautogui.size()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"size failed: {e}")
         return (1920, 1080)
     
     def get_os_version(self) -> str:

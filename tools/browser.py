@@ -256,8 +256,8 @@ def _try_connect_cdp(port: int = None) -> bool:
         if pw_was_none and _playwright is not None:
             try:
                 _playwright.__exit__(None, None, None)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"__exit__ failed: {e}")
             _playwright = None
         _browser = None
         _page = None
@@ -280,8 +280,8 @@ def _launch_firefox(timeout: int = 30000) -> bool:
         if _browser is not None:
             try:
                 _browser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"close failed: {e}")
             _browser = None
             _page = None
         return False
@@ -321,8 +321,8 @@ def _launch_chromium_browser(browser_name: str, timeout: int = 30000) -> bool:
         if _browser is not None:
             try:
                 _browser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"close failed: {e}")
             _browser = None
             _page = None
         return False
@@ -373,13 +373,13 @@ def _do_close():
     try:
         if _browser is not None:
             _browser.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"close failed: {e}")
     try:
         if _playwright is not None:
             _playwright.__exit__(None, None, None)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"__exit__ failed: {e}")
     _browser = None
     _page = None
     _playwright = None

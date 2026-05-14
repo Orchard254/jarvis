@@ -152,19 +152,19 @@ def _monitor_loop():
         now = time.time()
         try:
             _check_battery()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"_check_battery failed: {e}")
         try:
             _check_cpu(now)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"_check_cpu failed: {e}")
         try:
             _check_memory()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"_check_memory failed: {e}")
         try:
             _check_disk()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"_check_disk failed: {e}")
         _stop_event.wait(MONITOR_INTERVAL)
     logger.info("ambient_monitor: loop stopped")
