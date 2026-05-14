@@ -16,7 +16,6 @@ tool works even before a MemoryManager session has been initialised.
 
 import json
 import logging
-import re
 import sqlite3
 
 logger = logging.getLogger(__name__)
@@ -61,27 +60,6 @@ def memory(
                 }
             value = semantic.fetch(key, default=None)
             found = value is not None
-
-            # Fallback: fuzzy key search if exact match fails
-            if not found:
-                from settings import MEMORY_DB
-                from core.thread_db import get_connection
-                conn = get_connection(MEMORY_DB, timeout=5.0)
-                c = conn.cursor()
-                safe_key = key.replace("%", "\\%").replace("_", "\\_")
-                words = re.sub(r"[_\s]+", "%", safe_key)
-                rows = c.execute(
-                    "SELECT key, value FROM preferences WHERE key LIKE ? ESCAPE '\\' LIMIT 5",
-                    (f"%{words}%",),
-                ).fetchall()
-                conn.close()
-                if rows:
-                    # Best match: prefer shorter keys with fewer LIKE wildcards
-                    best = min(rows, key=lambda r: (r[0].count("%"), len(r[0])))
-                    value = json.loads(best[1])
-                    key = best[0]
-                    found = True
-                    logger.info(f"memory.recall: fuzzy fallback '{key}' = {value!r}")
 
             logger.info(f"memory.recall: '{key}' → {'found' if found else 'not found'}")
             return {

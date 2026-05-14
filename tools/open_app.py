@@ -119,7 +119,7 @@ def _is_running(app_name: str) -> tuple[bool, int | None]:
     for proc in psutil.process_iter(["pid", "name"]):
         try:
             pname = (proc.info["name"] or "").lower().replace(".exe", "")
-            if name_lower in pname or pname in name_lower:
+            if name_lower == pname:
                 return True, proc.info["pid"]
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
