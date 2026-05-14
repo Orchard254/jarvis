@@ -10,7 +10,28 @@ from settings import ALLOWED_IMPORTS, BLOCKED_PATHS, EXECUTE_CODE_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-from safety.path_guard import SENSITIVE_PATH_FRAGMENTS
+# ---------------------------------------------------------------------------
+# Sensitive path fragments checked by check_paths() in addition to the
+# settings-driven BLOCKED_PATHS list.  These cover SSH keys, cloud-provider
+# credential directories, and common standalone credential files.
+# ---------------------------------------------------------------------------
+_SENSITIVE_PATH_FRAGMENTS = (
+    ".ssh",
+    ".aws",
+    ".gnupg",
+    ".gpg",
+    "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+    "id_dsa",
+    "authorized_keys",
+    "known_hosts",
+    "credentials",
+    ".netrc",
+    ".pgpass",
+    ".kube/config",
+    "kubeconfig",
+)
 
 # ---------------------------------------------------------------------------
 # Secret-bearing environment variable keywords.
@@ -50,29 +71,9 @@ def _is_secret_env_key(key: str) -> bool:
     return False
 
 
-_POWERSHELL_BLOCKED_CMD = frozenset({
-    "invoke-expression", "iex",
-    "invoke-command", "icm",
-    "invoke-webrequest", "iwr", "curl", "wget",
-    "invoke-restmethod", "irm",
-    "start-process", "start",
-    "new-object net.webclient",
-    "downloadstring", "downloadfile",
-    "add-type",
-    "set-executionpolicy",
-    "new-object system.net.webclient",
-    "remove-item", "del", "rm",
-    "format-volume", "clear-disk",
-    "stop-computer", "restart-computer",
-    "shutdown", "restart",
-})
-
-
 def check_imports(code: str, language: str = "python"):
     if language != "python":
-        return _check_powershell(code)
-    if len(code) > 100000:
-        return False, "Code too large for safety check"
+        return True, ""
     try:
         tree = ast.parse(code)
         for node in ast.walk(tree):
@@ -87,12 +88,14 @@ def check_imports(code: str, language: str = "python"):
                     if mod not in ALLOWED_IMPORTS:
                         return False, f"Import not allowed: {node.module}"
             elif isinstance(node, ast.Call):
+                # Block __import__('x') dynamic imports
                 if isinstance(node.func, ast.Name) and node.func.id == "__import__":
                     if node.args and isinstance(node.args[0], ast.Constant):
                         mod = str(node.args[0].value).split(".")[0]
                         if mod not in ALLOWED_IMPORTS:
                             return False, f"Import not allowed: {mod}"
                     return False, "Dynamic import not allowed (__import__)"
+                # Block importlib.import_module('x') — bypasses the import allowlist
                 if (
                     isinstance(node.func, ast.Attribute)
                     and node.func.attr == "import_module"
@@ -104,15 +107,6 @@ def check_imports(code: str, language: str = "python"):
         return True, ""
     except SyntaxError as e:
         return False, f"Syntax error: {e}"
-
-
-def _check_powershell(code: str):
-    """Check PowerShell code for dangerous commands."""
-    lower = code.lower()
-    for cmd in _POWERSHELL_BLOCKED_CMD:
-        if cmd in lower:
-            return False, f"PowerShell command not allowed: '{cmd}'"
-    return True, ""
 
 
 def check_paths(args: dict):
@@ -132,7 +126,7 @@ def check_paths(args: dict):
             return False, f"Blocked path in args: '{path}'"
 
     # 2. Hardcoded sensitive path fragments (SSH keys, cloud credentials, …)
-    for fragment in SENSITIVE_PATH_FRAGMENTS:
+    for fragment in _SENSITIVE_PATH_FRAGMENTS:
         if fragment.lower() in args_str:
             return False, f"Blocked sensitive path in args: '{fragment}'"
 

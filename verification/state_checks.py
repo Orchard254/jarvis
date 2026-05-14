@@ -36,15 +36,17 @@ def verify_window_visible(title: str) -> bool:
                 if search_title in t:
                     found[0] = True
                     return 0  # stop enumeration early
-        except Exception as e:
-            logger.debug(f"GetWindowText failed: {e}")
+        except Exception:
+            pass
         return 1  # keep going
 
     try:
         win32gui.EnumWindows(_cb, None)
     except Exception as exc:
+        # EnumWindows raises when the callback returns False — that's normal.
+        # Any other exception is logged.
         if found[0]:
-            pass  # callback returned 0; EnumWindows may raise depending on wrapper
+            pass  # expected early-exit exception
         else:
             logger.debug(f"verify_window_visible unexpected error: {exc}")
 

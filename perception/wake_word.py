@@ -186,8 +186,8 @@ class WakeWordDetector:
             if settings.IS_SPEAKING.is_set():
                 try:
                     self._model.reset()
-                except Exception as e:
-                    logger.debug(f"reset failed: {e}")
+                except Exception:
+                    pass
                 self._was_speaking = True
                 return
 
@@ -204,8 +204,8 @@ class WakeWordDetector:
             if settings.STT_EXCLUSIVE.is_set():
                 try:
                     self._model.reset()
-                except Exception as e:
-                    logger.debug(f"reset failed: {e}")
+                except Exception:
+                    pass
                 return
 
             if time.monotonic() < self._cooldown_until:

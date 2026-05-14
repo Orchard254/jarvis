@@ -35,18 +35,18 @@ def scan_registry():
                         exe = None
                         try:
                             exe = winreg.QueryValueEx(subkey, "InstallLocation")[0]
-                        except Exception as e:
-                            logger.debug(f"QueryValueEx failed: {e}")
+                        except Exception:
+                            pass
                         ver = None
                         try:
                             ver = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
-                        except Exception as e:
-                            logger.debug(f"QueryValueEx failed: {e}")
+                        except Exception:
+                            pass
                         pub = None
                         try:
                             pub = winreg.QueryValueEx(subkey, "Publisher")[0]
-                        except Exception as e:
-                            logger.debug(f"QueryValueEx failed: {e}")
+                        except Exception:
+                            pass
                         apps.append(
                             {
                                 "name": name,

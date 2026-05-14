@@ -1,305 +1,424 @@
 """
-JARVIS Tool Registry — 6 consolidated tools.
+JARVIS Tool Registry.
 
-Each tool has a single responsibility and uses an `action` parameter
-for operation selection. Tools self-verify: check state before acting,
-report partial success honestly, never return success=True with hidden warnings.
-
-Tools:
-  1. screen  — perception (see the screen, find elements, read text)
-  2. input   — mouse + keyboard (click, type, hotkey, scroll, drag)
-  3. window  — app/window management + desktop state
-  4. browser — web interaction via Playwright
-  5. exec    — code execution + file I/O (the escape hatch)
-  6. memory  — persistent key-value memory
+Tools that require non-trivial integration code the LLM would struggle to
+write correctly inline via execute_code.  Simple operations (screenshots,
+window control, file ops, etc.) the LLM can do directly with Python/PowerShell.
 """
 
-from __future__ import annotations
+# ── Vision & Screen ───────────────────────────────────────────────────────────
+from tools.vision import vision_query
 
-from tools.screen import screen
-from tools.input import input as input_tool
-from tools.window import window
+# ── System & Automation ───────────────────────────────────────────────────────
+from tools.system import execute_code, query_pc_index
+
+# ── Browser ───────────────────────────────────────────────────────────────────
 from tools.browser import browser
-from tools.mem import memory
-from tools.exec import exec as exec_tool
+
+# ── Voice I/O ─────────────────────────────────────────────────────────────────
+from tools.voice import speak, listen
+
+# ── Communication & Calendar ──────────────────────────────────────────────────
+from tools.comm import send_message, schedule, time_calendar
+
+# ── Memory ────────────────────────────────────────────────────────────────────
+from tools.memory import memory
+
 
 TOOL_REGISTRY = {
-    "screen": screen,
-    "input": input_tool,
-    "window": window,
+    # ── Vision & Screen ──────────────────────────────────────────────────────
+    "vision_query": vision_query,
+    # ── System & Automation ──────────────────────────────────────────────────
+    "execute_code": execute_code,
+    "query_pc_index": query_pc_index,
+    # ── Browser ──────────────────────────────────────────────────────────────
     "browser": browser,
+    # ── Voice I/O ────────────────────────────────────────────────────────────
+    "speak": speak,
+    "listen": listen,
+    # ── Communication & Calendar ─────────────────────────────────────────────
+    "send_message": send_message,
+    "schedule": schedule,
+    "time_calendar": time_calendar,
+    # ── Memory & User Interaction ────────────────────────────────────────────
     "memory": memory,
-    "exec": exec_tool,
 }
 
+
 TOOL_SCHEMAS = [
-    # ── 1. screen — unified perception ─────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Vision & Screen
+    # ═══════════════════════════════════════════════════════════════════════════
     {
         "type": "function",
         "function": {
-            "name": "screen",
+            "name": "vision_query",
             "description": (
-                "Perceive the screen. Actions: "
-                "'capture' (screenshot; set grid=true for coordinate grid overlay), "
-                "'find' (locate UI element by visible text using Windows UIA — most reliable, no OCR; "
-                "falls back to vision+grid for apps UIA can't see like Chrome web content), "
-                "'tree' (get UIA accessibility tree of all interactive elements with names and bounds), "
-                "'elements' (list ALL interactive elements with coordinates — merges UIA + vision; "
-                "best for exploring an unfamiliar app or when you don't know the element's name), "
-                "'query' (ask vision model about screen content), "
-                "'ocr' (read visible text from a region). "
-                "Prefer 'find' for clicking known elements. Use 'elements' to discover what's clickable. "
-                "Do NOT use for sending keyboard/mouse input — use input() instead. "
-                "Do NOT use for launching apps — use window(open) instead."
+                "Capture the screen and ask gemma3:27b a specific question about what it sees. "
+                "Use this whenever visual content is needed: detecting dialogs, reading UI text, "
+                "confirming visual state, or finding element positions. "
+                "One call does both capture and analysis."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["capture", "find", "tree", "elements", "query", "ocr"],
-                        "description": "What to do",
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Visible text to find (required for 'find' action)",
-                    },
                     "question": {
                         "type": "string",
-                        "description": "Question about screen content (required for 'query' action)",
+                        "description": (
+                            "Specific question about the screen. "
+                            "Good: 'Is there an error dialog open?' / 'What text is in the search bar?' "
+                            "Bad: 'describe the screen' (too generic)."
+                        ),
                     },
                     "region": {
                         "type": "object",
-                        "description": "Screen region {left, top, width, height} for crop",
-                    },
-                    "window_title": {
-                        "type": "string",
-                        "description": "Window title substring to scope the action to",
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "description": "Max seconds for find timeout (default 5)",
-                    },
-                    "click": {
-                        "type": "boolean",
-                        "description": "Click the element after finding it (default false, only for 'find' action)",
-                    },
-                    "max_depth": {
-                        "type": "integer",
-                        "description": "Max depth for 'tree'/'elements' action (default 3)",
-                    },
-                    "grid": {
-                        "type": "boolean",
-                        "description": "Overlay coordinate grid on screenshot (for 'capture' action, default false)",
-                    },
-                    "grid_size": {
-                        "type": "integer",
-                        "description": "Grid cell size in pixels (default 100, only with grid=true)",
+                        "description": "Optional crop {left, top, width, height}. Omit for full desktop.",
                     },
                 },
-                "required": ["action"],
+                "required": ["question"],
             },
         },
     },
-    # ── 2. input — mouse + keyboard ────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # System & Automation
+    # ═══════════════════════════════════════════════════════════════════════════
     {
         "type": "function",
         "function": {
-            "name": "input",
+            "name": "execute_code",
             "description": (
-                "Send mouse or keyboard input. Actions: "
-                "'click' (click at x,y or on element by text), "
-                "'type' (type text at current focus), "
-                "'hotkey' (send keyboard shortcut like 'ctrl+c', 'alt+tab'), "
-                "'scroll' (scroll up/down N clicks), "
-                "'drag' (drag from one point to another). "
-                "For clicking a known UI element, prefer screen(action='find', text='...', click=true) — "
-                "it uses UIA for deterministic targeting. "
-                "Do NOT use for launching apps — use window(open) instead."
+                "Run Python or PowerShell on the local machine. "
+                "Primary tool for OS tasks, launching apps (os.startfile), "
+                "installing software (winget), file ops, and system queries. "
+                "Set background=True for long-running tasks — returns immediately "
+                "with a PID, then use action='check'/'wait'/'kill' to manage."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["click", "type", "hotkey", "scroll", "drag"],
-                        "description": "Input action to perform",
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Text to type (required for 'type' action)",
-                    },
-                    "keys": {
-                        "type": "string",
-                        "description": "Keyboard shortcut with '+' separator, e.g. 'ctrl+c', 'alt+tab' (required for 'hotkey' action)",
-                    },
-                    "x": {
-                        "type": "integer",
-                        "description": "X coordinate for click/drag",
-                    },
-                    "y": {
-                        "type": "integer",
-                        "description": "Y coordinate for click/drag",
-                    },
-                    "target_text": {
-                        "type": "string",
-                        "description": "Click element by visible text (alternative to x,y for 'click')",
-                    },
-                    "direction": {
-                        "type": "string",
-                        "enum": ["up", "down"],
-                        "description": "Scroll direction (default 'down')",
-                    },
-                    "clicks": {
-                        "type": "integer",
-                        "description": "Number of scroll clicks (default 1)",
-                    },
-                    "from_x": {"type": "integer", "description": "Drag start X"},
-                    "from_y": {"type": "integer", "description": "Drag start Y"},
-                    "to_x": {"type": "integer", "description": "Drag end X"},
-                    "to_y": {"type": "integer", "description": "Drag end Y"},
-                    "window_title": {
-                        "type": "string",
-                        "description": "Target window title for 'type' action — focuses the window before typing",
-                    },
+                    "code": {"type": "string", "description": "Code to execute (required for action='run')"},
+                    "language": {"type": "string", "enum": ["python", "powershell"]},
+                    "background": {"type": "boolean", "description": "Run in background (default false)."},
+                    "action": {"type": "string", "enum": ["run", "check", "wait", "kill", "list"]},
+                    "pid": {"type": "integer", "description": "Process ID for check/wait/kill actions"},
+                    "timeout": {"type": "integer", "description": "Max seconds for wait action (default 60)"},
                 },
-                "required": ["action"],
             },
         },
     },
-    # ── 3. window — app/window management + desktop state ──────────────────────
     {
         "type": "function",
         "function": {
-            "name": "window",
+            "name": "query_pc_index",
             "description": (
-                "Manage applications and windows. Actions: "
-                "'open' (launch an app by name — checks if already running, focuses if so, "
-                "else finds path, launches, waits for window, and focuses), "
-                "'close' (close window by title), "
-                "'focus' (bring window to foreground by title), "
-                "'list' (list all visible windows), "
-                "'minimize'/'maximize' (window state), "
-                "'state' (live snapshot of open windows, running processes, focused app). "
-                "Do NOT use for clicking UI elements inside a window — use screen(find) or input(click). "
-                "Do NOT use for taking screenshots — use screen(capture)."
+                "Search the PC index for installed apps, recent files, or running windows/processes. "
+                "Use this to quickly locate applications, find files, or check what's running."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["open", "close", "focus", "list", "minimize", "maximize", "state"],
-                        "description": "Window action to perform",
-                    },
-                    "app_name": {
-                        "type": "string",
-                        "description": "App name to launch (required for 'open' action, e.g. 'chrome', 'notepad')",
-                    },
-                    "window_title": {
-                        "type": "string",
-                        "description": "Window title substring for close/focus/minimize/maximize",
-                    },
+                    "query": {"type": "string", "description": "Search text (e.g. app name, file name, process name)"},
+                    "type": {"type": "string", "enum": ["app", "file", "state"]},
                 },
-                "required": ["action"],
+                "required": ["query"],
             },
         },
     },
-    # ── 4. browser — web interaction ───────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Browser
+    # ═══════════════════════════════════════════════════════════════════════════
     {
         "type": "function",
         "function": {
             "name": "browser",
             "description": (
-                "Control a web browser for interactive browsing. "
-                "Supports Brave, Opera, Firefox, and Chrome. "
-                "Auto-connects to a running browser via CDP if available (port 9222), "
-                "then tries to launch the preferred browser (set BROWSER_PREFERRED env var). "
-                "Actions: 'navigate' (go to URL, auto-launches browser), "
-                "'click' (click element by CSS selector), "
-                "'type' (type text into field by selector), "
-                "'read_page' (get page text content), "
-                "'screenshot' (capture browser page), "
-                "'scroll' (scroll down the page). "
-                "For tab management use input(hotkey) — e.g. 'ctrl+t', 'ctrl+w', 'ctrl+tab'. "
-                "For back/forward use input(hotkey) — 'alt+left', 'alt+right'. "
-                "For refresh use input(hotkey) — 'f5'. "
-                "Do NOT use for desktop app interaction — use screen() and input() instead."
+                "Control a web browser (Playwright). "
+                "Use for interactive browsing, form filling, clicking buttons, "
+                "tab management (close_tab, get_tabs, switch_tab)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["navigate", "click", "type", "read_page", "screenshot", "scroll"],
-                        "description": "Browser action",
+                        "enum": [
+                            "launch",
+                            "navigate",
+                            "click",
+                            "type",
+                            "read_page",
+                            "screenshot",
+                            "close",
+                            "close_tab",
+                            "new_tab",
+                            "get_tabs",
+                            "switch_tab",
+                            "back",
+                            "forward",
+                            "get_url",
+                            "scroll",
+                            "refresh",
+                            "wait_for",
+                        ],
                     },
-                    "url": {"type": "string", "description": "URL (required for navigate)"},
-                    "selector": {"type": "string", "description": "CSS selector or Playwright text locator, e.g. '#btn' or 'text=Submit'"},
-                    "text": {"type": "string", "description": "Text to type into field"},
-                    "timeout": {"type": "integer", "description": "Timeout in ms (default 30000)"},
+                    "url": {"type": "string"},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector or element description",
+                    },
+                    "text": {"type": "string", "description": "Text to type"},
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in ms (default 10000)",
+                    },
                 },
                 "required": ["action"],
             },
         },
     },
-    # ── 5. exec — code execution + file I/O ────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Voice I/O
+    # ═══════════════════════════════════════════════════════════════════════════
     {
         "type": "function",
         "function": {
-            "name": "exec",
+            "name": "speak",
             "description": (
-                "Execute code and manage files. Actions: "
-                "'run' (execute Python/PowerShell — the escape hatch for anything not covered by other tools), "
-                "'read' (read file content by path), "
-                "'write' (write content to file by path). "
-                "Do NOT use for launching apps — use window(open). "
-                "Do NOT use for web browsing — use browser(). "
-                "Do NOT use for screen interaction — use screen() or input()."
+                "Speak text aloud mid-task using the configured TTS engine (Edge TTS / Piper). "
+                "Use this to narrate progress, read content to the user, or give verbal "
+                "confirmations without ending the task. "
+                "The orchestrator also speaks the final response automatically — "
+                "only call this for intermediate speech during a multi-step task."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Text to speak aloud",
+                    },
+                    "blocking": {
+                        "type": "boolean",
+                        "description": "Wait for audio to finish before continuing (default true). "
+                                       "Set false to speak and keep working simultaneously.",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listen",
+            "description": (
+                "Capture a single spoken utterance from the microphone and return "
+                "the transcription.  Use mid-task when you need the user to say something "
+                "(e.g. confirm a file name, spell out a value) without requiring them to type.  "
+                "Pauses the wake-word listener during capture."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": (
+                            "Optional text to speak aloud before opening the mic, "
+                            "so the user knows it's their turn."
+                        ),
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Seconds to wait for speech (default 10).",
+                    },
+                    "speak_prompt": {
+                        "type": "boolean",
+                        "description": "Whether to speak the prompt via TTS (default true).",
+                    },
+                },
+            },
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Communication & Calendar
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message",
+            "description": (
+                "Send an outbound message to the user or a contact after a background task "
+                "completes — more reliable than a toast notification.  "
+                "Backends: email (SMTP) or telegram (Bot API).  "
+                "Configure credentials in .env: SMTP_USER/SMTP_PASS for email, "
+                "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID for Telegram."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "backend": {
+                        "type": "string",
+                        "enum": ["email", "telegram"],
+                        "description": "Delivery backend (default: email).",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Message content (required).",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "Recipient email address (required for email backend).",
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Email subject line (email backend only).",
+                    },
+                    "html": {
+                        "type": "boolean",
+                        "description": "Render body as HTML in email (default false).",
+                    },
+                    "chat_id": {
+                        "type": "string",
+                        "description": (
+                            "Telegram chat ID override.  Falls back to TELEGRAM_CHAT_ID in .env."
+                        ),
+                    },
+                },
+                "required": ["body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule",
+            "description": (
+                "Create, list, or cancel timed / recurring tasks. "
+                "The Scheduler thread picks up new tasks within 5 seconds. "
+                "Recurring tasks survive Jarvis restarts. "
+                "Supported 'when' expressions: "
+                "'in 10 minutes', 'in 2 hours', 'at 09:00', "
+                "'every 30 minutes', 'every 2 hours', "
+                "'every day at 07:30', 'on Monday at 09:00'."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["run", "read", "write"],
-                        "description": "Action to perform",
+                        "enum": ["add", "cancel", "list"],
                     },
-                    "code": {"type": "string", "description": "Python/PowerShell code (required for 'run' action)"},
-                    "language": {"type": "string", "enum": ["python", "powershell"], "description": "Code language (default 'python')"},
-                    "path": {"type": "string", "description": "File path (required for read/write actions)"},
-                    "content": {"type": "string", "description": "File content (required for write action)"},
-                    "background": {"type": "boolean", "description": "Run code in background (default false)"},
-                    "timeout": {"type": "integer", "description": "Max seconds for execution (default 30)"},
+                    "command": {
+                        "type": "string",
+                        "description": "Natural-language task to run at the scheduled time (required for 'add')",
+                    },
+                    "when": {
+                        "type": "string",
+                        "description": "Schedule expression (required for 'add'). "
+                                       "E.g. 'in 10 minutes', 'every day at 08:00'.",
+                    },
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID to cancel (required for 'cancel'). "
+                                       "Get IDs from action='list'.",
+                    },
                 },
                 "required": ["action"],
             },
         },
     },
-    # ── 6. memory — persistent key-value memory ───────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "time_calendar",
+            "description": (
+                "Calendar management: list, create, and delete events.  "
+                "get_events: upcoming calendar events (next N days).  "
+                "create_event: add a new event to the calendar.  "
+                "delete_event: remove an event by subject.  "
+                "Backend: Outlook (default) or .ics file — set CALENDAR_BACKEND in .env."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["get_events", "create_event", "delete_event"],
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Event title (required for create/delete).",
+                    },
+                    "start": {
+                        "type": "string",
+                        "description": "ISO datetime e.g. '2025-05-10T14:00:00' (required for create).",
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": "ISO datetime for event end (defaults to start + 1 hour).",
+                    },
+                    "location": {
+                        "type": "string",
+                        "description": "Optional venue.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Optional notes/description.",
+                    },
+                    "all_day": {
+                        "type": "boolean",
+                        "description": "True to create an all-day event.",
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "How many days ahead to fetch (get_events, default 7).",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Date filter YYYY-MM-DD (for delete_event).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Memory & User Interaction
+    # ═══════════════════════════════════════════════════════════════════════════
     {
         "type": "function",
         "function": {
             "name": "memory",
             "description": (
-                "Persistent memory for storing and retrieving facts. Actions: "
-                "'store' (save a fact: key+value pair — use for user preferences, learned info), "
-                "'recall' (retrieve a fact by key), "
-                "'search' (semantic search across all stored memories). "
-                "Do NOT store code snippets — those go into skills."
+                "Active long-term memory control. "
+                "store: save a key/value fact (e.g. key='user_docs_path', value='D:/Work'). "
+                "recall: retrieve a stored value by key. "
+                "forget: permanently delete a key. "
+                "summary: get a digest of all stored preferences and frequent commands. "
+                "search: full-text search across recent episodic history."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["store", "recall", "search"],
-                        "description": "Memory action",
+                        "enum": ["store", "recall", "forget", "summary", "search"],
                     },
-                    "key": {"type": "string", "description": "Fact key (required for store, recall)"},
-                    "value": {"description": "Value to store (required for store action; any JSON type)"},
-                    "query": {"type": "string", "description": "Search text for 'search' action"},
-                    "limit": {"type": "integer", "description": "Max results for search (default 10)"},
+                    "key": {
+                        "type": "string",
+                        "description": "Preference/fact key (required for store, recall, forget)",
+                    },
+                    "value": {
+                        "description": "Value to store (required for 'store'; any JSON-serialisable type)",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Text to search for in episodic history (required for 'search')",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results for summary/search (default 10)",
+                    },
                 },
                 "required": ["action"],
             },

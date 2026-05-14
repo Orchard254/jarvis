@@ -157,6 +157,6 @@ class IndexWriter:
             # Roll back so the next call can open a fresh transaction
             try:
                 self.conn.execute("ROLLBACK")
-            except Exception as rb_e:
-                logger.warning(f"Rollback failed: {rb_e}")
+            except Exception:
+                pass
             raise

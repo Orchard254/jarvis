@@ -62,32 +62,12 @@ class ToolResultCache:
 
     # Read-only tools that are safe to cache
     READ_ONLY_TOOLS = frozenset({
-        "read_file",
-        "read_pc_state",
-        "capture_screen",
-        "find_on_screen",
-        "screen",
-    })
-
-    # (tool, action) pairs that are read-only even when the tool itself has write actions
-    READ_ONLY_ACTIONS = frozenset({
-        ("window", "state"),
-        ("window", "list"),
+        "time_calendar",
     })
 
     # Tools that should invalidate related cache entries
     WRITE_TOOLS = frozenset({
-        "write_file",
-        "file_ops",
         "execute_code",
-        "control_input",
-        "control_window",
-        "process_manager",
-        "delete_file",
-        "move_file",
-        "exec",
-        "window",
-        "input",
     })
 
     def __init__(self, max_entries: int = 1000, default_ttl: int = 300):
@@ -104,13 +84,6 @@ class ToolResultCache:
 
     def _get_lock(self):
         return self._lock  # Always initialized in __init__ — no lazy init needed
-
-    def _is_cacheable(self, tool_name: str, args: dict) -> bool:
-        """Check if a tool call is cacheable (read-only tool or read-only action)."""
-        if tool_name in self.READ_ONLY_TOOLS:
-            return True
-        action = args.get("action", "")
-        return (tool_name, action) in self.READ_ONLY_ACTIONS
 
     def _make_key(self, tool_name: str, args: dict) -> str:
         """
@@ -133,7 +106,7 @@ class ToolResultCache:
         Returns:
             Cached result dict if found and not expired, None otherwise
         """
-        if not self._is_cacheable(tool_name, args):
+        if tool_name not in self.READ_ONLY_TOOLS:
             return None
 
         key = self._make_key(tool_name, args)
@@ -174,7 +147,7 @@ class ToolResultCache:
         Returns:
             True if cached successfully, False if tool is not cacheable
         """
-        if not self._is_cacheable(tool_name, args):
+        if tool_name not in self.READ_ONLY_TOOLS:
             return False
 
         if not result.get("success"):
@@ -299,12 +272,13 @@ class ToolResultCache:
 
     def _evict_oldest(self, count: int = 1) -> None:
         """Evict the oldest cache entries."""
-        # Find and remove the oldest entries
-        for _ in range(count):
-            if not self._cache:
-                break
-            oldest_key = min(self._cache, key=lambda k: self._cache[k].timestamp)
-            del self._cache[oldest_key]
+        # Sort by timestamp and remove oldest
+        sorted_entries = sorted(
+            self._cache.items(),
+            key=lambda x: x[1].timestamp
+        )
+        for key, _ in sorted_entries[:count]:
+            del self._cache[key]
         logger.debug(f"cache: evicted {count} oldest entries")
 
 

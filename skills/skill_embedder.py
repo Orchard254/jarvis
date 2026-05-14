@@ -52,8 +52,8 @@ def init():
 
             _os.environ.setdefault("HF_TOKEN", _hf_tok)
             _os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", _hf_tok)
-    except Exception as e:
-        logger.debug(f"setdefault failed: {e}")
+    except Exception:
+        pass
 
     try:
         settings.SKILLS_CHROMA.mkdir(parents=True, exist_ok=True)

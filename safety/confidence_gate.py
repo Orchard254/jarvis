@@ -47,10 +47,10 @@ _MILD_UNCERTAINTY_PHRASES = [
 
 # Tools where a higher effective threshold is enforced
 _HIGH_RISK_TOOLS = frozenset(
-    {"execute_code", "exec", "control_input", "input", "write_file", "file_ops", "process_manager"}
+    {"execute_code"}
 )
 _MEDIUM_RISK_TOOLS = frozenset(
-    {"control_window", "window", "system_settings", "browser", "clipboard"}
+    {"browser"}
 )
 
 

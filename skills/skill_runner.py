@@ -31,9 +31,9 @@ def run_skill(skill_id: str, intent: str) -> Dict:
         return {"success": False, "error": "Skill retired", "skill_id": skill_id, "intent": intent}
 
     try:
-        tool_name = "exec"
+        tool_name = "execute_code"
         tool_fn = TOOL_REGISTRY[tool_name]
-        args = {"action": "run", "code": skill["code"], "language": skill["language"]}
+        args = {"code": skill["code"], "language": skill["language"]}
 
         result = execute(
             tool_name=tool_name,

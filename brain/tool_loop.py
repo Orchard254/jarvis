@@ -1,17 +1,12 @@
 """
 The ReAct tool-calling loop. Pure reasoning layer.
 Executes tools via injected callbacks to maintain strict layer boundaries.
-
-Supports two execution modes:
-  1. Plan mode (default) — uses brain/planner.py to generate a structured plan,
-     then executes steps in dependency order with parallel batching.
-  2. ReAct mode (fallback) — the original iterative loop, used when planning
-     fails or for chat-only responses.
 """
 
+import concurrent.futures
 import json
 import logging
-import time as _time
+import threading
 
 from settings import (
     ITERATION_CAPS,
@@ -23,8 +18,8 @@ from verification.vision_summary import summarize_screen
 from brain import ollama_client
 from brain.context_manager import prune_history
 from brain.prompt_builder import build_system_prompt, get_pruned_schemas
-from brain.response_parser import validate_tool_calls
-from brain.tool_result_cache import get_cache
+from brain.response_parser import parse_batch_plan, format_batch_result, validate_tool_calls
+from brain.tool_result_cache import get_cache, ToolResultCache
 
 logger = logging.getLogger(__name__)
 
@@ -34,44 +29,106 @@ logger = logging.getLogger(__name__)
 # is a chat response or a tool-calling task based on full context.
 
 
-def _execute_step(
-    step: dict,
+def _execution_policy(plan: dict) -> tuple[str, list[int]]:
+    """Resolve execution order: ('sequential'|'parallel', ordered call indices)."""
+    calls = plan["calls"]
+    policy = plan.get("execution_policy", "auto")
+    if policy == "parallel":
+        return "parallel", [c["call_idx"] for c in calls]
+    if policy in ("sequential", "abort_on_fail"):
+        return "sequential", [c["call_idx"] for c in calls]
+    # auto: parallel if no dependencies, sequential otherwise
+    correlations = {c.get("correlation") for c in calls if c.get("correlation")}
+    has_deps = False
+    params_blob = " ".join(json.dumps(c.get("params", {}), default=str) for c in calls)
+    for corr in correlations:
+        if corr and corr in params_blob:
+            has_deps = True
+            break
+    return ("parallel" if not has_deps else "sequential"), [c["call_idx"] for c in calls]
+
+
+def _call_by_idx(plan: dict, idx: int) -> dict | None:
+    """Look up a plan call by its call_idx."""
+    for c in plan["calls"]:
+        if c["call_idx"] == idx:
+            return c
+    return None
+
+
+def _execute_single_call(
+    call: dict,
     execute_fn,
     verify_fn,
+    user_input: str,
     cache,
     tool_log: list,
+    fail_counts: dict,
     pc_state_fn,
-    user_input: str,
-):
-    """Execute a single plan step and return the result."""
-    name = step["tool"]
-    args = step.get("args", {})
+    iteration: int,
+) -> dict:
+    """
+    Execute one planned call. Returns a result dict for BATCH_TOOL_RESULT.
+    Side-effects: appends to tool_log, mutates fail_counts, updates cache.
+    """
+    tool_name = call["tool"]
+    args = call.get("params", {})
+    call_idx = call["call_idx"]
+    logger.info(f"Batch {iteration}: calling {tool_name} (call_idx={call_idx})")
 
-    cached_result = cache.get(name, args)
+    truncated_call_idx = min(call_idx, 9999)  # for stable call_id generation
+
+    # Check cache for read-only tools
+    cached_result = cache.get(tool_name, args)
     if cached_result is not None:
+        logger.info(f"  \u2713 {tool_name} (cached)")
         result = cached_result
-        tool_log.append({"tool": name, "args": args, "result": result, "cached": True})
-        verification = verify_fn(name, result, user_input)
-    else:
-        print(f"  [{name}]...", end="", flush=True)
-        result = execute_fn(name, args)
-        ok_str = "OK" if result.get("success") else "FAIL"
-        print(f"\r  [{name}] {ok_str}" + " " * 10, flush=True)
-        tool_log.append({"tool": name, "args": args, "result": result, "cached": False})
-        cache.set(name, args, result)
-        verification = verify_fn(name, result, user_input)
+        tool_log.append({"tool": tool_name, "args": args, "result": result,
+                         "call_id": f"batch_{truncated_call_idx}", "cached": True})
+        verification = verify_fn(tool_name, result, user_input)
+        if tool_log:
+            tool_log[-1]["verification"] = verification.get("status", "")
+        return {
+            "call_idx": call_idx,
+            "call_id": f"call_{truncated_call_idx}",
+            "status": "ok",
+            "output_summary": _summarize_output(tool_name, result),
+            "cached": True,
+        }
 
-    # Attach verification
+    print(f"  \U0001f527 {tool_name}...", end="", flush=True)
+    result = execute_fn(tool_name, args)
+    ok_str = "\u2713" if result.get("success") else "\u2717"
+    print(f"\r  \U0001f527 {tool_name} {ok_str}" + " " * 10, flush=True)
+    tool_log.append({"tool": tool_name, "args": args, "result": result,
+                     "call_id": f"batch_{truncated_call_idx}", "cached": False})
+
+    cache.set(tool_name, args, result)
+
+    verification = verify_fn(tool_name, result, user_input)
     if tool_log:
         tool_log[-1]["verification"] = verification.get("status", "")
 
-    # Invalidate cache on writes (skip read-only actions like window(state))
-    from brain.tool_result_cache import ToolResultCache
-    if name in ToolResultCache.WRITE_TOOLS and not cache._is_cacheable(name, args):
-        cache.invalidate_tool(name)
+    if tool_name in ToolResultCache.WRITE_TOOLS:
+        cache.invalidate_tool(tool_name)
+        if tool_name == "execute_code":
+            cache.clear()
 
-    # State snapshot on failure
-    if not result.get("success") and name != "read_pc_state" and pc_state_fn is not None:
+    # Fail-loop guard
+    if not result.get("success"):
+        fail_counts[tool_name] = fail_counts.get(tool_name, 0) + 1
+    else:
+        fail_counts[tool_name] = 0
+
+    v_status = verification.get("status", "")
+    if v_status == "FAILED":
+        verification["retry_directive"] = (
+            "Verification FAILED \u2014 the action did not produce the expected "
+            "outcome. Do NOT repeat the same approach. Try a different "
+            "tool, a different path, or ask the user for clarification."
+        )
+
+    if not result.get("success") and tool_name != "read_pc_state" and pc_state_fn is not None:
         try:
             state = pc_state_fn()
             if state.get("success"):
@@ -80,188 +137,109 @@ def _execute_step(
                     "open_windows_count": len(state.get("windows", [])),
                     "running_processes_count": len(state.get("processes", [])),
                 }
-        except Exception as e:
-            logger.debug(f"len failed: {e}")
+        except Exception:
+            pass
 
-    return {"step": step, "result": result, "verification": verification}
-
-
-
-def _build_step_batches(steps: list[dict]) -> list[list[dict]]:
-    """Group plan steps into sequential batches. Steps with no deps_on
-    field (or deps_on=[]) that are adjacent can run in parallel."""
-    batches: list[list[dict]] = []
-    current_batch: list[dict] = []
-
-    for step in steps:
-        has_deps = bool(step.get("deps_on"))
-        if has_deps:
-            # Dependent step must run alone after previous batch
-            if current_batch:
-                batches.append(current_batch)
-                current_batch = []
-            batches.append([step])
-        else:
-            current_batch.append(step)
-
-    if current_batch:
-        batches.append(current_batch)
-
-    return batches if batches else [[s] for s in steps]
+    status = "ok" if result.get("success") else "error"
+    return {
+        "call_idx": call_idx,
+        "call_id": f"call_{truncated_call_idx}",
+        "status": status,
+        "output_summary": _summarize_output(tool_name, result),
+        **({} if result.get("success") else {"error": result.get("error", "unknown error")}),
+    }
 
 
-def run_with_plan(
+def _summarize_output(tool_name: str, result: dict) -> str:
+    """Produce a short summary of a tool result for BATCH_TOOL_RESULT."""
+    if not result.get("success"):
+        return f"{tool_name} failed"
+    content = result.get("output") or result.get("result") or result.get("content") or ""
+    if isinstance(content, str):
+        content = content[:500]
+    elif isinstance(content, dict):
+        content = json.dumps(content, default=str)[:120]
+    return f"{tool_name}: {content}" if content else f"{tool_name} succeeded"
+
+
+def _execute_batch_plan(
     plan: dict,
-    user_input: str,
-    history: list[dict],
     execute_fn,
     verify_fn,
-    mode: str = "interactive_cloud",
-    tools: list = None,
-    memory_context: str = "",
-    valid_tool_names: set = None,
-    pc_state_fn=None,
-) -> dict:
-    """Execute a pre-generated plan with parallel DAG execution.
+    user_input: str,
+    cache,
+    tool_log: list,
+    fail_counts: dict,
+    pc_state_fn,
+    iteration: int,
+) -> list[dict]:
+    """Execute all calls in a BATCH_TOOL_PLAN. Returns list of result dicts."""
+    mode, order = _execution_policy(plan)
+    calls = plan["calls"]
+    plan_id = plan["plan_id"]
+    results: list[dict] = []
 
-    Steps with explicit batch_with dependencies run in dependency order;
-    independent steps (empty batch_with) run in parallel via ThreadPoolExecutor.
-    Falls back to ReAct (cap 4) if any step fails.
-    """
-    cache = get_cache()
-    steps = plan.get("steps", [])
-    tool_log = []
-    _valid_tool_names = valid_tool_names or set()
+    _tool_log_lock = threading.Lock()
+    _fail_lock = threading.Lock()
 
-    plan_summary = "; ".join(f"{s['tool']}({list(s.get('args', {}).keys())})" for s in steps)
-    logger.info(f"Plan execution: {len(steps)} steps [{plan_summary}]")
-
-    all_succeeded = True
-    failed_step = None
-
-    # Group steps into batches: steps sharing the same batch_with key
-    # or independent steps (no deps) can run in parallel.
-    batches = _build_step_batches(steps)
-
-    for batch in batches:
-        # Validate all tools in batch
-        invalid = [s for s in batch if s["tool"] not in _valid_tool_names]
-        if invalid:
-            logger.warning(f"Unknown tool '{invalid[0]['tool']}' — aborting plan")
-            all_succeeded = False
-            failed_step = invalid[0]
-            break
-
-        if len(batch) == 1:
-            # Single step — run inline (no thread overhead)
-            step_result = _execute_step(
-                batch[0], execute_fn, verify_fn, cache,
-                tool_log, pc_state_fn, user_input,
+    def _run_one(call: dict) -> dict:
+        with _tool_log_lock, _fail_lock:
+            return _execute_single_call(
+                call, execute_fn, verify_fn, user_input,
+                cache, tool_log, fail_counts, pc_state_fn, iteration,
             )
-            if not step_result["result"].get("success"):
-                all_succeeded = False
-                failed_step = batch[0]
-                logger.warning(f"Plan step failed: {batch[0]['tool']}")
-                break
-        else:
-            # Multiple independent steps — run in parallel
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            batch_results = {}
-            with ThreadPoolExecutor(max_workers=min(len(batch), 4)) as pool:
-                futures = {}
-                for step in batch:
-                    step_tool_log = []
-                    f = pool.submit(
-                        _execute_step, step, execute_fn, verify_fn,
-                        cache, step_tool_log, pc_state_fn, user_input,
-                    )
-                    futures[f] = (step, step_tool_log)
 
-                for f in as_completed(futures):
-                    step, step_log = futures[f]
-                    try:
-                        sr = f.result()
-                        tool_log.extend(step_log)
-                        batch_results[step["tool"]] = sr
-                        if not sr["result"].get("success"):
-                            all_succeeded = False
-                            failed_step = step
-                            logger.warning(f"Parallel step failed: {step['tool']}")
-                    except Exception as exc:
-                        all_succeeded = False
-                        failed_step = step
-                        logger.error(f"Parallel step exception: {step['tool']}: {exc}")
+    if mode == "parallel":
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(calls)) as pool:
+            fut_map = {pool.submit(_run_one, c): c for c in calls}
+            for fut in concurrent.futures.as_completed(fut_map):
+                try:
+                    results.append(fut.result())
+                except Exception as e:
+                    c = fut_map[fut]
+                    results.append({
+                        "call_idx": c["call_idx"],
+                        "call_id": f"call_{c['call_idx']}",
+                        "status": "error",
+                        "error": str(e),
+                    })
+    else:
+        abort = False
+        for call_idx in order:
+            if abort:
+                results.append({
+                    "call_idx": call_idx,
+                    "call_id": f"call_{call_idx}",
+                    "status": "skipped",
+                    "error": "aborted by previous failure",
+                })
+                continue
+            call = _call_by_idx(plan, call_idx)
+            if call is None:
+                results.append({
+                    "call_idx": call_idx,
+                    "call_id": f"call_{call_idx}",
+                    "status": "error",
+                    "error": f"call_idx {call_idx} not found in plan",
+                })
+                continue
 
-            if not all_succeeded:
-                break
+            if call.get("risk_tier") == "high" and call.get("preexec_required"):
+                results.append({
+                    "call_idx": call_idx,
+                    "call_id": f"call_{call_idx}",
+                    "status": "pending_approval",
+                    "error": "high-risk call requires approval before execution",
+                })
+                continue
 
-    if all_succeeded:
-        return {
-            "success": True,
-            "tool_calls": tool_log,
-            "iterations": len(steps),
-            "error": None,
-            "plan_executed": True,
-        }
+            r = _run_one(call)
+            results.append(r)
+            if r["status"] != "ok" and plan.get("execution_policy") == "abort_on_fail":
+                abort = True
 
-    logger.info("Plan execution failed — falling back to ReAct loop for recovery")
-    plan_history = list(history)
-    plan_history.append({"role": "user", "content": user_input})
-
-    # Inject completed plan steps as proper assistant+tool messages so the
-    # ReAct LLM knows what already ran and doesn't duplicate work.
-    if tool_log:
-        synthetic_calls = []
-        for i, tl in enumerate(tool_log):
-            name = tl.get("tool", "")
-            args = tl.get("args", {})
-            call_id = f"plan_{i}"
-            synthetic_calls.append({
-                "function": {"name": name, "arguments": args},
-                "id": call_id,
-            })
-        if synthetic_calls:
-            plan_history.append({
-                "role": "assistant",
-                "content": "I'll execute the planned steps.",
-                "tool_calls": synthetic_calls,
-            })
-        for i, tl in enumerate(tool_log):
-            name = tl.get("tool", "")
-            result = tl.get("result", {})
-            call_id = f"plan_{i}"
-
-            verification = verify_fn(name, result, user_input)
-            v = verification.copy() if isinstance(verification, dict) else {}
-            v.pop("method", None)
-            tool_feedback = {"tool_name": name, "result": result}
-            if v.get("status") not in (None, "CONFIRMED"):
-                tool_feedback["verification"] = v
-
-            plan_history.append({
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": json.dumps(tool_feedback, default=str),
-            })
-
-    fail_context = (
-        f"The plan failed at step '{failed_step['tool']}'. "
-        f"The original request is: {user_input}. "
-        f"Complete the remaining task."
-    )
-
-    return run(
-        user_input=fail_context,
-        history=plan_history,
-        execute_fn=execute_fn,
-        verify_fn=verify_fn,
-        mode=mode,
-        tools=tools,
-        memory_context=memory_context,
-        valid_tool_names=_valid_tool_names,
-        pc_state_fn=pc_state_fn,
-        fallback_cap=4,
-    )
+    results.sort(key=lambda r: r.get("call_idx", 0))
+    return results
 
 
 def run(
@@ -274,100 +252,30 @@ def run(
     memory_context: str = "",
     valid_tool_names: set = None,
     pc_state_fn=None,
-    plan: dict = None,
-    fallback_cap: int = None,
 ) -> dict:
     cache = get_cache()
     _tool_names = valid_tool_names or set()
-    cap = fallback_cap if fallback_cap is not None else ITERATION_CAPS.get(mode, 4)
-    messages = [{"role": "system", "content": build_system_prompt()}]
+    cap = ITERATION_CAPS.get(mode, 4)
+
+    # System prompt only on first interaction — LLM retains role from there
+    if not history:
+        messages = [{"role": "system", "content": build_system_prompt()}]
+    else:
+        messages = []
     if memory_context:
         messages.append({"role": "system", "content": memory_context})
     messages.extend(history[-TOOL_LOOP_HISTORY_MESSAGES:])
     messages.append({"role": "user", "content": user_input})
 
-    # ── Plan mode: execute pre-generated plan with parallel batching ─────────
-    if plan and plan.get("steps"):
-        plan_result = run_with_plan(
-            plan=plan,
-            user_input=user_input,
-            history=history,
-            execute_fn=execute_fn,
-            verify_fn=verify_fn,
-            mode=mode,
-            tools=tools,
-            memory_context=memory_context,
-            valid_tool_names=valid_tool_names,
-            pc_state_fn=pc_state_fn,
-        )
-        if not plan_result.get("success"):
-            return plan_result
-        # Plan succeeded — inject tool results as proper assistant+tool messages
-        tool_log = plan_result.get("tool_calls", [])
-        if tool_log:
-            synthetic_calls = []
-            for i, tl in enumerate(tool_log):
-                name = tl.get("tool", "")
-                args = tl.get("args", {})
-                call_id = f"plan_{i}"
-                tl["call_id"] = call_id
-                synthetic_calls.append({
-                    "function": {"name": name, "arguments": args},
-                    "id": call_id,
-                })
-
-            if synthetic_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": "I'll execute the planned steps.",
-                    "tool_calls": synthetic_calls,
-                })
-
-            for tl in tool_log:
-                name = tl.get("tool", "")
-                args = tl.get("args", {})
-                call_id = tl.get("call_id", "")
-                result = tl.get("result", {})
-
-                safe_result = dict(result)
-                if (name == "capture_screen" or (name == "screen" and args.get("action") == "capture")) and safe_result.get("image_b64"):
-                    try:
-                        vision_text = summarize_screen(safe_result["image_b64"], user_input)
-                        safe_result = {
-                            "success": safe_result.get("success", True),
-                            "width": safe_result.get("width"),
-                            "height": safe_result.get("height"),
-                            "vision_description": vision_text,
-                        }
-                    except Exception:
-                        safe_result.pop("image_b64", None)
-                        safe_result["vision_description"] = "(screenshot taken, description unavailable)"
-
-                verification = verify_fn(name, safe_result, user_input)
-                v = verification.copy() if isinstance(verification, dict) else {}
-                v.pop("method", None)
-                tool_feedback = {"tool_name": name, "result": safe_result}
-                if v.get("status") not in (None, "CONFIRMED"):
-                    tool_feedback["verification"] = v
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": json.dumps(tool_feedback, default=str),
-                })
-    else:
-        tool_log = []
+    tool_log = []
     valid_tools = set()
-    _circuit: dict[str, dict] = {}  # circuit breaker state per tool
-    _loop_aborted = False
+    _fail_counts: dict[str, int] = {}  # persists across iterations for fail-loop guard
 
     for iteration in range(1, cap + 1):
-        if _loop_aborted:
-            break
-        if len(json.dumps(messages)) > (MAX_CONTEXT_TOKENS * 3):
+        if len(json.dumps(messages)) > (MAX_CONTEXT_TOKENS * 4):
             messages = prune_history(messages)
 
-        print("\r[thinking]...", end="", flush=True)
+        print("\r\U0001f914 Thinking...", end="", flush=True)
 
         # ── Dynamic temperature + reasoning effort ────────────────────────────
         # Iteration 1, chat input  → warm temp + low effort (fast, no tools needed)
@@ -429,9 +337,54 @@ def run(
 
         print("\r" + " " * 25 + "\r", end="", flush=True)
         content = llm_result.get("content", "")
+
+        # ── Check for BATCH_TOOL_PLAN in text response ───────────────────────
+        batch_plan, plan_err = parse_batch_plan(content, _tool_names)
+        if batch_plan:
+            messages.append({"role": "assistant", "content": content})
+            batch_results = _execute_batch_plan(
+                batch_plan, execute_fn, verify_fn, user_input,
+                cache, tool_log, _fail_counts, pc_state_fn, iteration,
+            )
+            result_msg = format_batch_result(batch_plan["plan_id"], batch_results)
+            # If any call failed, tell the LLM to retry differently
+            has_failures = any(
+                r.get("status") in ("error", "skipped") for r in batch_results
+            )
+            if has_failures:
+                directive = (
+                    f"The runtime executed your batch plan and returned:\n"
+                    f"{result_msg}\n\n"
+                    f"Some calls failed. Do NOT repeat the same approach — try a "
+                    f"different tool, different parameters, or ask the user for "
+                    f"clarification before retrying."
+                )
+            else:
+                directive = (
+                    f"The runtime executed your batch plan and returned:\n"
+                    f"{result_msg}\n\n"
+                    f"Please analyze these results and provide a clear summary "
+                    f"to the user. Cite specific findings, errors, and suggested "
+                    f"next steps."
+                )
+            messages.append({"role": "user", "content": directive})
+            continue
+
+        if plan_err:
+            messages.append({"role": "assistant", "content": content})
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Your BATCH_TOOL_PLAN could not be parsed: {plan_err}\n\n"
+                    f"Fix the JSON syntax and output a corrected BATCH_TOOL_PLAN "
+                    f"with validated parameters matching the tool schemas exactly."
+                ),
+            })
+            continue
+
+        # ── Fallback: native tool_calls (backward compat) ─────────────────────
         tool_calls = llm_result.get("tool_calls") or []
 
-        # ── Early completion: if LLM responded with text (no tools), we're done ──
         if not tool_calls:
             return {
                 "response": content or "Task complete.",
@@ -442,25 +395,10 @@ def run(
             }
 
         valid_tools.update(tc["function"]["name"] for tc in tool_calls)
-        # Validate against ALL registered tools. Schema pruning (when enabled)
-        # must never imply only those tools exist — the model may call any name
-        # that appears in TOOL_REGISTRY.
         is_valid, err = validate_tool_calls(tool_calls, _tool_names)
         if not is_valid:
             messages.append({"role": "assistant", "content": err})
             continue
-
-        # Deduplicate identical tool calls — LLM sometimes outputs duplicates
-        seen: set[str] = set()
-        unique_calls: list[dict] = []
-        for tc in tool_calls:
-            key = json.dumps(tc, sort_keys=True, default=str)
-            if key not in seen:
-                seen.add(key)
-                unique_calls.append(tc)
-        if len(unique_calls) < len(tool_calls):
-            logger.warning(f"Deduplicated {len(tool_calls) - len(unique_calls)} duplicate tool call(s)")
-            tool_calls = unique_calls
 
         messages.append(
             {"role": "assistant", "content": content, "tool_calls": tool_calls}
@@ -472,130 +410,58 @@ def run(
             args = tc["function"]["arguments"]
             logger.info(f"Loop {iteration}: calling {name}")
 
-            # ── Check cache for read-only tools ────────────────────────────────
             cached_result = cache.get(name, args)
             if cached_result is not None:
-                logger.info(f"  ✓ {name} (cached)")
+                logger.info(f"  \u2713 {name} (cached)")
                 result = cached_result
-                # Mark as cached in tool log for transparency
                 tool_log.append(
                     {"tool": name, "args": args, "result": result, "call_id": tc["id"], "cached": True}
                 )
                 verification = verify_fn(name, result, user_input)
-                # Proceed to add to tool_results below
             else:
-                print(f"  [{name}]...", end="", flush=True)
+                print(f"  \U0001f527 {name}...", end="", flush=True)
                 result = execute_fn(name, args)
-                ok_str = "OK" if result.get("success") else "FAIL"
-                print(f"\r  [{name}] {ok_str}" + " " * 10, flush=True)
+                ok_str = "\u2713" if result.get("success") else "\u2717"
+                print(f"\r  \U0001f527 {name} {ok_str}" + " " * 10, flush=True)
                 tool_log.append(
                     {"tool": name, "args": args, "result": result, "call_id": tc["id"], "cached": False}
                 )
-
-                # Cache successful read-only tool results
                 cache.set(name, args, result)
-
                 verification = verify_fn(name, result, user_input)
 
-            # Attach verification status to the tool log entry
             if tool_log:
                 tool_log[-1]["verification"] = verification.get("status", "")
 
-            # Invalidate cache on write operations (skip read-only actions)
-            from brain.tool_result_cache import ToolResultCache
-            if name in ToolResultCache.WRITE_TOOLS and not cache._is_cacheable(name, args):
+            if name in ToolResultCache.WRITE_TOOLS:
                 cache.invalidate_tool(name)
-                # Also invalidate related read caches
-                if name in ("write_file", "file_ops"):
-                    path = args.get("path")
-                    if path:
-                        cache.invalidate_pattern("read_file", path=path)
-                elif name == "execute_code" or (name == "exec" and args.get("action", "run") == "run"):
+                if name == "execute_code":
                     cache.clear()
 
-            # ── Circuit breaker: track failures with time-based cooldown ─────
-            now = _time.time()
-            if name not in _circuit:
-                _circuit[name] = {"failures": 0, "last_fail": 0.0, "state": "closed"}
-            cb = _circuit[name]
-
-            if cb["state"] == "open":
-                if now - cb["last_fail"] >= 60.0:
-                    cb["state"] = "half_open"
-                    logger.info(f"Circuit {name}: OPEN → HALF_OPEN (cooldown expired)")
-                else:
-                    stop_msg = (
-                        f"CIRCUIT OPEN: '{name}' is in cooldown after {cb['failures']} failures. "
-                        f"STOP — do not retry. Notify the user."
-                    )
-                    logger.warning(stop_msg)
-                    messages.append({"role": "user", "content": stop_msg})
-                    _loop_aborted = True
-                    break
-
             if not result.get("success"):
-                cb["failures"] += 1
-                cb["last_fail"] = now
-                if cb["state"] == "half_open" or cb["failures"] >= 2:
-                    cb["state"] = "open"
+                _fail_counts[name] = _fail_counts.get(name, 0) + 1
+                if _fail_counts[name] >= 2:
                     stop_msg = (
-                        f"CIRCUIT OPEN: '{name}' failed ({cb['failures']} consecutive). "
-                        f"STOP — do not retry. Notify the user."
+                        f"FAIL-LOOP GUARD: '{name}' failed twice in a row "
+                        f"({result.get('error', 'unknown error')}). "
+                        f"STOP \u2014 do not retry. Notify the user."
                     )
                     logger.warning(stop_msg)
                     messages.append({"role": "user", "content": stop_msg})
-                    _loop_aborted = True
-                    break
+                    continue
             else:
-                cb["failures"] = 0
-                if cb["state"] == "half_open":
-                    cb["state"] = "closed"
-                    logger.info(f"Circuit {name}: HALF_OPEN → CLOSED (recovered)")
+                _fail_counts[name] = 0
 
-            # ── Vision: swap raw base64 for a text description ────────────────
-            # The main text LLM cannot process raw base64 image data — it just
-            # sees thousands of characters of noise, wasting tokens and giving
-            # it no visual information. We call the vision model here to convert
-            # the screenshot into a plain-text description before feeding it
-            # back to the main LLM in the next iteration.
             safe_result = dict(result)
-            if (name == "capture_screen" or (name == "screen" and args.get("action") == "capture")) and safe_result.get("image_b64"):
-                try:
-                    vision_text = summarize_screen(safe_result["image_b64"], user_input)
-                    # Replace the base64 blob with the human-readable description
-                    safe_result = {
-                        "success": safe_result.get("success", True),
-                        "width": safe_result.get("width"),
-                        "height": safe_result.get("height"),
-                        "vision_description": vision_text,
-                    }
-                    logger.info(
-                        f"tool_loop: screenshot converted to vision summary "
-                        f"({len(vision_text)} chars)"
-                    )
-                except Exception as ve:
-                    logger.warning(f"tool_loop: vision summary failed — {ve}")
-                    # Strip base64 even on failure to avoid token waste
-                    safe_result.pop("image_b64", None)
-                    safe_result["vision_description"] = (
-                        "(screenshot taken, description unavailable)"
-                    )
 
-            # ── Verification retry hint ───────────────────────────────────────
-            # When verification explicitly FAILS, inject a clear directive so
-            # the LLM knows to try a different approach, not repeat the same one.
             v_status = verification.get("status", "")
             if v_status == "FAILED":
                 verification["retry_directive"] = (
-                    "Verification FAILED — the action did not produce the expected "
+                    "Verification FAILED \u2014 the action did not produce the expected "
                     "outcome. Do NOT repeat the same approach. Try a different "
                     "tool, a different path, or ask the user for clarification."
                 )
-            
-            # ── Pre-execution state snapshot for failed tools ─────────────────
-            # When a tool fails, include a snapshot of current PC state to help
-            # the LLM diagnose what went wrong and choose a better approach.
-            if not result.get("success") and name not in ("read_pc_state", "window") and pc_state_fn is not None:
+
+            if not result.get("success") and name != "read_pc_state" and pc_state_fn is not None:
                 try:
                     state_snapshot = pc_state_fn()
                     if state_snapshot.get("success"):
@@ -604,40 +470,29 @@ def run(
                             "open_windows_count": len(state_snapshot.get("windows", [])),
                             "running_processes_count": len(state_snapshot.get("processes", [])),
                         }
-                except Exception as e:
-                    logger.debug(f"State snapshot unavailable: {e}")
+                except Exception:
+                    pass
 
-            # Omit redundant CONFIRmed verification — the LLM already sees
-            # success=True. Only send verification when it has useful info.
-            v = verification.copy() if isinstance(verification, dict) else {}
-            v.pop("method", None)
-            tool_feedback: dict = {"tool_name": name, "result": safe_result}
-            if v.get("status") not in (None, "CONFIRMED"):
-                tool_feedback["verification"] = v
             tool_results.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": json.dumps(tool_feedback, default=str),
+                    "content": json.dumps(
+                        {"result": safe_result, "verification": verification},
+                        default=str,
+                    ),
                 }
             )
 
         messages.extend(tool_results)
 
-    if _loop_aborted:
-        return {
-            "response": "A tool failed repeatedly. I've stopped to avoid compounding the issue.",
-            "tool_calls": tool_log,
-            "iterations": cap,
-            "success": False,
-            "error": "FAIL_LOOP_GUARD",
-        }
-
     logger.warning(f"Hit iteration cap ({cap})")
-    return {
+    result = {
         "response": "Task hit complexity limit. I've logged progress for review.",
         "tool_calls": tool_log,
         "iterations": cap,
         "success": False,
         "error": "ITERATION_CAP_EXCEEDED",
     }
+
+    return result

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from indexer import pc_indexer
 from indexer import app_scanner, file_scanner, state_monitor
-from tools.query_pc_index import query_pc_index
+from tools.system import query_pc_index
 
 def test_db_initializes():
     pc_indexer.init_db()
@@ -27,12 +27,9 @@ def test_app_scanner_pushes_records():
     assert count is None or isinstance(count, int)  # scan_apps returns via queue
     w.stop()
 
-def test_query_pc_index_returns_dict():
+def test_query_pc_index_returns_list():
     results = query_pc_index("notepad", type="app")
-    assert isinstance(results, dict)
-    assert "success" in results
-    assert "results" in results
-    assert isinstance(results["results"], list)
+    assert isinstance(results, list)
 
 def test_indexer_background_starts_and_stops_cleanly():
     pc_indexer.start()

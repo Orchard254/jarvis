@@ -36,7 +36,7 @@ def test_approval_gate_flow():
     t = threading.Thread(target=_try_request, daemon=True)
     t.start()
     t.join(timeout=3)
-    assert result[0] == False  # Timed out → denied
+    assert result[0] is False  # Timed out → denied
 
 def test_scheduler_cron_parsing():
     sched = scheduler.Scheduler(lambda cmd: "mock")

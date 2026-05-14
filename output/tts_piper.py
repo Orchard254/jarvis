@@ -86,8 +86,8 @@ def speak_piper(text: str, blocking: bool = True) -> bool:
         logger.error("TTS(piper): subprocess timed out — killing")
         try:
             proc.kill()
-        except Exception as e:
-            logger.debug(f"kill failed: {e}")
+        except Exception:
+            pass
         return False
 
     except Exception as exc:

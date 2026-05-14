@@ -1,8 +1,7 @@
-"""skills.stdlib.messaging — email, Telegram, and desktop toast notifications."""
+"""skills.stdlib.messaging — email and Telegram messaging."""
 from __future__ import annotations
 
-from tools.send_message import send_message
-from tools.notify_user import notify_user
+from tools.comm.send_message import send_message
 
 
 def send_email(
@@ -20,9 +19,4 @@ def send_telegram(body: str, chat_id: str = "") -> dict:
     return send_message(backend="telegram", body=body, chat_id=chat_id)
 
 
-def notify(title: str, message: str = "", duration: int = 5) -> dict:
-    """Show a Windows desktop toast notification."""
-    return notify_user(title=title, message=message, duration=duration)
-
-
-__all__ = ["send_email", "send_telegram", "notify", "send_message", "notify_user"]
+__all__ = ["send_email", "send_telegram", "send_message"]

@@ -12,5 +12,5 @@ def test_orchestrator_deterministic_flow():
 
 def test_orchestrator_cli_instantiates():
     orc = Orchestrator()
-    assert orc.running == True
-    assert orc._history == []
+    assert orc.running is True
+    assert len(orc._history) == 0

@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.execute_code import execute_code
+from tools.system import execute_code
 
 
 def test_unicode_print_succeeds():

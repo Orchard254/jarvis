@@ -237,12 +237,12 @@ class PlannerAgent:
             if line.startswith("COMPLEXITY:"):
                 try:
                     result["complexity_score"] = int(line.split(":")[1].strip())
-                except (ValueError, TypeError, IndexError):
+                except:
                     pass
             elif line.startswith("STEPS:"):
                 try:
                     result["estimated_steps"] = int(line.split(":")[1].strip())
-                except (ValueError, TypeError, IndexError):
+                except:
                     pass
             elif line.startswith("RESOURCES:"):
                 res = line.split(":")[1].strip()

@@ -33,12 +33,9 @@ except ImportError:
     DISK_WARN_THRESHOLD = 92
     MONITOR_INTERVAL = 15
 
-try:
-    from tools.notify_user import notify_user as _notify_user
-except ImportError:
-    def _notify_user(message: str, urgency: str = "normal") -> dict:
-        logger.warning(f"ambient_monitor [{urgency.upper()}]: {message}")
-        return {"success": False, "reason": "notify_user_unavailable"}
+def _notify_user(message: str, urgency: str = "normal") -> dict:
+    logger.warning(f"ambient_monitor [{urgency.upper()}]: {message}")
+    return {"success": False, "reason": "notify_user_unavailable"}
 
 _COOLDOWN = 600  # 10 minutes between repeat alerts
 
@@ -152,19 +149,19 @@ def _monitor_loop():
         now = time.time()
         try:
             _check_battery()
-        except Exception as e:
-            logger.debug(f"_check_battery failed: {e}")
+        except Exception:
+            pass
         try:
             _check_cpu(now)
-        except Exception as e:
-            logger.debug(f"_check_cpu failed: {e}")
+        except Exception:
+            pass
         try:
             _check_memory()
-        except Exception as e:
-            logger.debug(f"_check_memory failed: {e}")
+        except Exception:
+            pass
         try:
             _check_disk()
-        except Exception as e:
-            logger.debug(f"_check_disk failed: {e}")
+        except Exception:
+            pass
         _stop_event.wait(MONITOR_INTERVAL)
     logger.info("ambient_monitor: loop stopped")

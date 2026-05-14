@@ -96,9 +96,9 @@ try:
         _orig_tqdm_close(self)
 
     _std_tqdm.close = _safe_tqdm_close
-    del _std_tqdm
+    del _std_tqdm, _orig_tqdm_close
 except Exception:
-    pass  # logger not yet defined at this point in module init
+    pass
 # ─────────────────────────────────────────────────────────────────────────────
 
 logger = logging.getLogger("jarvis")
@@ -117,43 +117,22 @@ signal.signal(signal.SIGTERM, handle_exit)
 def main():
     logger.info("JARVIS Starting...")
 
-    # ── First-run setup ──────────────────────────────────────────────────
+    # Strict startup checks
     env_path = Path(__file__).parent / ".env"
     if not env_path.exists():
-        example_path = Path(__file__).parent / ".env.example"
-        if example_path.exists():
-            print("\n📋 First run detected — creating .env from .env.example ...")
-            import shutil
-            shutil.copy(example_path, env_path)
-            print("    Created .env — please edit it with your settings.")
-        else:
-            print("\n❌ ERROR: .env file not found!")
-            print("    Please copy .env.example to .env and configure it.")
-            sys.exit(1)
+        print("\n❌ ERROR: .env file not found!")
+        print("    Please copy .env.example to .env and configure it.")
+        sys.exit(1)
 
     from settings import OLLAMA_API_KEY
 
     leaked_pattern = "b3ad7ee1e4614eee89cb85dcfe1451d1.4a-cPAqHQnD-OHBwj9qHbg8d"
-    if not OLLAMA_API_KEY or OLLAMA_API_KEY == leaked_pattern:
-        print("\n" + "=" * 60)
-        print("  JARVIS — API Key Setup Required")
-        print("=" * 60)
-        if OLLAMA_API_KEY == leaked_pattern:
-            print("  ⚠  You're using a leaked placeholder key.")
-        else:
-            print("  No OLLAMA_API_KEY configured.")
-        print()
-        print("  To get your API key:")
-        print("    1. Go to https://ollama.com/settings/api-keys")
-        print("    2. Create a new API key")
-        print("    3. Add it to your .env file:")
-        print("       OLLAMA_API_KEY=your_key_here")
-        print()
-        print("  For local-only mode (no cloud), set:")
-        print("    OLLAMA_MODE=local")
-        print("    OLLAMA_LOCAL_URL=http://localhost:11434/api/chat")
-        print("=" * 60)
-        print("  Continuing with limited functionality...\n")
+    if OLLAMA_API_KEY == leaked_pattern:
+        print("\n⚠️  WARNING: You're using a leaked placeholder OLLAMA_API_KEY!")
+        print(
+            "    Please update your .env file with your actual API key from https://ollama.com/settings/api-keys"
+        )
+        print("    Continuing with placeholder (limited functionality)...\n")
 
     # ── Startup health check ───────────────────────────────────────────────
     from core.health_check import run_all as run_health_check
@@ -163,7 +142,7 @@ def main():
     audit_log.setup()
     pc_indexer.start()
 
-    mem = memory_manager.MemoryManager(session_id=f"cli_{os.getpid()}")
+    mem = memory_manager.MemoryManager(session_id="prod_cli_01")
 
     # Prune old episodic memory (>90 days) on startup so the DB stays lean.
     # This is fast when there's little old data and silent on failure.
@@ -172,17 +151,7 @@ def main():
     except Exception as _prune_exc:
         logger.debug(f"Episode prune skipped: {_prune_exc}")
 
-    # Initialize long-term memory (RAG-based, cross-session) for
-    # semantically relevant memory retrieval
-    ltm = None
-    try:
-        from memory.long_term_memory import init_memory_manager
-        ltm = init_memory_manager(persist_dir=str(settings.DATA_DIR / "long_term_memory"))
-        logger.info("Long-term memory initialized with semantic search")
-    except Exception as _ltm_exc:
-        logger.warning(f"Long-term memory unavailable: {_ltm_exc}")
-
-    orc = Orchestrator(memory=mem, long_term_memory=ltm)
+    orc = Orchestrator(memory=mem)
 
     print("\n" + "=" * 50)
     print("JARVIS ONLINE. Type a command or 'quit' to exit.")

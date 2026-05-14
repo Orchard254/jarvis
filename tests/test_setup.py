@@ -4,8 +4,7 @@ import pytest
 from pathlib import Path
 import sys
 
-BASE = Path(__file__).parent.parent
-sys.path.insert(0, str(BASE))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_settings_imports():
     import settings
@@ -24,7 +23,7 @@ def test_required_directories_exist():
         "data", "logs", "skills/db", "indexer/db", "memory/db"
     ]
     for d in dirs:
-        assert (BASE / d).exists(), f"Missing directory: {d}"
+        assert Path(d).exists(), f"Missing directory: {d}"
 
 def test_required_init_files():
     packages = [
@@ -32,22 +31,21 @@ def test_required_init_files():
         "memory", "verification", "perception", "output", "autonomous", "tests"
     ]
     for d in packages:
-        assert (BASE / d / "__init__.py").exists(), f"Missing __init__.py in {d}/"
+        assert (Path(d) / "__init__.py").exists(), f"Missing __init__.py in {d}/"
 
 def test_jarvis_entry_point():
-    entry = BASE / "jarvis.py"
-    assert entry.exists()
+    assert Path("jarvis.py").exists()
     import importlib.util
-    spec = importlib.util.spec_from_file_location("jarvis", str(entry))
+    spec = importlib.util.spec_from_file_location("jarvis", "jarvis.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert hasattr(module, "main")
 
 def test_env_file_exists():
-    assert (BASE / ".env").exists()
+    assert Path(".env").exists()
 
 def test_requirements_has_critical_deps():
-    reqs = (BASE / "requirements.txt").read_text().lower()
+    reqs = Path("requirements.txt").read_text().lower()
     critical = ["ollama", "chromadb", "pywin32", "psutil", "pillow", "pytesseract", "pytest"]
     for dep in critical:
         assert dep in reqs, f"Missing critical dependency in requirements.txt: {dep}"

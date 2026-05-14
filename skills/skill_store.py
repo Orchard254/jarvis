@@ -12,15 +12,6 @@ from skills import skill_embedder
 from skills.skill_embedder import add_skill as embed_skill
 from skills.skill_embedder import delete_skill as delete_embedding
 
-# Skill versioning — tracks multiple versions per intent_label for A/B testing
-try:
-    from core.skill_versioning import get_registry, DeploymentStatus
-    _version_registry = get_registry()
-    _VERSIONING_AVAILABLE = True
-except Exception:
-    _version_registry = None
-    _VERSIONING_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,33 +73,12 @@ def save_candidate(intent_label: str, code: str, language: str = "python") -> st
             (skill_id, intent_label, code, language),
         )
         conn.commit()
-
-        # Track version in version registry when available
-        if _VERSIONING_AVAILABLE:
-            version = _compute_next_version(intent_label)
-            # Register in-memory — actual version selection is passive (via select_version)
-            _version_registry.register_version(
-                intent_label, version,
-                lambda: None,  # dummy — actual impl is in DB
-                status=DeploymentStatus.DRAFT,
-                metadata={"skill_id": skill_id, "language": language}
-            )
-
         logger.info(f"Saved candidate skill {skill_id} for {intent_label}")
     except Exception as e:
         logger.error(f"Failed to save candidate: {e}")
         return ""
 
     return skill_id
-
-
-def _compute_next_version(intent_label: str) -> str:
-    """Compute the next version string for a given intent label."""
-    conn = _connect()
-    existing = conn.execute(
-        "SELECT COUNT(*) FROM skills WHERE intent_label = ?", (intent_label,)
-    ).fetchone()[0]
-    return f"v{existing + 1}.0.0"
 
 
 def promote_skill(skill_id: str, conn=None):
@@ -124,38 +94,12 @@ def promote_skill(skill_id: str, conn=None):
             logger.warning(f"Skill {skill_id} not found for promotion")
             return
         intent_label, code = row
-
-        # Demote any existing active skill with the same intent to ACTIVE (multi-version support)
-        # so we keep the old version available for A/B comparison
-        old_active = conn.execute(
-            "SELECT skill_id FROM skills WHERE intent_label = ? AND status = 'active' AND skill_id != ?",
-            (intent_label, skill_id),
-        ).fetchone()
-        if old_active:
-            # Keep it active — traffic routing in version_registry handles selection
-            pass
-
         conn.execute(
             "UPDATE skills SET status = 'active', embedding_generated = 1 WHERE skill_id = ?",
             (skill_id,),
         )
         conn.commit()
         embed_skill(skill_id, intent_label, code)
-
-        # Promote version in registry
-        if _VERSIONING_AVAILABLE:
-            version = _compute_next_version(intent_label)
-            versions = _version_registry.versions.get(intent_label, [])
-            for v in versions:
-                if v.metadata.get("skill_id") == skill_id:
-                    v.status = DeploymentStatus.ACTIVE
-                    v.traffic_percentage = 100.0
-                else:
-                    # Older versions become DEPRECATED to phase out traffic
-                    if v.status == DeploymentStatus.ACTIVE:
-                        v.status = DeploymentStatus.DEPRECATED
-                        v.traffic_percentage = 0.0
-
         logger.info(f"Promoted skill {skill_id} to active")
     except Exception as e:
         logger.error(f"Failed to promote skill {skill_id}: {e}")

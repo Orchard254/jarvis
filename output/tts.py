@@ -22,7 +22,6 @@ import logging
 import os
 import sys
 import tempfile
-from collections import deque
 from pathlib import Path
 
 import settings
@@ -31,11 +30,10 @@ logger = logging.getLogger(__name__)
 
 # ── Lazy pygame mixer initialisation ──────────────────────────────────────────
 _mixer_ready: bool = False
-_mixer_lock: threading.Lock = __import__('threading').Lock()
 
 # Files queued for deletion after non-blocking playback finishes.
 # _speak_edge appends the path; _wait_and_clear drains the queue.
-_tmp_cleanup_queue: deque[str] = deque(maxlen=200)
+_tmp_cleanup_queue: list[str] = []
 
 
 def _init_mixer() -> bool:
@@ -43,9 +41,6 @@ def _init_mixer() -> bool:
     global _mixer_ready
     if _mixer_ready:
         return True
-    with _mixer_lock:
-        if _mixer_ready:
-            return True
     try:
         os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
         # Try DirectSound first on Windows to avoid WASAPI issues
@@ -153,20 +148,20 @@ def speak(text: str, blocking: bool = True) -> bool:
                     # Unload so Windows releases the file handle, then delete queued temps.
                     try:
                         pygame.mixer.music.unload()
-                    except Exception as e:
-                        logger.debug(f"unload failed: {e}")
+                    except Exception:
+                        pass
                     for p in list(_tmp_cleanup_queue):
                         try:
                             Path(p).unlink(missing_ok=True)
-                        except Exception as e:
-                            logger.debug(f"Path failed: {e}")
-                    _tmp_cleanup_queue.clear()
+                            _tmp_cleanup_queue.remove(p)
+                        except Exception:
+                            pass
                     # Non-blocking wait using pygame clock instead of time.sleep
                     _clock = pygame.time.Clock()
                     for _ in range(16):  # ~0.8s at 20Hz
                         _clock.tick(20)
-                except Exception as e:
-                    logger.debug(f"tick failed: {e}")
+                except Exception:
+                    pass
                 finally:
                     settings.IS_SPEAKING.clear()
 
@@ -271,100 +266,57 @@ def _speak_edge(text: str, blocking: bool) -> bool:
         # after get_busy() returns False — deleting here cuts audio mid-sentence.
         if blocking and tmp_path:
             try:
-                if _mixer_ready:
-                    import pygame  # noqa: PLC0415
-                    pygame.mixer.music.unload()
-            except Exception as e:
-                logger.debug(f"unload failed: {e}")
+                import pygame  # noqa: PLC0415
+                pygame.mixer.music.unload()
+            except Exception:
+                pass
             try:
                 Path(tmp_path).unlink(missing_ok=True)
-            except Exception as e:
-                logger.debug(f"Path failed: {e}")
+            except Exception:
+                pass
         elif tmp_path:
             _tmp_cleanup_queue.append(tmp_path)
 
 
 # ── Cross-platform fallback helper (pyttsx3) ──────────────────────────────────
-# Uses a dedicated worker thread with a queue so only one runAndWait() call
-# is ever active at a time, avoiding "run loop already started" errors.
-
-import threading as _threading
-from dataclasses import dataclass
-
-_pyttsx3_engine = None
-_pyttsx3_init_lock = _threading.Lock()
-_pyttsx3_request_queue: "queue.Queue[_Pyttsx3Request | None]" = __import__("queue").Queue()
-_pyttsx3_worker_started = False
-
-
-@dataclass
-class _Pyttsx3Request:
-    text: str
-    done_event: _threading.Event | None = None  # None = fire-and-forget
-
-
-def _pyttsx3_worker():
-    """Dedicated thread: serialises all pyttsx3 say+runAndWait calls."""
-    import pyttsx3
-    engine = _get_pyttsx3_engine()
-    while True:
-        req = _pyttsx3_request_queue.get()
-        if req is None:
-            break
-        try:
-            engine.say(req.text)
-            engine.runAndWait()
-        except Exception as exc:
-            logger.error(f"TTS(pyttsx3 worker): {exc}")
-        if req.done_event is not None:
-            req.done_event.set()
-
-
-def _ensure_pyttsx3_worker():
-    global _pyttsx3_worker_started
-    with _pyttsx3_init_lock:
-        if not _pyttsx3_worker_started:
-            _pyttsx3_worker_started = True
-            t = _threading.Thread(target=_pyttsx3_worker, daemon=True, name="pyttsx3-worker")
-            t.start()
-
-
-def _get_pyttsx3_engine():
-    """Return a singleton pyttsx3 engine, initialised once."""
-    global _pyttsx3_engine
-    if _pyttsx3_engine is None:
-        with _pyttsx3_init_lock:
-            if _pyttsx3_engine is None:
-                import pyttsx3
-                _pyttsx3_engine = pyttsx3.init()
-                voices = _pyttsx3_engine.getProperty('voices')
-                if voices and hasattr(settings, 'TTS_VOICE') and settings.TTS_VOICE:
-                    for voice in voices:
-                        if settings.TTS_VOICE.lower() in voice.name.lower() or \
-                           settings.TTS_VOICE.lower() in voice.id.lower():
-                            _pyttsx3_engine.setProperty('voice', voice.id)
-                            break
-                if hasattr(settings, 'TTS_RATE') and settings.TTS_RATE:
-                    _pyttsx3_engine.setProperty('rate', settings.TTS_RATE)
-                if hasattr(settings, 'TTS_VOLUME') and settings.TTS_VOLUME:
-                    _pyttsx3_engine.setProperty('volume', min(settings.TTS_VOLUME / 100.0, 1.0))
-    return _pyttsx3_engine
 
 
 def _fallback_pyttsx3(text: str, blocking: bool) -> bool:
     """
     Use pyttsx3 for cross-platform TTS fallback.
-
-    Uses a singleton engine with a dedicated worker thread to avoid
-    "run loop already started" errors from concurrent runAndWait() calls.
+    
+    This works on Windows (SAPI5), macOS (nsss), and Linux (espeak).
+    Does not require pygame or any specific audio hardware configuration.
     """
     logger.info("TTS: using pyttsx3 fallback (cross-platform)")
     try:
-        _ensure_pyttsx3_worker()
-        done_event = _threading.Event() if blocking else None
-        _pyttsx3_request_queue.put(_Pyttsx3Request(text=text, done_event=done_event))
+        import pyttsx3  # noqa: PLC0415
+        
+        engine = pyttsx3.init()
+        
+        # Configure voice properties from settings if available
+        voices = engine.getProperty('voices')
+        if voices and hasattr(settings, 'TTS_VOICE') and settings.TTS_VOICE:
+            # Try to find a matching voice
+            for voice in voices:
+                if settings.TTS_VOICE.lower() in voice.name.lower() or \
+                   settings.TTS_VOICE.lower() in voice.id.lower():
+                    engine.setProperty('voice', voice.id)
+                    break
+        
+        if hasattr(settings, 'TTS_RATE') and settings.TTS_RATE:
+            engine.setProperty('rate', settings.TTS_RATE)
+        if hasattr(settings, 'TTS_VOLUME') and settings.TTS_VOLUME:
+            engine.setProperty('volume', min(settings.TTS_VOLUME / 100.0, 1.0))
+        
+        engine.say(text)
         if blocking:
-            done_event.wait()
+            engine.runAndWait()
+        else:
+            # Non-blocking: start in a thread
+            import threading
+            threading.Thread(target=engine.runAndWait, daemon=True).start()
+        
         return True
     except Exception as exc:
         logger.error(f"TTS(pyttsx3 fallback): failed — {exc}")

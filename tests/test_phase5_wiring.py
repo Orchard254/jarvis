@@ -7,9 +7,9 @@ from core.orchestrator import Orchestrator
 
 def test_orchestrator_instantiates_clean():
     orc = Orchestrator()
-    assert orc._history == []
+    assert len(orc._history) == 0
     assert orc._mode == "interactive_cloud"
-    assert orc.running == True
+    assert orc.running is True
 
 def test_mode_switching_valid():
     orc = Orchestrator()
