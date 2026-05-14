@@ -24,29 +24,43 @@ def _register(pattern: str, tool: str, description: str):
     _PATTERNS.append((re.compile(pattern, re.IGNORECASE), tool, description))
 
 
-# ── Window management ────────────────────────────────────────────────────────
+# ── Browser navigation (MUST come before window patterns so URLs are caught first)
 _register(
-    r"^(?:open|launch|start)\s+(?!https?://)(.+)$",
+    r"^(?:go to|open|navigate to|browse)\s+(https?://\S+)$",
+    "browser_navigate",
+    "Navigate to URL",
+)
+# "go to X.com" or "go to X.org" etc. — bare domain without scheme
+_register(
+    r"^(?:go to|navigate to|browse)\s+(\S+\.(?:com|org|net|io|dev|edu|gov|co|me|app|ai|info|biz|us|uk|xyz|site|online|tech|store|cloud)\S*)$",
+    "browser_navigate_bare",
+    "Navigate to URL",
+)
+
+# ── Window management ────────────────────────────────────────────────────────
+# Reject compound commands containing " and " — those need the LLM planner.
+_register(
+    r"^(?:open|launch|start)\s+(?!https?://)((?:(?!\band\b).)+)$",
     "window_open",
     "Open/launch an application",
 )
 _register(
-    r"^(?:close|quit|exit)\s+(.+)$",
+    r"^(?:close|quit|exit)\s+((?:(?!\band\b).)+)$",
     "window_close",
     "Close a window/application",
 )
 _register(
-    r"^(?:minimize)\s+(.+)$",
+    r"^(?:minimize)\s+((?:(?!\band\b).)+)$",
     "window_minimize",
     "Minimize a window",
 )
 _register(
-    r"^(?:maximize)\s+(.+)$",
+    r"^(?:maximize)\s+((?:(?!\band\b).)+)$",
     "window_maximize",
     "Maximize a window",
 )
 _register(
-    r"^(?:focus|switch to|go to)\s+(?!https?://)(.+)$",
+    r"^(?:focus|switch to|activate)\s+((?:(?!\band\b).)+)$",
     "window_focus",
     "Focus/switch to a window",
 )
@@ -66,12 +80,6 @@ _register(
     "Take a screenshot",
 )
 
-# ── Browser navigation ──────────────────────────────────────────────────────
-_register(
-    r"^(?:go to|open|navigate to|browse)\s+(https?://\S+)$",
-    "browser_navigate",
-    "Navigate to URL",
-)
 _register(
     r"^(?:search|google|look up|search for)\s+(.+)$",
     "browser_search",
@@ -146,6 +154,9 @@ def _build_tool_call(action_key: str, match: re.Match) -> Optional[dict]:
         return {"tool": "window", "args": {"action": "maximize", "window_title": target}}
     elif action_key == "window_focus":
         return {"tool": "window", "args": {"action": "focus", "window_title": target}}
+    elif action_key == "browser_navigate_bare":
+        url = target if target.startswith("http") else f"https://{target}"
+        return {"tool": "browser", "args": {"action": "navigate", "url": url}}
     elif action_key == "volume_set":
         try:
             level = int(target)
