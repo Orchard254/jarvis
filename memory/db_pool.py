@@ -58,7 +58,7 @@ class ConnectionPool:
                 self._pool.put_nowait(conn)
             except Exception as e:
                 logger.warning(f"Failed to pre-create connection {i}: {e}")
-                break
+                continue
         
         if not self._pool.empty():
             self._initialized = True
@@ -119,13 +119,16 @@ class ConnectionPool:
 # Global pools for each database module
 _episodic_pool: Optional[ConnectionPool] = None
 _semantic_pool: Optional[ConnectionPool] = None
+_pool_lock = threading.Lock()
 
 
 def get_episodic_pool() -> ConnectionPool:
     """Get or create the episodic memory connection pool."""
     global _episodic_pool
     if _episodic_pool is None:
-        _episodic_pool = ConnectionPool(MEMORY_DB, pool_size=5)
+        with _pool_lock:
+            if _episodic_pool is None:
+                _episodic_pool = ConnectionPool(MEMORY_DB, pool_size=5)
     return _episodic_pool
 
 
@@ -133,8 +136,21 @@ def get_semantic_pool() -> ConnectionPool:
     """Get or create the semantic memory connection pool."""
     global _semantic_pool
     if _semantic_pool is None:
-        _semantic_pool = ConnectionPool(MEMORY_DB, pool_size=3)
+        with _pool_lock:
+            if _semantic_pool is None:
+                _semantic_pool = ConnectionPool(MEMORY_DB, pool_size=3)
     return _semantic_pool
+
+
+def shutdown_pools():
+    """Close all pooled connections (call on app exit)."""
+    global _episodic_pool, _semantic_pool
+    if _episodic_pool is not None:
+        _episodic_pool.close_all()
+        _episodic_pool = None
+    if _semantic_pool is not None:
+        _semantic_pool.close_all()
+        _semantic_pool = None
 
 
 @contextmanager

@@ -9,10 +9,10 @@ from safety import executor
 from verification import verifier
 
 def test_all_tools_registered():
-    assert len(TOOL_REGISTRY) >= 10
+    assert len(TOOL_REGISTRY) >= 30
     assert "execute_code" in TOOL_REGISTRY
-    assert "browser" in TOOL_REGISTRY
     assert "vision_query" in TOOL_REGISTRY
+    assert "speak" in TOOL_REGISTRY
 
 def test_execute_code_safe():
     from tools.system import execute_code

@@ -12,7 +12,7 @@ from brain.tool_loop import run
 
 def test_system_prompt_contains_rules():
     prompt = build_system_prompt()
-    assert "TOOL_CALL" in prompt
+    assert "BATCH_TOOL_PLAN" in prompt
     assert "Jarvis" in prompt
 
 def test_context_manager_prunes_heavy_history():
@@ -53,7 +53,7 @@ def test_tool_loop_executes_callbacks(monkeypatch):
         return {"status": "CONFIRMED", "summary": "ok"}
 
     result = run("test", [], mock_exec, mock_verify, mode="interactive_cloud", valid_tool_names={"read_pc_state"})
-    assert call_count == 2
+    assert call_count == 3  # 1 Jarvis + 1 executor validation + 1 Jarvis summary
     assert "read_pc_state" in executed
     assert result["success"] is True
     assert "Done." in result["response"]

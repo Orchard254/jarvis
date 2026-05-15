@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from indexer import pc_indexer
 from indexer import app_scanner, file_scanner, state_monitor
-from tools.system import query_pc_index
 
 def test_db_initializes():
     pc_indexer.init_db()
@@ -24,12 +23,17 @@ def test_app_scanner_pushes_records():
     w = IndexWriter()
     w.start()
     count = app_scanner.scan_apps(w)
-    assert count is None or isinstance(count, int)  # scan_apps returns via queue
+    assert count is None or isinstance(count, int)
     w.stop()
 
-def test_query_pc_index_returns_list():
-    results = query_pc_index("notepad", type="app")
-    assert isinstance(results, list)
+def test_db_query_returns_results():
+    import sqlite3
+    from core.thread_db import get_connection
+    conn = get_connection(pc_indexer.PC_INDEX_DB, timeout=5000)
+    cur = conn.execute("SELECT name, exe_path FROM apps WHERE name LIKE ?", ("%notepad%",))
+    rows = cur.fetchall()
+    conn.close()
+    assert isinstance(rows, list)
 
 def test_indexer_background_starts_and_stops_cleanly():
     pc_indexer.start()

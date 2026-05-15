@@ -61,7 +61,7 @@ def test_activity_log_summary():
     
     summary = activity_log.generate_summary(task_id=tid)
     assert "autonomous test" in summary
-    assert "✅" in summary or "complete" in summary.lower()
+    assert "complete" in summary.lower()
 
 def test_pending_approvals_filter():
     task_queue.init_db()

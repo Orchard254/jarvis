@@ -8,7 +8,6 @@ import logging
 import sqlite3
 import time
 import uuid
-from pathlib import Path
 
 from settings import MEMORY_DB
 from core.thread_db import get_connection
@@ -68,6 +67,25 @@ def create_task(
     label = repr(command) if len(command) <= 50 else repr(command[:50]) + "..."
     logger.info(f"task_queue: created task '{task_id[:8]}' — {label}")
     return task_id
+
+
+def claim_task(task_id: str) -> bool:
+    """
+    Atomically claim a pending task by transitioning it to 'running'.
+    Returns True if the task was successfully claimed, False if another
+    scheduler already claimed it (TOCTOU-safe).
+    """
+    conn = _connect()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE autonomous_tasks SET status = 'running', started_at = ? WHERE task_id = ? AND status = 'pending'",
+        (time.time(), task_id),
+    )
+    conn.commit()
+    claimed = c.rowcount > 0
+    if claimed:
+        logger.info(f"task_queue: claimed task '{task_id[:8]}' (pending → running)")
+    return claimed
 
 
 def get_pending_tasks() -> list[dict]:

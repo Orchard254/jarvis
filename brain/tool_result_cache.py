@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +115,12 @@ class ToolResultCache:
         with lock:
             entry = self._cache.get(key)
             if entry is None:
+                self._track_miss()
                 return None
 
             if entry.is_expired():
                 del self._cache[key]
+                self._track_miss()
                 logger.debug(f"cache: expired entry for {tool_name}")
                 return None
 
@@ -254,6 +256,7 @@ class ToolResultCache:
 
     def stats(self) -> dict:
         """Return cache statistics."""
+        total_misses = getattr(self, "_total_misses", 0)
         lock = self._get_lock()
         with lock:
             total_hits = sum(e.hit_count for e in self._cache.values())
@@ -262,13 +265,19 @@ class ToolResultCache:
             # Count expired entries
             expired = sum(1 for e in self._cache.values() if e.is_expired())
 
+        total_requests = total_hits + total_misses
         return {
             "entries": total_entries,
             "total_hits": total_hits,
+            "total_misses": total_misses,
             "expired_entries": expired,
             "max_entries": self._max_entries,
-            "hit_rate": total_hits / (total_hits + total_entries) if (total_hits + total_entries) > 0 else 0.0,
+            "hit_rate": total_hits / total_requests if total_requests > 0 else 0.0,
         }
+
+    def _track_miss(self):
+        """Increment the miss counter (thread-safe)."""
+        self._total_misses = getattr(self, "_total_misses", 0) + 1
 
     def _evict_oldest(self, count: int = 1) -> None:
         """Evict the oldest cache entries."""

@@ -23,7 +23,7 @@ def prune_history(messages: list[dict], budget: int = MAX_CONTEXT_TOKENS) -> lis
     system = [m for m in messages if m["role"] == "system"]
     history = [m for m in messages if m["role"] != "system"]
 
-    current_tokens = sum(estimate_tokens(json.dumps(m)) for m in history)
+    current_tokens = sum(estimate_tokens(json.dumps(m, default=str)) for m in history)
     if current_tokens <= budget * 0.8:
         return system + history[-20:]
 
@@ -87,28 +87,18 @@ def _summarize_early_turns(early_turns: list[dict]) -> str:
             f"context_manager: LLM summarization failed — {exc}, using fallback"
         )
 
-    # Fallback: extract tool names from tool-role messages
-    # Actual tool result content from tool_loop.py is:
-    #   {"result": {...}, "verification": {...}}
-    # NOT the old {"tool": str, ...} format.
-    tools_used = []
+    # Fallback: summarize the topics discussed from user messages
+    topics = []
     for m in early_turns:
-        if m.get("role") == "tool":
-            content_str = m.get("content", "{}")
-            if not isinstance(content_str, str):
-                content_str = str(content_str)
-            try:
-                content_data = json.loads(content_str)
-                # Try to extract tool name from nested result
-                tool_name = (
-                    content_data.get("tool")  # direct (old format)
-                    or content_data.get("result", {}).get("tool_name")  # nested result
-                    or "tool"  # generic fallback
-                )
-                tools_used.append(tool_name)
-            except (json.JSONDecodeError, AttributeError):
-                tool_name = "tool"
-                tools_used.append(tool_name)
-    unique = list(dict.fromkeys(tools_used))  # deduplicate, preserve order
-    tool_str = ", ".join(unique) if unique else "various tools"
-    return f"User requested a multi-step task. Tools used: {tool_str}."
+        if m.get("role") == "user":
+            content = m.get("content", "")
+            if isinstance(content, str) and content.strip():
+                topics.append(content.strip()[:80])
+        elif m.get("role") == "tool":
+            # Mark that tools were executed (tool name is not embedded in this format)
+            content_raw = m.get("content", "")
+            if content_raw:
+                topics.append("[tool execution step]")
+    unique_topics = list(dict.fromkeys(topics))
+    topic_str = "; ".join(unique_topics[:6]) if unique_topics else "various operations"
+    return f"Earlier conversation covered: {topic_str}."

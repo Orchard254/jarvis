@@ -33,7 +33,9 @@ _mixer_ready: bool = False
 
 # Files queued for deletion after non-blocking playback finishes.
 # _speak_edge appends the path; _wait_and_clear drains the queue.
+# Protected by _tmp_cleanup_lock for thread safety.
 _tmp_cleanup_queue: list[str] = []
+_tmp_cleanup_lock = threading.Lock()
 
 
 def _init_mixer() -> bool:
@@ -150,12 +152,14 @@ def speak(text: str, blocking: bool = True) -> bool:
                         pygame.mixer.music.unload()
                     except Exception:
                         pass
-                    for p in list(_tmp_cleanup_queue):
-                        try:
-                            Path(p).unlink(missing_ok=True)
-                            _tmp_cleanup_queue.remove(p)
-                        except Exception:
-                            pass
+                    import threading as _thr
+                    with _thr.Lock():
+                        for p in list(_tmp_cleanup_queue):
+                            try:
+                                Path(p).unlink(missing_ok=True)
+                                _tmp_cleanup_queue.remove(p)
+                            except Exception:
+                                pass
                     # Non-blocking wait using pygame clock instead of time.sleep
                     _clock = pygame.time.Clock()
                     for _ in range(16):  # ~0.8s at 20Hz
@@ -208,26 +212,22 @@ def _speak_edge(text: str, blocking: bool) -> bool:
             pitch=settings.EDGE_TTS_PITCH,
         )
 
-        # asyncio.run() works even if no event loop is running (e.g. main thread).
-        # For callers inside an existing loop use loop.run_until_complete() instead.
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
+        # Run edge-tts in a dedicated thread with its own event loop to avoid
+        # deadlocking when called from a thread that already has a running loop.
+        import concurrent.futures
 
-        if loop and loop.is_running():
-            # We're inside an async context — schedule as a task and spin the loop
-            import concurrent.futures  # noqa: PLC0415
-
-            future = asyncio.run_coroutine_threadsafe(communicate.save(tmp_path), loop)
-            future.result(timeout=settings.EDGE_TTS_TIMEOUT)
-        else:
+        def _run_edge_synthesis():
+            import asyncio
             asyncio.run(
                 asyncio.wait_for(
                     communicate.save(tmp_path),
                     timeout=settings.EDGE_TTS_TIMEOUT,
                 )
             )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _tts_pool:
+            _tts_future = _tts_pool.submit(_run_edge_synthesis)
+            _tts_future.result(timeout=settings.EDGE_TTS_TIMEOUT + 10)
 
         logger.debug(f"TTS(edge): synthesised {len(text)} chars → {tmp_path}")
 
@@ -275,7 +275,8 @@ def _speak_edge(text: str, blocking: bool) -> bool:
             except Exception:
                 pass
         elif tmp_path:
-            _tmp_cleanup_queue.append(tmp_path)
+            with _tmp_cleanup_lock:
+                _tmp_cleanup_queue.append(tmp_path)
 
 
 # ── Cross-platform fallback helper (pyttsx3) ──────────────────────────────────

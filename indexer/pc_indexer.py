@@ -2,9 +2,7 @@
 """
 Background indexer orchestrator. Starts scanners, manages DB schema, handles lifecycle.
 """
-import sqlite3
 import logging
-import time
 import threading
 from settings import PC_INDEX_DB, DB_BUSY_TIMEOUT, INDEX_REFRESH_APPS, INDEX_REFRESH_FILES
 from indexer.write_queue import IndexWriter

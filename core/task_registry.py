@@ -123,17 +123,14 @@ class TaskRegistry:
     def cleanup_old_tasks(self, max_age_hours: int = 24):
         """Remove completed tasks older than max_age_hours"""
         now = datetime.now()
-        to_remove = []
         with self._lock:
-            for tid, task in self._tasks.items():
-                if task.completed_at:
-                    age = (now - task.completed_at).total_seconds() / 3600
-                    if age > max_age_hours:
-                        to_remove.append(tid)
-        
-        for tid in to_remove:
-            del self._tasks[tid]
-            logger.debug(f"Cleaned up old task: {tid}")
+            to_remove = [
+                tid for tid, task in self._tasks.items()
+                if task.completed_at and (now - task.completed_at).total_seconds() / 3600 > max_age_hours
+            ]
+            for tid in to_remove:
+                del self._tasks[tid]
+                logger.debug(f"Cleaned up old task: {tid}")
 
 # Global instance
 registry = TaskRegistry()

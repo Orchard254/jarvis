@@ -6,7 +6,6 @@ Simplified: formatting is plain text without emoji decoration.
 The LLM is better suited to generate rich summaries from raw task data.
 """
 
-import json
 import logging
 import time
 from datetime import datetime

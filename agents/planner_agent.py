@@ -49,12 +49,18 @@ class PlannerAgent:
             for ind in simple_indicators
         ) and len(goal.split()) < 15
         
+        # Check for destructive keywords — even if the goal starts with a
+        # simple indicator, destructive intent forces decomposition.
+        destructive_keywords = ["delete", "remove", "wipe", "destroy", "format", "shutdown",
+                                "restart", "kill", "rm ", "del ", "erase"]
+        has_destructive_intent = any(kw in goal_lower for kw in destructive_keywords)
+
         # Check for compound tasks (multiple actions)
         compound_connectors = [" then ", " after that ", " and then ", " followed by "]
         is_compound = any(conn in goal_lower for conn in compound_connectors)
         
         # Estimate steps based on complexity markers
-        if is_simple and not is_compound:
+        if is_simple and not is_compound and not has_destructive_intent:
             return {
                 "complexity_score": 1,
                 "estimated_steps": 1,

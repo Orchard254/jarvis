@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 # Thread-local storage for connections
 _thread_local = threading.local()
+# Global registry: thread_ident -> [(db_path, conn), ...] for cross-thread cleanup
+_global_connections: dict[int, list[tuple[str, sqlite3.Connection]]] = {}
+_global_lock = threading.Lock()
 
 
 def _get_thread_connections() -> dict:
@@ -59,8 +62,14 @@ def get_connection(db_path: Path, timeout: float = 5.0) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(f"PRAGMA busy_timeout={int(timeout * 1000)}")
         conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        conn.execute("PRAGMA cache_size=-64000")
         connections[db_key] = conn
+        # Register in global registry for cross-thread cleanup
+        tid = threading.current_thread().ident
+        with _global_lock:
+            if tid not in _global_connections:
+                _global_connections[tid] = []
+            _global_connections[tid].append((db_key, conn))
     
     return connections[db_key]
 
@@ -85,29 +94,38 @@ def connection_context(db_path: Path, timeout: float = 5.0):
 
 
 def close_thread_connections():
-    """
-    Close all SQLite connections for the current thread.
-    
-    Call this when a thread is exiting to release resources.
-    """
-    connections = _get_thread_connections()
+    """Close all SQLite connections for the current thread."""
+    if not hasattr(_thread_local, "connections"):
+        return
+
+    connections = _thread_local.connections
+    tid = threading.current_thread().ident
     for db_key, conn in list(connections.items()):
         try:
-            logger.debug(f"Closing SQLite connection for {db_key} in thread {threading.current_thread().ident}")
+            logger.debug(f"Closing SQLite connection for {db_key} in thread {tid}")
             conn.close()
         except Exception as e:
             logger.warning(f"Error closing connection {db_key}: {e}")
     connections.clear()
+    # Remove from global registry
+    with _global_lock:
+        _global_connections.pop(tid, None)
 
 
 def close_all_connections():
     """
     Close all SQLite connections across all threads.
-    
-    Use with caution - only call during shutdown.
+    Use during shutdown to ensure no connections leak.
     """
-    # Note: This only closes connections accessible from the current thread's view
-    # For proper multi-thread cleanup, each thread should call close_thread_connections()
+    with _global_lock:
+        for tid, conns in list(_global_connections.items()):
+            for db_key, conn in conns:
+                try:
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"Error closing connection for {db_key} in thread {tid}: {e}")
+        _global_connections.clear()
+    # Also close current thread's connections
     close_thread_connections()
 
 

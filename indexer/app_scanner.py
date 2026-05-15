@@ -24,40 +24,40 @@ def scan_registry():
     ]:
         for reg_path in paths:
             try:
-                key = winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ)
-                for i in range(winreg.QueryInfoKey(key)[0]):
-                    try:
-                        subkey_name = winreg.EnumKey(key, i)
-                        subkey = winreg.OpenKey(key, subkey_name, 0, winreg.KEY_READ)
-                        name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-                        if not name:
-                            continue
-                        exe = None
+                with winreg.OpenKey(hive, reg_path, 0, winreg.KEY_READ) as key:
+                    for i in range(winreg.QueryInfoKey(key)[0]):
                         try:
-                            exe = winreg.QueryValueEx(subkey, "InstallLocation")[0]
-                        except Exception:
+                            subkey_name = winreg.EnumKey(key, i)
+                            with winreg.OpenKey(key, subkey_name, 0, winreg.KEY_READ) as subkey:
+                                name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                                if not name:
+                                    continue
+                                exe = None
+                                try:
+                                    exe = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                except Exception:
+                                    pass
+                                ver = None
+                                try:
+                                    ver = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
+                                except Exception:
+                                    pass
+                                pub = None
+                                try:
+                                    pub = winreg.QueryValueEx(subkey, "Publisher")[0]
+                                except Exception:
+                                    pass
+                                apps.append(
+                                    {
+                                        "name": name,
+                                        "exe_path": exe,
+                                        "version": ver,
+                                        "publisher": pub,
+                                        "source": "registry",
+                                    }
+                                )
+                        except FileNotFoundError:
                             pass
-                        ver = None
-                        try:
-                            ver = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
-                        except Exception:
-                            pass
-                        pub = None
-                        try:
-                            pub = winreg.QueryValueEx(subkey, "Publisher")[0]
-                        except Exception:
-                            pass
-                        apps.append(
-                            {
-                                "name": name,
-                                "exe_path": exe,
-                                "version": ver,
-                                "publisher": pub,
-                                "source": "registry",
-                            }
-                        )
-                    except FileNotFoundError:
-                        pass
             except (FileNotFoundError, PermissionError):
                 pass
     return apps
@@ -72,15 +72,18 @@ def _resolve_lnk(lnk_path: Path) -> str:
         from win32com.shell import shell
 
         pythoncom.CoInitialize()
-        shortcut = pythoncom.CoCreateInstance(
-            shell.CLSID_ShellLink,
-            None,
-            pythoncom.CLSCTX_INPROC_SERVER,
-            shell.IID_IShellLink,
-        )
-        shortcut.QueryInterface(pythoncom.IID_IPersistFile).Load(str(lnk_path))
-        target, _ = shortcut.GetPath(shell.SLGP_UNCPRIORITY)
-        return target if target else str(lnk_path)
+        try:
+            shortcut = pythoncom.CoCreateInstance(
+                shell.CLSID_ShellLink,
+                None,
+                pythoncom.CLSCTX_INPROC_SERVER,
+                shell.IID_IShellLink,
+            )
+            shortcut.QueryInterface(pythoncom.IID_IPersistFile).Load(str(lnk_path))
+            target, _ = shortcut.GetPath(shell.SLGP_UNCPRIORITY)
+            return target if target else str(lnk_path)
+        finally:
+            pythoncom.CoUninitialize()
     except Exception:
         return str(lnk_path)
 

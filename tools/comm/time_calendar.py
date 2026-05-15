@@ -17,16 +17,11 @@ outlook     Uses win32com.client — zero auth, works if Outlook is installed.
             Set CALENDAR_BACKEND=outlook in .env (default).
 ics         Read/write a local .ics file.
             Set CALENDAR_BACKEND=ics and ICS_CALENDAR_PATH=/path/to/cal.ics.
-
-Notes
------
-- Google Calendar is intentionally out of scope here (needs OAuth2 browser
-  flow which is awkward in a background agent).  Add it as a future backend.
-- All times are returned in the local timezone unless a tzname is provided.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -35,261 +30,207 @@ import settings
 
 logger = logging.getLogger(__name__)
 
-# ── timezone helper ───────────────────────────────────────────────────────────
 
 def _local_tz():
     """Return the local ZoneInfo object, falling back to UTC."""
-    import time as _time
     try:
-        # tzlocal is optional but gives a reliable name on Windows
-        import tzlocal
-        return tzlocal.get_localzone()
-    except ImportError:
+        from tzlocal import get_localzone
+        return get_localzone()
+    except Exception:
         pass
-    # stdlib fallback: ask the OS
     try:
-        tz_name = datetime.now().astimezone().tzname()
-        return ZoneInfo(tz_name)
-    except (ZoneInfoNotFoundError, Exception):
+        import time as _time_mod
+        offset = -_time_mod.timezone
+        if offset == 0:
+            return ZoneInfo("UTC")
+        hours = offset // 3600
+        return ZoneInfo(f"Etc/GMT{'+' if hours < 0 else '-'}{abs(hours)}")
+    except Exception:
         return ZoneInfo("UTC")
 
 
-# ── get_time ──────────────────────────────────────────────────────────────────
-
-def _action_get_time() -> dict:
-    tz = _local_tz()
-    now = datetime.now(tz)
-    return {
-        "success": True,
-        "datetime": now.isoformat(timespec="seconds"),
-        "date": now.strftime("%Y-%m-%d"),
-        "time": now.strftime("%H:%M:%S"),
-        "weekday": now.strftime("%A"),
-        "timezone": str(tz),
-        "utc_offset": now.strftime("%z"),
-        "iso_week": now.isocalendar()[1],
-        "unix_timestamp": int(now.timestamp()),
-    }
+def _now_local() -> datetime:
+    return datetime.now(_local_tz())
 
 
-# ── Outlook backend ───────────────────────────────────────────────────────────
-
-def _outlook_get_events(days: int) -> dict:
+def _outlook_get_events(days: int) -> list[dict]:
+    events = []
     try:
-        import win32com.client  # type: ignore
-    except ImportError:
-        return {"success": False, "error": "pywin32 not installed — run: pip install pywin32"}
-
-    try:
-        outlook = win32com.client.Dispatch("Outlook.Application")
-        ns = outlook.GetNamespace("MAPI")
-        cal = ns.GetDefaultFolder(9)  # olFolderCalendar = 9
+        import win32com.client
+        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
+        cal = outlook.GetDefaultFolder(9)  # olFolderCalendar
         items = cal.Items
-        items.IncludeRecurrences = True
         items.Sort("[Start]")
-
         now = datetime.now()
         end = now + timedelta(days=days)
-        restriction = (
-            f"[Start] >= '{now.strftime('%m/%d/%Y')}' "
-            f"AND [Start] <= '{end.strftime('%m/%d/%Y')}'"
-        )
-        filtered = items.Restrict(restriction)
-
-        events = []
-        for item in filtered:
+        items.IncludeRecurrences = True
+        for i in range(1, min(items.Count + 1, 50)):
             try:
-                events.append({
-                    "subject": item.Subject,
-                    "start": str(item.Start),
-                    "end": str(item.End),
-                    "location": item.Location or "",
-                    "body": (item.Body or "")[:200],
-                    "all_day": item.AllDayEvent,
-                    "organizer": getattr(item, "Organizer", ""),
-                })
+                item = items(i)
+                start = item.Start.replace(tzinfo=None)
+                if start > end:
+                    break
+                if start >= now:
+                    events.append({
+                        "subject": item.Subject,
+                        "start": item.Start.isoformat(),
+                        "end": item.End.isoformat(),
+                        "location": item.Location,
+                        "body": item.Body[:200] if item.Body else "",
+                    })
             except Exception:
                 continue
+    except Exception as e:
+        logger.warning(f"Outlook get_events failed: {e}")
+    return events
 
-        return {"success": True, "events": events, "count": len(events)}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
 
-
-def _outlook_create_event(subject: str, start: str, end: str,
-                          location: str, body: str, all_day: bool) -> dict:
+def _outlook_create_event(subject, start, end, location, body, all_day):
     try:
-        import win32com.client  # type: ignore
-    except ImportError:
-        return {"success": False, "error": "pywin32 not installed"}
-
-    try:
+        import win32com.client
         outlook = win32com.client.Dispatch("Outlook.Application")
-        appt = outlook.CreateItem(1)  # olAppointmentItem = 1
+        appt = outlook.CreateItem(1)
         appt.Subject = subject
         appt.Start = start
-        appt.End = end
+        appt.End = end or (datetime.fromisoformat(start) + timedelta(hours=1)).isoformat()
         if location:
             appt.Location = location
         if body:
             appt.Body = body
-        appt.AllDayEvent = all_day
+        if all_day:
+            appt.AllDayEvent = True
         appt.Save()
-        return {"success": True, "subject": subject, "start": start, "end": end}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+        return {"success": True, "status": f"created event '{subject}'"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
-def _outlook_delete_event(subject: str, date: str) -> dict:
+def _outlook_delete_event(subject, date):
     try:
-        import win32com.client  # type: ignore
-    except ImportError:
-        return {"success": False, "error": "pywin32 not installed"}
-
-    try:
-        outlook = win32com.client.Dispatch("Outlook.Application")
-        ns = outlook.GetNamespace("MAPI")
-        cal = ns.GetDefaultFolder(9)
+        import win32com.client
+        outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
+        cal = outlook.GetDefaultFolder(9)
         items = cal.Items
         items.Sort("[Start]")
-        restriction = f"[Subject] = '{subject}' AND [Start] >= '{date}'"
-        filtered = items.Restrict(restriction)
-        deleted = 0
-        for item in filtered:
-            item.Delete()
-            deleted += 1
-            break  # delete first match only
-        if deleted:
-            return {"success": True, "deleted": True, "subject": subject}
-        return {"success": True, "deleted": False, "reason": "No matching event found"}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+        for i in range(1, items.Count + 1):
+            try:
+                item = items(i)
+                if item.Subject == subject:
+                    if date:
+                        item_start = item.Start.strftime("%Y-%m-%d")
+                        if item_start != date:
+                            continue
+                    item.Delete()
+                    return {"success": True, "status": f"deleted event '{subject}'"}
+            except Exception:
+                continue
+        return {"success": False, "error": f"event '{subject}' not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
-# ── ICS backend ───────────────────────────────────────────────────────────────
-
-def _ics_path() -> str:
+def _ics_get_events(days: int) -> list[dict]:
     path = settings.ICS_CALENDAR_PATH
     if not path:
-        import os
-        path = os.path.join(os.path.expanduser("~"), "jarvis_calendar.ics")
-    return path
-
-
-def _ics_get_events(days: int) -> dict:
+        return []
     try:
-        from icalendar import Calendar  # type: ignore
-        import os
-        path = _ics_path()
-        if not os.path.exists(path):
-            return {"success": True, "events": [], "count": 0}
-        with open(path, "rb") as f:
+        from icalendar import Calendar
+        from pathlib import Path
+        cal_path = Path(path)
+        if not cal_path.exists():
+            return []
+        with open(cal_path, encoding="utf-8") as f:
             cal = Calendar.from_ical(f.read())
         now = datetime.now()
         end = now + timedelta(days=days)
         events = []
         for comp in cal.walk():
-            if comp.name != "VEVENT":
-                continue
-            dtstart = comp.get("DTSTART")
-            if dtstart is None:
-                continue
-            dt = dtstart.dt
-            if isinstance(dt, datetime):
-                start_dt = dt.replace(tzinfo=None) if dt.tzinfo else dt
-            else:
-                from datetime import date
-                start_dt = datetime.combine(dt, datetime.min.time())
-            if now <= start_dt <= end:
-                events.append({
-                    "subject": str(comp.get("SUMMARY", "")),
-                    "start": str(dtstart.dt),
-                    "end": str(comp.get("DTEND", {}).get("dt", "") if comp.get("DTEND") else ""),
-                    "location": str(comp.get("LOCATION", "")),
-                    "body": str(comp.get("DESCRIPTION", ""))[:200],
-                })
-        events.sort(key=lambda e: e["start"])
-        return {"success": True, "events": events, "count": len(events)}
-    except ImportError:
-        return {"success": False, "error": "icalendar not installed — run: pip install icalendar"}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+            if comp.name == "VEVENT":
+                start = comp.get("dtstart").dt
+                if isinstance(start, datetime):
+                    if start.tzinfo:
+                        start = start.astimezone(_local_tz()).replace(tzinfo=None)
+                    if now <= start <= end:
+                        events.append({
+                            "subject": str(comp.get("summary", "")),
+                            "start": start.isoformat(),
+                            "end": str(comp.get("dtend", "")),
+                            "location": str(comp.get("location", "")),
+                            "body": str(comp.get("description", ""))[:200],
+                        })
+        return events
+    except Exception as e:
+        logger.warning(f"ICS get_events failed: {e}")
+        return []
 
 
-def _ics_create_event(subject: str, start: str, end: str,
-                      location: str, body: str, all_day: bool) -> dict:
+def _ics_create_event(subject, start, end, location, body, all_day):
+    path = settings.ICS_CALENDAR_PATH
+    if not path:
+        return {"success": False, "error": "ICS_CALENDAR_PATH not configured"}
     try:
-        from icalendar import Calendar, Event  # type: ignore
-        import os, uuid
-        path = _ics_path()
-        if os.path.exists(path):
-            with open(path, "rb") as f:
+        from icalendar import Calendar, Event
+        from pathlib import Path
+        cal_path = Path(path)
+        if cal_path.exists():
+            with open(cal_path, encoding="utf-8") as f:
                 cal = Calendar.from_ical(f.read())
         else:
             cal = Calendar()
-            cal.add("prodid", "-//JARVIS//EN")
-            cal.add("version", "2.0")
-
         event = Event()
         event.add("summary", subject)
-        event.add("uid", str(uuid.uuid4()))
-        if all_day:
-            from datetime import date as _date
-            d = datetime.fromisoformat(start).date()
-            event.add("dtstart", d)
-        else:
-            event.add("dtstart", datetime.fromisoformat(start))
-            event.add("dtend", datetime.fromisoformat(end))
+        event.add("dtstart", datetime.fromisoformat(start))
+        event.add("dtend", datetime.fromisoformat(end) if end else datetime.fromisoformat(start) + timedelta(hours=1))
         if location:
             event.add("location", location)
         if body:
             event.add("description", body)
         cal.add_component(event)
-
-        with open(path, "wb") as f:
+        with open(cal_path, "wb") as f:
             f.write(cal.to_ical())
-        return {"success": True, "subject": subject, "start": start}
-    except ImportError:
-        return {"success": False, "error": "icalendar not installed — run: pip install icalendar"}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+        return {"success": True, "status": f"created event '{subject}'"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
-def _ics_delete_event(subject: str, date: str) -> dict:
+def _ics_delete_event(subject, date):
+    path = settings.ICS_CALENDAR_PATH
+    if not path:
+        return {"success": False, "error": "ICS_CALENDAR_PATH not configured"}
     try:
-        from icalendar import Calendar  # type: ignore
-        import os
-        path = _ics_path()
-        if not os.path.exists(path):
-            return {"success": True, "deleted": False, "reason": "Calendar file not found"}
-        with open(path, "rb") as f:
+        from icalendar import Calendar
+        from pathlib import Path
+        cal_path = Path(path)
+        if not cal_path.exists():
+            return {"success": False, "error": "calendar file not found"}
+        with open(cal_path, encoding="utf-8") as f:
             cal = Calendar.from_ical(f.read())
-
         new_cal = Calendar()
-        for k, v in cal.items():
-            new_cal.add(k, v)
-        deleted = 0
+        deleted = False
         for comp in cal.walk():
             if comp.name == "VEVENT":
-                if subject.lower() in str(comp.get("SUMMARY", "")).lower():
-                    deleted += 1
+                comp_subject = str(comp.get("summary", ""))
+                if comp_subject == subject:
+                    if date:
+                        start = comp.get("dtstart").dt
+                        if isinstance(start, datetime):
+                            if start.strftime("%Y-%m-%d") != date:
+                                new_cal.add_component(comp)
+                                continue
+                    deleted = True
                     continue
-            if comp.name != "VCALENDAR":
-                new_cal.add_component(comp)
-
-        with open(path, "wb") as f:
+            new_cal.add_component(comp)
+        if not deleted:
+            return {"success": False, "error": f"event '{subject}' not found"}
+        with open(cal_path, "wb") as f:
             f.write(new_cal.to_ical())
-        return {"success": True, "deleted": deleted > 0, "count_removed": deleted}
-    except ImportError:
-        return {"success": False, "error": "icalendar not installed — run: pip install icalendar"}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+        return {"success": True, "status": f"deleted event '{subject}'"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-
-# ── public API ────────────────────────────────────────────────────────────────
 
 def time_calendar(
-    action: str = "get_time",
+    action: str,
     subject: str = "",
     start: str = "",
     end: str = "",
@@ -298,48 +239,32 @@ def time_calendar(
     all_day: bool = False,
     days: int = 7,
     date: str = "",
+    backend: str = "",
 ) -> dict:
-    """
-    Time awareness and calendar management.
-
-    Parameters
-    ----------
-    action : str
-        ``get_time`` | ``get_events`` | ``create_event`` | ``delete_event``.
-    subject : str
-        Event title (required for create/delete).
-    start : str
-        ISO datetime string e.g. ``2025-05-10T14:00:00`` (required for create).
-    end : str
-        ISO datetime string (required for create unless all_day).
-    location : str
-        Optional venue for create.
-    body : str
-        Optional notes/description for create.
-    all_day : bool
-        True to create an all-day event.
-    days : int
-        How many days ahead to fetch events (default 7).
-    date : str
-        Date filter for delete (YYYY-MM-DD).
-
-    Returns
-    -------
-    dict
-        Always contains ``success``.  See action docstrings for specific fields.
-    """
-    logger.info(f"time_calendar: action={action}")
-    backend = settings.CALENDAR_BACKEND.lower()
-
+    """Interact with system time and calendar."""
     try:
+        backend = backend or settings.CALENDAR_BACKEND
+        now = _now_local()
+
         if action == "get_time":
-            return _action_get_time()
+            return {
+                "success": True,
+                "action": "get_time",
+                "datetime": now.isoformat(),
+                "date": now.strftime("%Y-%m-%d"),
+                "time": now.strftime("%H:%M:%S"),
+                "timezone": str(now.tzinfo or _local_tz()),
+                "weekday": now.strftime("%A"),
+                "iso_week": now.isocalendar().week,
+                "unix_timestamp": now.timestamp(),
+            }
 
         elif action == "get_events":
             if backend == "outlook":
-                return _outlook_get_events(days)
+                events = _outlook_get_events(days)
             else:
-                return _ics_get_events(days)
+                events = _ics_get_events(days)
+            return {"success": True, "action": "get_events", "events": events, "count": len(events)}
 
         elif action == "create_event":
             if not subject:
@@ -347,7 +272,6 @@ def time_calendar(
             if not start:
                 return {"success": False, "error": "start datetime is required"}
             if not end and not all_day:
-                # Default: 1-hour event
                 end = (datetime.fromisoformat(start) + timedelta(hours=1)).isoformat()
             if backend == "outlook":
                 return _outlook_create_event(subject, start, end, location, body, all_day)
@@ -358,7 +282,7 @@ def time_calendar(
             if not subject:
                 return {"success": False, "error": "subject is required for delete"}
             if backend == "outlook":
-                return _outlook_delete_event(subject, date or datetime.now().strftime("%m/%d/%Y"))
+                return _outlook_delete_event(subject, date or now.strftime("%m/%d/%Y"))
             else:
                 return _ics_delete_event(subject, date)
 

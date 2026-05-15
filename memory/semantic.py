@@ -7,11 +7,8 @@ Optimized with connection pooling for reduced latency.
 
 import json
 import logging
-import sqlite3
 import time
-from pathlib import Path
 
-from settings import MEMORY_DB
 from memory.db_pool import get_semantic_connection
 
 logger = logging.getLogger(__name__)

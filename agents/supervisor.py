@@ -121,6 +121,11 @@ class Supervisor:
                     "steps_count": len(steps)
                 })
                 
+                # Guard: reject empty plans
+                if not steps:
+                    result["error"] = "Planner returned an empty plan"
+                    return result
+
                 # Execute each step with dynamic handoff
                 exec_result = self._execute_plan(steps, goal, context, task_state)
             

@@ -41,7 +41,6 @@ def get_env_bool(key: str, default: bool = False) -> bool:
 
 
 # ── Paths ──────────────────────────────────────────────
-BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / get_env_str("DATA_DIR", "data")
 LOGS_DIR = BASE_DIR / get_env_str("LOG_DIR", "logs")
 SKILLS_DB = BASE_DIR / "skills" / "db" / "skills.db"
@@ -54,6 +53,7 @@ CONFIG_DIR = BASE_DIR / get_env_str("CONFIG_DIR", "config")
 
 # ── LLM & Context Budget ───────────────────────────────
 LLM_MODEL = get_env_str("OLLAMA_MODEL", "gpt-oss:120b-cloud")
+EXECUTOR_MODEL = get_env_str("EXECUTOR_MODEL", "nemotron-3-nano:30b-cloud")
 LLM_VISION_MODEL = get_env_str("OLLAMA_VISION_MODEL", "gemma3:27b-cloud")
 LLM_BASE_URL = get_env_str("OLLAMA_CLOUD_URL", "https://api.ollama.com/api/chat")
 OLLAMA_LOCAL_URL = get_env_str("OLLAMA_LOCAL_URL", "http://localhost:11434")
@@ -126,7 +126,6 @@ ALLOWED_IMPORTS = {
     "itertools",
     "functools",
     "copy",
-    "subprocess",
     "psutil",
     "win32gui",
     "win32con",
@@ -146,147 +145,123 @@ ALLOWED_IMPORTS = {
     "textwrap",
     "difflib",
     "sys",
-    # ── previously missing — model generates code using these ─────────────────
-    "winreg",       # Windows registry access
-    "ctypes",       # low-level Windows API calls
-    "threading",    # background threads in generated scripts
-    "socket",       # network queries (hostname, IP)
-    "urllib",       # URL operations
-    "http",         # HTTP client in generated scripts
-    "io",           # BytesIO / StringIO
-    "struct",       # binary data packing
-    "platform",     # OS version / machine info
-    "signal",       # process signal handling
-    "queue",        # thread-safe queues
-    "traceback",    # error introspection in generated scripts
-    # ── clipboard libraries for UI automation tasks ────────────────────────────
-    "pyperclip",    # cross-platform clipboard operations
-    "win32clipboard",  # Windows clipboard API
-    # ── additional Windows automation & UI control ─────────────────────────────
-    "win32ui",      # Windows UI automation (device contexts, window capture)
-    "win32pdh",     # Windows performance data (CPU, memory monitoring)
-    "comtypes",     # COM automation (alternative to win32com)
-    "pythoncom",    # Python COM support
-    # ── image processing & screen capture ──────────────────────────────────────
-    "mss",          # fast screen capture
-    "cv2",          # OpenCV for image processing/computer vision
-    "numpy",        # numerical operations (required by cv2, PIL)
-    "imagegrab",    # PIL.ImageGrab for screenshots
-    # ── web automation ─────────────────────────────────────────────────────────
-    "selenium",     # browser automation
-    "webdriver",    # Selenium WebDriver
-    "bs4",          # BeautifulSoup for HTML parsing
-    "lxml",         # fast XML/HTML parser
-    # ── Windows audio API ──────────────────────────────────────────────────────
-    "pycaw",        # Windows Core Audio API (precise volume/device control)
-    "pycaw.pycaw",  # pycaw main module (AudioUtilities, IAudioEndpointVolume)
-    # ── document handling ──────────────────────────────────────────────────────
-    "docx",         # python-docx for Word documents
-    "xlsxwriter",   # Excel file creation
-    "openpyxl",     # Excel file reading/writing
-    "pdf2image",    # PDF to image conversion
-    "PyPDF2",       # PDF manipulation
-    # ── audio processing ───────────────────────────────────────────────────────
-    "wave",         # WAV file handling
-    "audioop",      # audio operations
-    "pyaudio",      # audio recording/playback
-    "speech_recognition",  # STT alternative
-    # ── data serialization ─────────────────────────────────────────────────────
-    "pickle",       # Python object serialization
-    "yaml",         # YAML parsing (pyyaml)
-    "toml",         # TOML parsing
-    "xml",          # XML processing
-    "html",         # HTML utilities
-    # ── compression & archives ─────────────────────────────────────────────────
-    "zipfile",      # ZIP file operations
-    "tarfile",      # TAR file operations
-    "gzip",         # GZIP compression
-    "bz2",          # BZ2 compression
-    # ── networking & protocols ─────────────────────────────────────────────────
-    "ftplib",       # FTP client
-    "poplib",       # POP3 email
-    "imaplib",      # IMAP email
-    "smtplib",      # SMTP email (already listed but good to have here too)
-    "email",        # email utilities (already listed)
-    "socketserver", # network servers
-    "asyncio",      # async I/O
-    "aiohttp",      # async HTTP
-    # ── system introspection & debugging ───────────────────────────────────────
-    "inspect",      # live object inspection
-    "dis",          # disassembler for bytecode
-    "ast",          # Python AST manipulation
-    "profile",      # profiling tools
-    "cProfile",     # deterministic profiler
-    # ── concurrency enhancements ───────────────────────────────────────────────
-    "multiprocessing",  # process-based parallelism
-    "concurrent",       # concurrent.futures
-    "contextlib",       # context manager utilities
-    # ── stdlib skills — pre-written, audited modules the LLM can import ───────
-    # e.g. from skills.stdlib.web import search_web, fetch_url
-    "skills",       # umbrella: skills.stdlib.* submodules
-    "icalendar",    # used internally by skills.stdlib.time_cal
-    "win32com",     # used internally by skills.stdlib.time_cal (Outlook backend)
-    "zoneinfo",     # used internally by skills.stdlib.time_cal
-    "tzlocal",      # used internally by skills.stdlib.time_cal
-    # ── additional useful libraries for AI agent tasks ───────────────────────────
-    "pygetwindow",  # window management (get, move, resize windows)
-    "reportlab",    # PDF document creation
-    "exchangelib",  # Microsoft Exchange/Outlook integration
-    "playwright",   # modern browser automation (alternative to Selenium)
-    "spacy",        # NLP and text processing
-    "nltk",         # natural language toolkit
-    "tqdm",         # progress bars for long operations
-    "rich",         # rich terminal output and formatting
-    "colorama",     # cross-platform colored terminal text
-    "dotenv",       # environment variable management
-    "python_pptx",  # PowerPoint presentation creation
-    "fitz",         # PyMuPDF for advanced PDF handling
-    "scipy",        # scientific computing
-    "matplotlib",   # plotting and visualization
-    "skimage",      # scikit-image for advanced image processing
-    "sounddevice",  # audio playback/recording
-    "soundfile",    # audio file I/O
-    "pandas",       # data manipulation and analysis
-    "sqlalchemy",   # database ORM and queries
-    "chardet",      # character encoding detection
-    "dateutil",     # date parsing and manipulation
-    "shlex",        # shell-like syntax parsing
-    "warnings",     # warning control
-    "unittest",     # testing framework
-    "typing",       # type hints
-    "dataclasses",  # data class decorators
-    "enum",         # enumeration support
-    "abc",          # abstract base classes
-    "weakref",      # weak references
-    "types",        # dynamic type creation
-    "pprint",       # pretty-printing
-    "random",       # random number generation
-    "statistics",   # statistical functions
-    "decimal",      # decimal arithmetic
-    "fractions",    # fraction arithmetic
-    "array",        # array module
-    "bisect",       # bisection algorithms
-    "heapq",        # heap queue algorithms
-    "configparser", # configuration file parser
-    "mimetypes",    # MIME type guessing
-    "binascii",     # binary ASCII conversions
-    "hmac",         # HMAC hashing
-    "secrets",      # secure random numbers
-    "unicodedata",  # Unicode database
-    "codecs",       # codec registry and base classes
-    "fnmatch",      # Unix filename pattern matching
-    "linecache",    # random access line caching
-    "locale",       # internationalization services
-    "gettext",      # internationalization via gettext
-    # ── modules the LLM commonly generates but were missing ────────────────────
-    "numbers",      # numeric abstract base classes
-    "win32event",   # Windows event objects
-    "win32service", # Windows service control
-    "win32file",    # Windows file operations
-    "win32pipe",    # Windows named pipes
-    "win32security",# Windows security descriptors / ACLs
-    "win32net",     # Windows network management
-    "win32print",   # Windows printer management
+    "winreg",
+    "threading",
+    "socket",
+    "urllib",
+    "http",
+    "io",
+    "struct",
+    "platform",
+    "signal",
+    "queue",
+    "traceback",
+    "pyperclip",
+    "win32clipboard",
+    "win32ui",
+    "win32pdh",
+    "comtypes",
+    "pythoncom",
+    "mss",
+    "cv2",
+    "numpy",
+    "imagegrab",
+    "selenium",
+    "webdriver",
+    "bs4",
+    "lxml",
+    "pycaw",
+    "pycaw.pycaw",
+    "docx",
+    "xlsxwriter",
+    "openpyxl",
+    "pdf2image",
+    "PyPDF2",
+    "wave",
+    "audioop",
+    "pyaudio",
+    "speech_recognition",
+    "yaml",
+    "toml",
+    "xml",
+    "html",
+    "zipfile",
+    "tarfile",
+    "gzip",
+    "bz2",
+    "ftplib",
+    "poplib",
+    "imaplib",
+    "smtplib",
+    "email",
+    "asyncio",
+    "aiohttp",
+    "inspect",
+    "ast",
+    "concurrent",
+    "contextlib",
+    "skills",
+    "icalendar",
+    "win32com",
+    "zoneinfo",
+    "tzlocal",
+    "pygetwindow",
+    "reportlab",
+    "exchangelib",
+    "playwright",
+    "spacy",
+    "nltk",
+    "tqdm",
+    "rich",
+    "colorama",
+    "dotenv",
+    "python_pptx",
+    "fitz",
+    "scipy",
+    "matplotlib",
+    "skimage",
+    "sounddevice",
+    "soundfile",
+    "pandas",
+    "sqlalchemy",
+    "chardet",
+    "dateutil",
+    "shlex",
+    "warnings",
+    "unittest",
+    "typing",
+    "dataclasses",
+    "enum",
+    "abc",
+    "weakref",
+    "types",
+    "pprint",
+    "random",
+    "statistics",
+    "decimal",
+    "fractions",
+    "array",
+    "bisect",
+    "heapq",
+    "configparser",
+    "mimetypes",
+    "binascii",
+    "hmac",
+    "secrets",
+    "unicodedata",
+    "codecs",
+    "fnmatch",
+    "linecache",
+    "locale",
+    "gettext",
+    "numbers",
+    "win32event",
+    "win32service",
+    "win32file",
+    "win32pipe",
+    "win32security",
+    "win32net",
+    "win32print",
 }
 
 BLOCKED_PATHS = [
@@ -437,148 +412,14 @@ HF_TOKEN = get_env_str("HF_TOKEN", "")
 # ── User Profile ───────────────────────────────────────
 USER_NAME = get_env_str("USER_NAME", "User")
 
-# ── Tool Schemas ─────────────────────────────────────────
-# TOOL_SCHEMAS lives in tools/__init__.py — the single source of truth.
-# Import from there: `from tools import TOOL_SCHEMAS`
-# DO NOT redeclare here — it caused the LLM to see phantom retired tools.
-_TOOL_SCHEMAS_TOMBSTONE = [  # kept for grep-ability; not imported by anything
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_code",
-            "description": "Run Python/PowerShell. Primary OS tool.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string"},
-                    "language": {"type": "string", "enum": ["python", "powershell"]},
-                },
-                "required": ["code"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "capture_screen",
-            "description": "Screenshot desktop.",
-            "parameters": {
-                "type": "object",
-                "properties": {"region": {"type": "object"}},
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_pc_state",
-            "description": "Live desktop state.",
-            "parameters": {"type": "object"},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "control_window",
-            "description": "Focus/minimize/maximize/resize window.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "window_title": {"type": "string"},
-                    "action": {
-                        "type": "string",
-                        "enum": [
-                            "focus",
-                            "minimize",
-                            "maximize",
-                            "restore",
-                            "close",
-                            "resize",
-                            "move",
-                        ],
-                    },
-                    "params": {"type": "object"},
-                },
-                "required": ["window_title", "action"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "control_input",
-            "description": "Keyboard/mouse input.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "enum": ["click", "type", "hotkey", "key", "move", "scroll"],
-                    },
-                    "data": {"type": "object"},
-                },
-                "required": ["type", "data"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_pc_index",
-            "description": "Search apps/files/state.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "type": {"type": "string", "enum": ["app", "file", "state"]},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read file content.",
-            "parameters": {
-                "type": "object",
-                "properties": {"path": {"type": "string"}},
-                "required": ["path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": "Write to file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "content": {"type": "string"},
-                },
-                "required": ["path", "content"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "notify_user",
-            "description": "Desktop notification.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "message": {"type": "string"},
-                    "urgency": {"type": "string", "enum": ["low", "normal", "high"]},
-                },
-                "required": ["message"],
-            },
-        },
-    },
-]
+# ── Tool Stage (graduated exposure) ──────────────────────
+# Controls which tools the LLM can see. Higher stages unlock more tools.
+# Stage 1: core OS control + input + perception (21 tools)
+# Stage 2: + file ops + process state + python (32 tools)
+# Stage 3: + advanced perception / UI detection (33 tools)
+# Stage 4: + web + memory + comms (42 tools)
+# Set to 0 to expose ALL tools.
+TOOL_STAGE = get_env_int("TOOL_STAGE", 4)
 
 # ── Advanced Features ──────────────────────────────────
 ENABLE_SKILLS = get_env_bool("ENABLE_SKILLS", True)

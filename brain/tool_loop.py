@@ -13,8 +13,6 @@ from settings import (
     MAX_CONTEXT_TOKENS,
     TOOL_LOOP_HISTORY_MESSAGES,
 )
-from verification.vision_summary import summarize_screen
-
 from brain import ollama_client
 from brain.context_manager import prune_history
 from brain.prompt_builder import build_system_prompt, get_pruned_schemas
@@ -76,7 +74,7 @@ def _execute_single_call(
     call_idx = call["call_idx"]
     logger.info(f"Batch {iteration}: calling {tool_name} (call_idx={call_idx})")
 
-    truncated_call_idx = min(call_idx, 9999)  # for stable call_id generation
+    truncated_call_idx = min(call_idx, 9999)
 
     # Check cache for read-only tools
     cached_result = cache.get(tool_name, args)
@@ -86,8 +84,7 @@ def _execute_single_call(
         tool_log.append({"tool": tool_name, "args": args, "result": result,
                          "call_id": f"batch_{truncated_call_idx}", "cached": True})
         verification = verify_fn(tool_name, result, user_input)
-        if tool_log:
-            tool_log[-1]["verification"] = verification.get("status", "")
+        tool_log[-1]["verification"] = verification.get("status", "")
         return {
             "call_idx": call_idx,
             "call_id": f"call_{truncated_call_idx}",
@@ -106,19 +103,37 @@ def _execute_single_call(
     cache.set(tool_name, args, result)
 
     verification = verify_fn(tool_name, result, user_input)
-    if tool_log:
-        tool_log[-1]["verification"] = verification.get("status", "")
+    tool_log[-1]["verification"] = verification.get("status", "")
 
     if tool_name in ToolResultCache.WRITE_TOOLS:
         cache.invalidate_tool(tool_name)
         if tool_name == "execute_code":
             cache.clear()
 
-    # Fail-loop guard
-    if not result.get("success"):
+    # Track consecutive failures per tool
+    tool_failed = not result.get("success")
+    if tool_failed:
         fail_counts[tool_name] = fail_counts.get(tool_name, 0) + 1
     else:
         fail_counts[tool_name] = 0
+
+    # Fail-loop guard: block on 2+ consecutive failures
+    guard_triggered = tool_failed and fail_counts[tool_name] >= 2
+
+    # Build result dict with full context for the LLM
+    res: dict = {
+        "call_idx": call_idx,
+        "call_id": f"call_{truncated_call_idx}",
+    }
+
+    if guard_triggered:
+        res["status"] = "error"
+        res["error"] = f"FAIL-LOOP GUARD: '{tool_name}' failed twice in a row"
+        res["output_summary"] = f"{tool_name} blocked by fail-loop guard"
+        tool_log[-1]["blocked"] = "fail-loop_guard"
+        return res
+
+    res["status"] = "ok" if result.get("success") else "error"
 
     v_status = verification.get("status", "")
     if v_status == "FAILED":
@@ -128,7 +143,7 @@ def _execute_single_call(
             "tool, a different path, or ask the user for clarification."
         )
 
-    if not result.get("success") and tool_name != "read_pc_state" and pc_state_fn is not None:
+    if tool_failed and tool_name != "read_pc_state" and pc_state_fn is not None:
         try:
             state = pc_state_fn()
             if state.get("success"):
@@ -140,14 +155,21 @@ def _execute_single_call(
         except Exception:
             pass
 
-    status = "ok" if result.get("success") else "error"
-    return {
-        "call_idx": call_idx,
-        "call_id": f"call_{truncated_call_idx}",
-        "status": status,
-        "output_summary": _summarize_output(tool_name, result),
-        **({} if result.get("success") else {"error": result.get("error", "unknown error")}),
-    }
+    res["output_summary"] = _summarize_output(tool_name, result)
+
+    # Include full result for the batch — the LLM needs it to reason
+    res["full_output"] = json.dumps(result, default=str)[:1000]
+
+    if v_status == "FAILED":
+        res["verification"] = v_status
+        res["retry_directive"] = verification.get("retry_directive", "")
+        if "state_snapshot" in verification:
+            res["state_snapshot"] = verification["state_snapshot"]
+
+    if not result.get("success"):
+        res["error"] = result.get("error", "unknown error")
+
+    return res
 
 
 def _summarize_output(tool_name: str, result: dict) -> str:
@@ -176,7 +198,6 @@ def _execute_batch_plan(
     """Execute all calls in a BATCH_TOOL_PLAN. Returns list of result dicts."""
     mode, order = _execution_policy(plan)
     calls = plan["calls"]
-    plan_id = plan["plan_id"]
     results: list[dict] = []
 
     _tool_log_lock = threading.Lock()
@@ -337,20 +358,41 @@ def run(
 
         print("\r" + " " * 25 + "\r", end="", flush=True)
         content = llm_result.get("content", "")
+        tool_calls_native = llm_result.get("tool_calls") or []
+
+        # ── Log what the LLM produced ─────────────────────────────────────────
+        if content:
+            logger.info(f"LLM content (first 300): {content[:300]}")
+        if tool_calls_native:
+            for tc in tool_calls_native:
+                fn = tc.get("function", {})
+                logger.info(f"LLM native tool_call: {fn.get('name')} args={json.dumps(fn.get('arguments', {}))}")
+        else:
+            logger.info("LLM response: no native tool_calls")
 
         # ── Check for BATCH_TOOL_PLAN in text response ───────────────────────
         batch_plan, plan_err = parse_batch_plan(content, _tool_names)
         if batch_plan:
+            logger.info(f"BATCH_TOOL_PLAN detected: {json.dumps(batch_plan, default=str)[:500]}")
             messages.append({"role": "assistant", "content": content})
-            batch_results = _execute_batch_plan(
+            # Route through executor agent (validates params with small LLM, then executes)
+            from brain.executor_agent import execute_plan as executor_execute
+            result_msg = executor_execute(
                 batch_plan, execute_fn, verify_fn, user_input,
                 cache, tool_log, _fail_counts, pc_state_fn, iteration,
             )
-            result_msg = format_batch_result(batch_plan["plan_id"], batch_results)
-            # If any call failed, tell the LLM to retry differently
-            has_failures = any(
-                r.get("status") in ("error", "skipped") for r in batch_results
-            )
+
+            # Parse BATCH_TOOL_RESULT to check for failures
+            try:
+                result_data = json.loads(result_msg[len("BATCH_TOOL_RESULT "):])
+                batch_results = result_data.get("results", [])
+                has_failures = any(
+                    r.get("status") in ("error", "skipped") or r.get("verification") == "FAILED"
+                    for r in batch_results
+                )
+            except (json.JSONDecodeError, ValueError):
+                has_failures = False
+
             if has_failures:
                 directive = (
                     f"The runtime executed your batch plan and returned:\n"
@@ -409,6 +451,22 @@ def run(
             name = tc["function"]["name"]
             args = tc["function"]["arguments"]
             logger.info(f"Loop {iteration}: calling {name}")
+            if name == "execute_code":
+                logger.info(f"  code: {json.dumps(args.get('code', ''))[:500]}")
+                logger.info(f"  lang: {args.get('language', 'python')}")
+
+            # Executor pre-validation
+            from brain.executor_agent import validate_tool_call
+            validation_error = validate_tool_call(name, args)
+            if validation_error:
+                logger.warning(f"Executor rejected {name}: {validation_error[:200]}")
+                tool_log.append({"tool": name, "args": args, "result": {"success": False, "error": f"executor rejected: {validation_error}"}, "call_id": tc["id"], "cached": False})
+                tool_results.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps({"result": {"success": False, "error": f"TOOL_VALIDATION_ERROR: {validation_error}"}, "verification": {"status": "REJECTED"}}, default=str),
+                })
+                continue
 
             cached_result = cache.get(name, args)
             if cached_result is not None:
@@ -429,8 +487,7 @@ def run(
                 cache.set(name, args, result)
                 verification = verify_fn(name, result, user_input)
 
-            if tool_log:
-                tool_log[-1]["verification"] = verification.get("status", "")
+            tool_log[-1]["verification"] = verification.get("status", "")
 
             if name in ToolResultCache.WRITE_TOOLS:
                 cache.invalidate_tool(name)
@@ -452,6 +509,9 @@ def run(
                 _fail_counts[name] = 0
 
             safe_result = dict(result)
+            # Strip large binary data from tool results before sending to LLM
+            for _key in ("image_b64", "screenshot", "image"):
+                safe_result.pop(_key, None)
 
             v_status = verification.get("status", "")
             if v_status == "FAILED":

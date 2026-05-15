@@ -27,7 +27,6 @@ import sqlite3
 import time
 import uuid
 from datetime import datetime
-from pathlib import Path
 
 from core.thread_db import get_connection
 
@@ -149,40 +148,37 @@ def schedule(
             new_id = task_id or str(uuid.uuid4())
             recurring = _is_recurring(when)
 
-            # Write to autonomous task queue (picked up by Scheduler on next tick)
-            conn = get_connection(MEMORY_DB, timeout=5.0)
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO autonomous_tasks
-                    (task_id, command, confidence_required, created_at, scheduled_for, status)
-                VALUES (?, ?, 0.85, ?, ?, 'pending')
-                """,
-                (new_id, command, time.time(), run_at),
-            )
+            # Write via task_queue module to use its connection management
+            from autonomous.task_queue import create_task as _qt_create
+            _qt_create(command, confidence_required=0.85, scheduled_for=run_at)
             # For recurring tasks also write to recurring_schedules so the
             # Scheduler reloads them on restart.
             if recurring:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS recurring_schedules (
-                        task_id         TEXT PRIMARY KEY,
-                        command         TEXT,
-                        cron_expression TEXT,
-                        next_run        REAL,
-                        created_at      REAL,
-                        active          INTEGER DEFAULT 1
+                conn = get_connection(MEMORY_DB, timeout=5.0)
+                try:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS recurring_schedules (
+                            task_id         TEXT PRIMARY KEY,
+                            command         TEXT,
+                            cron_expression TEXT,
+                            next_run        REAL,
+                            created_at      REAL,
+                            active          INTEGER DEFAULT 1
+                        )
+                        """
                     )
-                    """
-                )
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO recurring_schedules
-                        (task_id, command, cron_expression, next_run, created_at, active)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                    """,
-                    (new_id, command, when, run_at, time.time()),
-                )
-            conn.commit()
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO recurring_schedules
+                            (task_id, command, cron_expression, next_run, created_at, active)
+                        VALUES (?, ?, ?, ?, ?, 1)
+                        """,
+                        (new_id, command, when, run_at, time.time()),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
 
             run_at_str = datetime.fromtimestamp(run_at).strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"schedule.add: '{new_id[:8]}' — {command!r} @ {run_at_str} (recurring={recurring})")

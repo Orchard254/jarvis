@@ -11,14 +11,14 @@ import logging
 import sqlite3
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import settings
 from settings import MEMORY_DB
 from core.thread_db import get_connection
 
 from autonomous.approval_gate import ApprovalGate
-from autonomous.task_queue import create_task, get_pending_tasks, update_task
+from autonomous.task_queue import create_task, get_pending_tasks, update_task, claim_task as _claim_task_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +101,14 @@ class Scheduler:
         logger.info("scheduler: monitor loop started")
         while not self._stop_event.is_set():
             try:
+                # Use atomic status transition to avoid TOCTOU races
                 pending = get_pending_tasks()
                 for task in pending:
-                    self._handle_task(task)
+                    task_id = task["task_id"]
+                    # Atomically claim this task — only one scheduler instance wins
+                    claimed = _claim_task_atomic(task_id)
+                    if claimed:
+                        self._handle_task(task)
             except Exception as e:
                 logger.error(f"scheduler: monitor error: {e}")
 
@@ -224,6 +229,8 @@ class Scheduler:
                 try:
                     time_part = rest[7:].strip()
                     h, m = int(time_part.split(":")[0]), int(time_part.split(":")[1])
+                    if not (0 <= h <= 23 and 0 <= m <= 59):
+                        return None
                     target = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
                     ts = target.timestamp()
                     return ts if ts > now else ts + 86400
@@ -235,6 +242,8 @@ class Scheduler:
             try:
                 parts = rest.split()
                 n = int(parts[0])
+                if n <= 0:
+                    return None
                 unit = parts[1] if len(parts) > 1 else "minutes"
                 return now + n * (60 if unit.startswith("minute") else 3600)
             except (ValueError, IndexError):
@@ -244,7 +253,10 @@ class Scheduler:
             try:
                 time_part = expr.split("at ")[-1].strip()
                 h, m = int(time_part.split(":")[0]), int(time_part.split(":")[1])
-                target = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+                if not (0 <= h <= 23 and 0 <= m <= 59):
+                    return None
+                # Use timezone-aware datetime for DST-safe computation
+                target = datetime.now().astimezone().replace(hour=h, minute=m, second=0, microsecond=0)
                 ts = target.timestamp()
                 return ts if ts > now else ts + 86400
             except (ValueError, IndexError):

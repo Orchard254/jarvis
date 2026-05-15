@@ -7,7 +7,7 @@ Executes code and manages the Execute-Detect-Analyze-Patch-Retry workflow.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from safety.executor import execute as safety_execute
 from tools import TOOL_REGISTRY
@@ -260,11 +260,12 @@ class ExecutorAgent:
         task_type = task_spec.get("type", "code")
         
         if task_type == "code":
-            # Execute Python code
+            # Execute code — respect language from task spec, default to python
+            lang = task_spec.get("language", "python")
             result = safety_execute(
                 "execute_code",
                 execute_code,
-                {"code": code, "language": "python"},
+                {"code": code, "language": lang},
                 plan=task_spec.get("plan")
             )
             return result

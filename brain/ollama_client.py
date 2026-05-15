@@ -101,7 +101,7 @@ def chat(
 
     # Exponential backoff retry logic
     retry_count = 0
-    while retry_count <= max_retries:
+    while retry_count < max_retries:
         try:
             resp = requests.post(
                 endpoint, json=payload, headers=headers, timeout=LLM_TIMEOUT
@@ -110,7 +110,7 @@ def chat(
             data = resp.json()
 
             # Handle OpenAI-compatible response format
-            if "choices" in data:
+            if "choices" in data and data["choices"]:
                 choice = data["choices"][0]
                 msg = choice.get("message", {})
                 tool_calls_raw = msg.get("tool_calls") or []
@@ -151,7 +151,7 @@ def chat(
 
         except Exception as e:
             retry_count += 1
-            if retry_count > max_retries:
+            if retry_count >= max_retries:
                 logger.error(f"Cloud LLM unavailable after {max_retries} retries: {e}")
                 if FALLBACK_TO_LOCAL:
                     logger.info("Falling back to local Ollama instance...")
@@ -229,9 +229,7 @@ def chat(
                     f"Request failed (attempt {retry_count}/{max_retries}), "
                     f"retrying in {wait_total:.1f}s: {e}"
                 )
-            deadline = time.monotonic() + wait_total
-            while time.monotonic() < deadline:
-                time.sleep(min(0.1, deadline - time.monotonic()))
+            time.sleep(wait_total)
 
 
 def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
@@ -306,10 +304,9 @@ def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
         ]
         _mock_tools_called = True
     elif "write" in lower_msg and "jarvis_test.txt" in lower_msg:
-        import os
+        import tempfile
 
-        desktop = os.path.expanduser("~/Desktop")
-        test_file = os.path.join(desktop, "jarvis_test.txt")
+        test_file = os.path.join(tempfile.gettempdir(), "jarvis_test.txt")
         tool_calls = [
             {
                 "id": "call_0",
@@ -511,10 +508,18 @@ def health_check() -> bool:
             list_url = (
                 f"{base_url}/models" if "/v1" in base_url else f"{base_url}/api/tags"
             )
-            return requests.get(list_url, timeout=5).status_code == 200
-        except Exception:
+            resp = requests.get(list_url, timeout=5)
+            # 200 = healthy, 401/404 = reachable but needs auth/wrong path
+            return resp.status_code in (200, 401)
+        except requests.ConnectionError:
+            return False  # server unreachable
+        except requests.RequestException:
             # Fallback to simple ping
-            return requests.get(base_url, timeout=5).status_code in [200, 401, 404, 405]
+            try:
+                resp = requests.get(base_url, timeout=5)
+                return resp.status_code in (200, 401, 405)
+            except requests.ConnectionError:
+                return False
     except Exception:
         return False
 

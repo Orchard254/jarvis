@@ -8,7 +8,6 @@ import queue
 import sqlite3
 import threading
 import time
-from pathlib import Path
 
 from settings import DB_BUSY_TIMEOUT, PC_INDEX_DB
 
@@ -158,5 +157,16 @@ class IndexWriter:
             try:
                 self.conn.execute("ROLLBACK")
             except Exception:
-                pass
+                # Connection is in an unknown state — close and reopen
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+                try:
+                    self.conn = sqlite3.connect(PC_INDEX_DB, timeout=DB_BUSY_TIMEOUT)
+                    self.conn.execute("PRAGMA journal_mode=WAL;")
+                    self.conn.execute(f"PRAGMA busy_timeout={DB_BUSY_TIMEOUT};")
+                    self.conn.execute("PRAGMA synchronous=NORMAL;")
+                except Exception as conn_err:
+                    logger.error(f"IndexWriter reconnection failed: {conn_err}")
             raise

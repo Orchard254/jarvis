@@ -4,7 +4,8 @@ Tests for false positives that would block legitimate non-harmful code
 """
 
 import sys
-sys.path.insert(0, '/workspace')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from safety.tool_guard import check_imports, check_paths
 from safety.plan_validator import validate

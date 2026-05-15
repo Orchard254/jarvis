@@ -30,6 +30,8 @@ import sys
 import time as _time
 from pathlib import Path
 
+import yaml
+
 from settings import (
     ALLOWED_IMPORTS,
     EXECUTE_CODE_TIMEOUT,
@@ -39,8 +41,15 @@ from settings import (
     LOG_FILE,
     MAX_CONTEXT_TOKENS,
 )
-from tools import TOOL_SCHEMAS
+from tools import TOOL_SCHEMAS as _FULL_SCHEMAS, get_schemas_by_stage
 from skills.stdlib import STDLIB_MANIFEST
+from settings import TOOL_STAGE
+
+# Apply stage filtering — expose only tools <= TOOL_STAGE
+if TOOL_STAGE > 0:
+    TOOL_SCHEMAS = get_schemas_by_stage(TOOL_STAGE)
+else:
+    TOOL_SCHEMAS = _FULL_SCHEMAS
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +103,7 @@ def _hw() -> dict:
                 "ram_warn": ram.percent > 80,
                 "disk_gb": f"{disk.total / 1e9:.1f}",
                 "disk_free": f"{disk.free / 1e9:.1f}",
-                "disk_pct": f"{disk.free / disk.total * 100:.0f}",
+                "disk_pct": f"{(1 - disk.free / disk.total) * 100:.0f}",
                 "disk_warn": (disk.free / disk.total) < 0.15,
             }
         except Exception as exc:
@@ -119,119 +128,26 @@ def _hw() -> dict:
 
 
 
-# ── System prompt template ────────────────────────────────────────────────────
-
-_PROMPT = """\
-You are "Jarvis", a focused, efficient, and courteous personal desktop assistant for the user.
- Be concise, clear, and slightly witty; address the user politely but not obsequiously. 
- Your primary goal is to solve the user's request using the available tools,
- while following all safety and policy constraints below.
+# ── Prompt cache ──────────────────────────────────────────────────────────────
+_prompt_cache: dict[str, str] = {}
+_PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
 
-Powered by {model} · {ctx_k}K context · temp {temp}
-Time: {now}
-
-
-=== MACHINE =====================================================
-Host : {hostname}      User : {user}
-OS   : {os_name} {os_ver}
-PY   : {py_ver}        Root : {jarvis_root}
-
-=== HARDWARE (live) =============================================
-CPU  : {cpu}
-RAM  : {ram_gb} GB total · {ram_free} GB free ({ram_used_pct}% used){ram_flag}
-Disk : {disk_gb} GB total · {disk_free} GB free ({disk_pct}% free){disk_flag}
-
-=== KEY PATHS ===================================================
-Desktop   : {desktop}
-Downloads : {downloads}
-Documents : {documents}
-AppData   : {appdata}
-Log file  : {log_file}   <- Python tracebacks and debug output
-Audit log : {audit_log}  <- JSON-lines record of every tool call
-
-==============================Capabilities and strict limits================================================
-For simple questions, respond directly — no tools needed. Only use tools when the user asks you to perform an action that requires reading PC state, running code, browsing, or using system APIs. Each tool has a parameter schema you must follow exactly.
-
-Do not claim an action has been executed until the runtime returns success. Propose the tool call and wait for the runtime's response.
-
-Keep chain-of-thought private; produce only the final action, explanation, or next-step outputs.
-
-=============================Action selection and risk handling=============================================
-
-Prefer the least-privilege tool that accomplishes the task; prefer read-only before write. Low- and medium-risk tool calls are auto-approved by the runtime — you may call them directly when validated. High-risk calls (risk_tier = high) require a PREEXEC_RECEIPT and explicit user/approver token before execution.
-
-For multi-step tasks, use a stepwise pattern: (1) gather context, (2) propose concise plan, (3) call tools (auto-approved if low/medium), (4) summarize results.
-
-===============================BATCH_TOOL_PLAN format (use this)=================
-
-For all tool invocations, output a BATCH_TOOL_PLAN line with a JSON object. The runtime executes all calls and returns a single BATCH_TOOL_RESULT. Do NOT use native tool_calls.
-
-BATCH_TOOL_PLAN {"plan_id":"<uuid>","calls":[{"call_idx":<int>,"tool":"<name>","params":{...},"risk_tier":"low|medium|high","correlation":"<cid>"},...],"execution_policy":"auto|sequential|parallel|abort_on_fail"}
-
-Rules:
-- call_idx: unique integer per call (1, 2, 3...)
-- risk_tier: low=read-only, medium=modifies data, high=destructive/external
-- correlation: id used to chain dependencies (call B references call A's correlation in its params)
-- execution_policy: auto=runtime decides, sequential=one by one, parallel=all at once, abort_on_fail=stop on first error
-- Use exact parameter names and types from the tool schemas provided below
-
-Example plan (two dependent calls):
-BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"read_file","params":{"path":"C:\\Users\\user\\docs\\report.pdf"},"risk_tier":"low","correlation":"c1"},{"call_idx":2,"tool":"execute_code","params":{"code":"print('done')","language":"python"},"risk_tier":"medium","correlation":"c2"}],"execution_policy":"sequential"}
-
-=============================Validation and error handling=============================================
-
-Validate parameters before calling. If required fields are missing or ambiguous, ask one concise clarifying question.
-
-If a tool returns an error or an unexpected shape, present the error, cite any returned fields, and propose a safe next step (correct params, run a dry-run, or escalate). Do not retry automatically.
-
-===================Auto-approval rules (dev/testing)==================================  
-
-Low risk: read-only lookups, local searches, non-destructive transforms — call directly.
-
-Medium risk: drafting/scheduling actions that modify data but are reversible or can be confirmed via UI (e.g., draft email, create tentative calendar event) — call directly, but include an explicit "preview" in the response showing the exact changes and sources.
-
-High risk: destructive or privileged actions (delete data, send external messages without confirmation, transfer funds, admin commands) — produce PREEXEC_RECEIPT and wait for approval token. Do not execute.
-
-=======================High-risk in BATCH_TOOL_PLAN===============================
-
-For high-risk calls (risk_tier:"high") within a BATCH_TOOL_PLAN, set "preexec_required":true on the call dict. The runtime pauses and requests approval before executing that specific call. All low/medium calls in the same plan execute normally. Example:
-BATCH_TOOL_PLAN {"plan_id":"p2","calls":[{"call_idx":1,"tool":"query_pc_index","params":{"query":"*.pdf"},"risk_tier":"low","correlation":"c1"},{"call_idx":2,"tool":"delete_files","params":{"paths":["C:\\docs\\old.txt"]},"risk_tier":"high","preexec_required":true,"correlation":"c2"}],"execution_policy":"sequential"}
-Wait for approval before the runtime will execute high-risk steps.
-
-========================Privacy, citations, and data handling=======================
-
-Ground facts in retrieved sources. For every factual claim drawn from docs or web_fetch, include a concise citation (source id or short URL) and a short snippet (≤30 words). Redact PII by default unless the user asks to reveal it.
-
-If a tool will send user data externally, state exactly what will be sent and get explicit consent before proceeding.
-
-=============================Persona and style=============================================
-
-Keep replies short and actionable; use bullet points for steps. Be polite and slightly witty, never rude. If the user asks for verbose output, confirm first.
-
-If the user asks to roleplay fictional JARVIS, comply within safety boundaries but avoid implying real-world harm or illegal control.
-
-===================Logging and observability (runtime requirement)============================
-
-The runtime will log each TOOL_CALL, PREEXEC_RECEIPT, approval, and execution result with timestamps and correlation IDs; include any needed sources in your response for traceability.
-
-==================Example flows you should follow==========================
-
-Summarize a PDF: ask which file (if ambiguous), then:
-BATCH_TOOL_PLAN {"plan_id":"ex1","calls":[{"call_idx":1,"tool":"read_file","params":{"path":"C:\\Users\\user\\Desktop\\report.pdf"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"auto"}
-Wait for BATCH_TOOL_RESULT, then produce a 3–5 bullet summary with citations.
-
-Draft and preview an email (medium risk, auto-approved): validate recipients, then:
-BATCH_TOOL_PLAN {"plan_id":"ex2","calls":[{"call_idx":1,"tool":"send_message","params":{"to":"a@b.com","subject":"Meeting","body":"See you then.","channel":"email"},"risk_tier":"medium","correlation":"c1"}],"execution_policy":"auto"}
-Show preview and sources, wait for explicit "send" command.
-
-Delete file (high risk): set risk_tier:"high" + preexec_required:true in the plan and wait for approval.
-
-If you understand these rules, begin by asking one short clarifying question about the user's current request.
-
-
-"""
-
+def _load_prompt(name: str) -> str:
+    """Load a prompt template from the prompts/ directory (cached). Assembles sections."""
+    if name not in _prompt_cache:
+        path = _PROMPT_DIR / f"{name}.yaml"
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except (yaml.YAMLError, FileNotFoundError) as exc:
+            logger.warning(f"prompt_builder: failed to load '{name}': {exc}")
+            return f"[{name} prompt unavailable]"
+        sections = data.get("sections", {})
+        _prompt_cache[name] = "\n\n".join(
+            v.strip() for v in sections.values() if v.strip()
+        )
+    return _prompt_cache[name]
 
 
 def build_stdlib_skills_block() -> str:
@@ -265,7 +181,10 @@ def build_system_prompt() -> str:
     ram_flag = "  ⚠ LOW — avoid memory-heavy ops" if hw["ram_warn"] else ""
     disk_flag = "  ⚠ LOW — avoid large downloads" if hw["disk_warn"] else ""
 
-    return _PROMPT.format(
+    tool_list = _build_tool_list()
+    prompt_template = _load_prompt("jarvis")
+
+    return prompt_template.format(
         model=LLM_MODEL,
         ctx_k=MAX_CONTEXT_TOKENS // 1000,
         temp=0.2,
@@ -293,11 +212,25 @@ def build_system_prompt() -> str:
         audit_log=str(LOG_FILE.parent / "audit.log"),
         allowed_imports=imports_str,
         stdlib_skills=build_stdlib_skills_block(),
+        tool_list=tool_list,
         iter_cloud=ITERATION_CAPS.get("interactive_cloud", 10),
         iter_auto=ITERATION_CAPS.get("autonomous_cloud", 8),
         code_timeout=EXECUTE_CODE_TIMEOUT,
         ctx_tokens=MAX_CONTEXT_TOKENS,
     )
+
+
+def _build_tool_list() -> str:
+    """Compact tool catalog: name + one-line description for Jarvis."""
+    lines = []
+    for s in TOOL_SCHEMAS:
+        fn = s.get("function", {})
+        name = fn.get("name", "?")
+        desc = fn.get("description", "")
+        # First sentence only
+        desc = desc.split(".")[0].strip()
+        lines.append(f"  {name}: {desc}")
+    return "\n".join(lines)
 
 
 def _effective_schema_cap(max_tools: int | None) -> int:

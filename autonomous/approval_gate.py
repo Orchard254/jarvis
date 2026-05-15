@@ -8,7 +8,6 @@ accordingly. This module handles only the user-facing prompt-and-wait flow.
 
 import logging
 import threading
-import time
 
 from core.console import cli_input
 

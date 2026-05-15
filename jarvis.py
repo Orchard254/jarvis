@@ -5,7 +5,6 @@ Production Entry Point. Wires Indexer, Memory, Orchestrator, and Voice I/O.
 """
 
 import logging
-import os
 import signal
 import sys
 from pathlib import Path
@@ -114,6 +113,19 @@ signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
 
 
+def _cleanup():
+    pc_indexer.stop()
+    try:
+        from memory.db_pool import shutdown_pools as _sp
+        _sp()
+    except Exception:
+        pass
+
+
+import atexit
+atexit.register(_cleanup)
+
+
 def main():
     logger.info("JARVIS Starting...")
 
@@ -138,6 +150,14 @@ def main():
     from core.health_check import run_all as run_health_check
 
     run_health_check()
+
+    from tools import TOOL_SCHEMAS as _tool_count
+    from settings import TOOL_STAGE as _stage
+
+    logger.info(
+        f"Stage {_stage} active — {len(_tool_count)} tools available "
+        f"({_stage}/4, higher stage = more tools)"
+    )
 
     audit_log.setup()
     pc_indexer.start()
@@ -166,8 +186,6 @@ def main():
         input_handler.start_listening()
         output_cb = input_handler._output
         # Ensure cleanup on exit
-        import atexit
-
         atexit.register(input_handler.stop)
 
     orc.run_cli(output_callback=output_cb)

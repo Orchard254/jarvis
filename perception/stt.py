@@ -4,7 +4,6 @@ Respects IS_SPEAKING mute flag to prevent acoustic feedback.
 """
 
 import logging
-import time
 
 import settings
 from settings import STT_LANGUAGE, STT_SAMPLE_RATE
@@ -15,7 +14,7 @@ try:
     import speech_recognition as sr
 
     _recognizer = sr.Recognizer()
-    _recognizer.dynamic_energy_threshold = True  # never touch again after init
+    _recognizer.dynamic_energy_threshold = False  # use fixed threshold from calibration
     _stt_available = True
 except ImportError:
     _stt_available = False

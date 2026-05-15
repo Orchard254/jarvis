@@ -8,7 +8,6 @@ import json
 import logging
 import sqlite3
 import time
-from pathlib import Path
 
 from settings import MEMORY_DB
 from memory.db_pool import get_episodic_connection

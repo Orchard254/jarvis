@@ -12,8 +12,12 @@ logger = logging.getLogger(__name__)
 _DANGEROUS: list[tuple[str, str]] = [
     # Shell command patterns (direct execution)
     (r"\brm\s+-[rRfF]{1,3}\b", "Destructive recursive delete (rm -rf)"),
-    # Python subprocess with rm -rf in any form (list or shell string)
-    (r"subprocess.*?['\"]rm['\"].*?['\"]-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf)"),
+    # Python subprocess with rm -rf in list form (e.g. ["rm", "-rf", ...])
+    (r"subprocess.*?['\"]rm['\"].*?['\"]-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf list)"),
+    # Python subprocess with rm -rf in shell-string form (e.g. "rm -rf /")
+    (r"subprocess\.(?:run|Popen|call)\(.*?['\"]rm\s+-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf shell string)"),
+    # Python os.system / os.popen with rm -rf
+    (r"os\.(?:system|popen)\(.*?rm\s+-[rRfF]+", "Destructive recursive delete via os.system/popen (rm -rf)"),
     (r"\bdel\s+/[sStTfFqQ]", "Destructive del command"),
     (r"\brd\s+/[sS]", "Recursive directory removal (rd /s)"),
     (r"\bformat\s+[a-zA-Z]:", "Disk format command"),
@@ -35,8 +39,8 @@ _DANGEROUS: list[tuple[str, str]] = [
     (r"\bRestart-Computer\b", "PowerShell restart (Restart-Computer)"),
     (r"\bRemove-ItemProperty\b", "PowerShell registry deletion (Remove-ItemProperty)"),
     (
-        r"subprocess.*?(\bformat\b|\brd\s+/s\b|\bshutdown\b)",
-        "Subprocess calling destructive command",
+        r"(?:subprocess\.(?:run|Popen|call)|os\.(?:system|popen)).*?(\bformat\b|\brd\s+/s\b|\bshutdown\b)",
+        "Calling destructive command via subprocess or os.system",
     ),
     # Dangerous dynamic code execution
     (r"\beval\s*\(", "Dynamic code execution (eval)"),

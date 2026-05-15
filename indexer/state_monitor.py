@@ -21,15 +21,25 @@ _bg_processes_imported = False
 _bg_processes_ref = None
 
 
-def _background_tasks() -> list[dict]:
+def _ensure_bg_imported():
+    """Thread-safe lazy import using double-checked locking."""
     global _bg_processes_imported, _bg_processes_ref
-    if not _bg_processes_imported:
+    if _bg_processes_imported:
+        return
+    with _bg_lock:
+        if _bg_processes_imported:
+            return
         try:
             from tools.system.execute_code import _bg_processes
             _bg_processes_ref = _bg_processes
         except ImportError:
             _bg_processes_ref = {}
         _bg_processes_imported = True
+
+
+def _background_tasks() -> list[dict]:
+    global _bg_processes_imported, _bg_processes_ref
+    _ensure_bg_imported()
     d = _bg_processes_ref
     if not d:
         return []
@@ -65,7 +75,7 @@ _SYSTEM_PROCS = {
 # ── Window enumeration ───────────────────────────────────────────────────────
 
 def _get_raw_windows() -> list[dict]:
-    import win32gui, win32process, psutil, win32con
+    import win32gui, win32process, psutil
     results = []
     def callback(hwnd, _):
         try:

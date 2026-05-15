@@ -24,7 +24,6 @@ before blocking and disarms it once the user presses Enter.
 
 import logging
 import shutil
-import sys
 import threading
 
 # ---------------------------------------------------------------------------

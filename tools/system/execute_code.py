@@ -18,7 +18,6 @@ Example (LLM decomposition):
 
 import logging
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -64,7 +63,13 @@ def _bg_register(proc: subprocess.Popen, temp_path: str, code: str, language: st
 
 def _bg_unregister(pid: int) -> None:
     with _bg_lock:
-        _bg_processes.pop(pid, None)
+        info = _bg_processes.pop(pid, None)
+    # Clean up temp file outside the lock to avoid holding it during I/O
+    if info and info.get("temp_path"):
+        try:
+            os.unlink(info["temp_path"])
+        except Exception:
+            pass
 
 
 def _bg_get(pid: int) -> dict | None:
@@ -329,17 +334,6 @@ if not found:
 """
 
 
-def get_fallback_script(intent: str) -> str | None:
-    """
-    Return an optimised, pre-built script for common intent patterns.
-    
-    DEPRECATED: This function now returns None for all intents.
-    Modern LLMs handle these cases well with tool calling.
-    Kept for backward compatibility but effectively disabled.
-    """
-    return None
-
-
 def execute_code(
     code: str = "",
     language: str = "python",
@@ -363,8 +357,6 @@ def execute_code(
     kill       Terminate a background process by *pid*.
     list       Return all tracked background processes with status summary.
     """
-    from safety.tool_guard import check_imports, get_safe_env
-
     # ── Action dispatch (non-execution actions) ──────────────────────────────
     if action == "list":
         with _bg_lock:
@@ -394,19 +386,29 @@ def execute_code(
         rc = proc.poll()
         done = rc is not None
 
-        # Collect output if finished and not yet collected
-        if done and not info["done"]:
-            info["done"] = True
-            info["returncode"] = rc
-            try:
-                info["stdout"], info["stderr"] = proc.communicate(timeout=5)
-            except Exception:
-                pass
-            # Clean up temp file
-            try:
-                os.unlink(info["temp_path"])
-            except Exception:
-                pass
+        # Collect output if finished and not yet collected — under lock to avoid races
+        if done:
+            with _bg_lock:
+                info = _bg_processes.get(pid)
+                if info is None:
+                    return {"success": False, "error": f"No tracked background process with pid={pid}"}
+                if info["done"]:
+                    done = True
+                    rc = info["returncode"]
+                else:
+                    info["done"] = True
+                    info["returncode"] = rc
+                    try:
+                        info["stdout"], info["stderr"] = proc.communicate(timeout=5)
+                    except Exception:
+                        pass
+                    # Clean up temp file
+                    try:
+                        os.unlink(info["temp_path"])
+                    except Exception:
+                        pass
+            proc = info["proc"]
+            rc = info["returncode"]
 
         if action == "kill":
             try:
@@ -479,6 +481,7 @@ def execute_code(
         if not allowed:
             return {"success": False, "error": f"Security check failed: {reason}"}
 
+    temp_path = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -497,7 +500,7 @@ def execute_code(
         env["PYTHONIOENCODING"] = "utf-8"
         project_root = str(Path(__file__).resolve().parent.parent)
         existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = project_root + (";" + existing if existing else "")
+        env["PYTHONPATH"] = project_root + (os.pathsep + existing if existing else "")
 
         if background:
             proc = subprocess.Popen(
@@ -510,6 +513,7 @@ def execute_code(
                 creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
             bg_pid = _bg_register(proc, temp_path, code, language)
+            temp_path = None  # ownership transferred to _bg_register
             return {
                 "success": True,
                 "pid": bg_pid,
@@ -528,11 +532,6 @@ def execute_code(
             env=env,
             creationflags=CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
-
-        try:
-            os.unlink(temp_path)
-        except Exception:
-            pass
 
         if result.returncode == 0:
             return {
@@ -558,4 +557,10 @@ def execute_code(
             "success": False,
             "error": str(e),
         }
+    finally:
+        if temp_path is not None:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
 

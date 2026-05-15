@@ -15,7 +15,6 @@ user can fix config issues without a hard crash.
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -135,7 +134,7 @@ def _check_tesseract() -> bool:
         import pytesseract
 
         # Trigger a version check — this exercises the binary path
-        ver = pytesseract.get_languages()
+        pytesseract.get_languages()
         logger.info("Health: Tesseract OCR OK")
         return True
     except ImportError:

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import time
+import threading
 from pathlib import Path
 
 from settings import PIPER_BINARY, PIPER_MODEL, PIPER_MODEL_JSON
@@ -70,6 +70,19 @@ def speak_piper(text: str, blocking: bool = True) -> bool:
 
         if blocking:
             proc.wait(timeout=60)
+        else:
+            # Detach: close stdin so the process can finish, then wait briefly
+            # to collect the zombie instead of leaving it orphaned.
+            def _reap():
+                try:
+                    proc.wait(timeout=30)
+                except Exception:
+                    try:
+                        proc.kill()
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+            threading.Thread(target=_reap, daemon=True).start()
 
         logger.info(f"TTS(piper): spoke {len(text)} chars")
         return True

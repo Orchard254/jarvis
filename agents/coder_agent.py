@@ -27,10 +27,12 @@ class CoderAgent:
     """
     
     # Allowed standard library modules
+    # NOTE: subprocess is intentionally excluded — all command execution must
+    # go through the execute_code tool which has AST import guard + sandboxing.
     SAFE_STD_MODULES = {
         "os", "sys", "pathlib", "shutil", "glob", "tempfile",
         "json", "csv", "xml", "re", "datetime", "time",
-        "subprocess", "threading", "multiprocessing",
+        "threading", "multiprocessing",
         "http", "urllib", "socket",
         "math", "random", "statistics",
         "collections", "itertools", "functools",
@@ -342,16 +344,11 @@ Do not repeat the same fix strategy.
                 "notes": ""
             }
         
-        # Check for dangerous patterns
+        # Check for dangerous patterns (literal substring match)
         code_lower = code.lower()
         for pattern in self.DANGEROUS_PATTERNS:
-            import re
-            try:
-                if re.search(re.escape(pattern), code_lower):
-                    warnings.append(f"Dangerous pattern detected: {pattern}")
-            except re.error:
-                # Skip invalid regex patterns
-                continue
+            if pattern.lower() in code_lower:
+                warnings.append(f"Dangerous pattern detected: {pattern}")
         
         # Check imports
         try:

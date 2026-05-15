@@ -50,6 +50,8 @@ def _check_log_for_failures(lines: int = 30) -> str:
     """
     Read the last *lines* lines of jarvis.log and check for failure signals.
     Returns a human-readable summary if failures found, or empty string if clean.
+    Uses a larger tail window (64KB) and timestamp filtering to avoid false
+    positives from stale log entries.
     """
     path = LOG_FILE
     if not os.path.isfile(path):
@@ -60,8 +62,8 @@ def _check_log_for_failures(lines: int = 30) -> str:
             # Efficient tail: seek near end and read
             f.seek(0, 2)
             file_size = f.tell()
-            # Read up to 8KB from the end
-            chunk_size = min(file_size, 8192)
+            # Read up to 64KB from the end (was 8KB — too small)
+            chunk_size = min(file_size, 65536)
             f.seek(file_size - chunk_size)
             tail = f.read()
 

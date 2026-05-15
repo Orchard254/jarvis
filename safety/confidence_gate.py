@@ -73,24 +73,31 @@ def check(plan: dict) -> tuple[bool, str]:
     tool_name = plan.get("tool_name", "")
     destructive = plan.get("destructive", False)
 
+    # Override: independently check the plan for destructive patterns regardless
+    # of what the LLM declared, so an LLM cannot bypass the cap by lying.
+    _destructive_tools = frozenset({"shutdown", "restart", "delete_file", "kill_process"})
+    tool_name_from_plan = plan.get("tool_name", "")
+    if tool_name_from_plan in _destructive_tools:
+        destructive = True
+
     confidence = float(base_confidence)
 
     # ── Signal 1: LLM response uncertainty analysis ────────────────────────
     if llm_response:
         text = llm_response.lower()
-        found_high = next((p for p in _HIGH_UNCERTAINTY_PHRASES if p in text), None)
-        if found_high:
-            confidence *= 0.70
+        # Count all uncertainty signals — multiple signals compound
+        high_count = sum(1 for p in _HIGH_UNCERTAINTY_PHRASES if p in text)
+        mild_count = sum(1 for p in _MILD_UNCERTAINTY_PHRASES if p in text)
+        if high_count > 0:
+            confidence *= 0.70 ** high_count
             logger.debug(
-                f"confidence_gate: high-uncertainty '{found_high}' → {confidence:.2f}"
+                f"confidence_gate: {high_count} high-uncertainty phrase(s) → {confidence:.2f}"
             )
-        else:
-            found_mild = next((p for p in _MILD_UNCERTAINTY_PHRASES if p in text), None)
-            if found_mild:
-                confidence *= 0.88
-                logger.debug(
-                    f"confidence_gate: mild-uncertainty '{found_mild}' → {confidence:.2f}"
-                )
+        elif mild_count > 0:
+            confidence *= 0.88 ** mild_count
+            logger.debug(
+                f"confidence_gate: {mild_count} mild-uncertainty phrase(s) → {confidence:.2f}"
+            )
 
     # ── Signal 2: Explicit destructive flag ───────────────────────────────
     if destructive:

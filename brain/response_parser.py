@@ -5,7 +5,6 @@ Supports both native tool_calls and BATCH_TOOL_PLAN text format.
 """
 import json
 import logging
-import re
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -36,12 +35,17 @@ def parse_batch_plan(content: str, valid_tool_names: set) -> tuple:
     if not content:
         return None, None
 
-    match = re.search(r'BATCH_TOOL_PLAN\s*(\{.*\})', content, re.DOTALL)
-    if not match:
+    # Use raw_decode to correctly handle nested JSON objects
+    idx = content.find("BATCH_TOOL_PLAN")
+    if idx < 0:
         return None, None
-
+    decoder = json.JSONDecoder()
+    json_start = idx + len("BATCH_TOOL_PLAN")
+    # Skip whitespace between tag and JSON object
+    while json_start < len(content) and content[json_start] in (' ', '\t', '\n', '\r'):
+        json_start += 1
     try:
-        plan = json.loads(match.group(1))
+        plan, _ = decoder.raw_decode(content, json_start)
     except json.JSONDecodeError as e:
         return None, f"Invalid BATCH_TOOL_PLAN JSON: {e}"
 
@@ -74,6 +78,7 @@ def parse_batch_plan(content: str, valid_tool_names: set) -> tuple:
         risk_tier = call.get("risk_tier", "low")
         if risk_tier not in ("low", "medium", "high"):
             return None, f"call {call_idx}: invalid risk_tier '{risk_tier}'"
+        call["risk_tier"] = risk_tier
 
         if "correlation" not in call:
             call["correlation"] = f"c{call_idx}"

@@ -3,9 +3,11 @@ Main routing gate. Bridges brain, safety, tools, and verification.
 Injects callbacks into tool_loop to maintain strict layer boundaries.
 """
 
+import concurrent.futures
 import logging
 import re
 import sys
+import threading
 from collections import deque
 
 import autonomous.activity_log
@@ -15,7 +17,7 @@ from autonomous.approval_gate import ApprovalGate
 from autonomous.scheduler import Scheduler
 from brain.tool_loop import run as tool_loop_run
 from safety import executor as safety
-from settings import ITERATION_CAPS, TOOL_LOOP_HISTORY_MESSAGES
+from settings import ITERATION_CAPS
 from skills.skill_store import get_active_skills, search_by_intent
 from skills.skill_store import init_db as init_skills
 from tools import TOOL_REGISTRY
@@ -36,9 +38,9 @@ class Orchestrator:
         self._mode = "interactive_cloud"
         self._approval_gate = ApprovalGate()
         autonomous.task_queue.init_db()
+        self._memory = memory
         self._scheduler = Scheduler(self.handle)
         self._scheduler.start()
-        self._memory = memory
         self.running = True
         self._last_tool_calls: list[dict] = []
         init_skills()
@@ -138,20 +140,65 @@ class Orchestrator:
                     )
                     memory_context = f"{skill_hint}\n\n{memory_context}" if memory_context else skill_hint
 
-            result = tool_loop_run(
-                user_input=text,
-                history=list(self._history),
-                execute_fn=self._execute_wrapper,
-                verify_fn=self._verify_wrapper,
-                mode=self._mode,
-                tools=[],
-                memory_context=memory_context,
-                valid_tool_names=set(TOOL_REGISTRY.keys()),
-                pc_state_fn=read_pc_state,
-            )
+            # Run tool loop with a timeout guard
+            timeout = settings.LLM_TIMEOUT + 30
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                future = _pool.submit(
+                    tool_loop_run,
+                    user_input=text,
+                    history=list(self._history),
+                    execute_fn=self._execute_wrapper,
+                    verify_fn=self._verify_wrapper,
+                    mode=self._mode,
+                    tools=[],
+                    memory_context=memory_context,
+                    valid_tool_names=set(TOOL_REGISTRY.keys()),
+                    pc_state_fn=read_pc_state,
+                )
+                try:
+                    result = future.result(timeout=timeout) or {}
+                except concurrent.futures.TimeoutError:
+                    logger.error(f"Tool loop timed out after {timeout}s")
+                    return "I'm sorry, the operation timed out. Please try a simpler request."
+
+            if not result:
+                result = {"response": "No response from tool loop", "success": False, "tool_calls": []}
 
             response = result.get("response", "Done.")
             self._last_tool_calls = result.get("tool_calls", [])
+
+            # ── Verification: cross-check LLM summary against actual tool results ──
+            tool_calls_list = result.get("tool_calls", [])
+            if tool_calls_list and result.get("success"):
+                failed_calls = [
+                    tc for tc in tool_calls_list
+                    if not tc.get("result", {}).get("success", False)
+                ]
+                # Only flag if the LAST call failed, or ALL calls for the same tool failed
+                last_call = tool_calls_list[-1] if tool_calls_list else None
+                if failed_calls:
+                    last_failed = last_call and not last_call.get("result", {}).get("success", False)
+                    all_same_tool = len({tc.get("tool") for tc in failed_calls}) == 1
+                    all_calls_tool_failed = all_same_tool and all(
+                        tc.get("tool") == failed_calls[0].get("tool")
+                        for tc in tool_calls_list
+                    ) and len(tool_calls_list) == len(failed_calls)
+                    if last_failed or all_calls_tool_failed:
+                        logger.warning(
+                            f"Verification: {len(failed_calls)} tool(s) failed, final result wrong"
+                        )
+                        errors = []
+                        for tc in failed_calls[:3]:
+                            name = tc.get("tool", "?")
+                            err = tc.get("result", {}).get("error", "unknown")
+                            errors.append(f"  - {name}: {err[:100]}")
+                        correction = (
+                            f"\n\n⚠️ Correction: The following tool call(s) actually failed:\n"
+                            + "\n".join(errors)
+                            + "\nPlease check and try again."
+                        )
+                        response = response.strip() + correction
+                    result["success"] = False
 
             if result.get("success") and result.get("tool_calls"):
                 try:
