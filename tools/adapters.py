@@ -12,15 +12,12 @@ import webbrowser
 from pathlib import Path
 
 import psutil
-try:
-    import pyautogui
-except ImportError:
-    pyautogui = None  # type: ignore
 
-try:
-    import pygetwindow as gw
-except ImportError:
-    gw = None  # type: ignore
+# Defer pyautogui import to runtime to avoid DISPLAY errors on Linux/headless systems
+pyautogui = None  # type: ignore
+
+# Defer pygetwindow import to runtime (Windows-only)
+gw = None  # type: ignore
 
 # Stub for pyautogui if missing
 if pyautogui is None:
@@ -205,6 +202,15 @@ def close_app(**kwargs) -> dict:
 
 def get_active_window(**kwargs) -> dict:
     try:
+        # Lazy import pygetwindow at runtime (Windows-only)
+        global gw
+        if gw is None:
+            try:
+                import pygetwindow as gw_mod
+                gw = gw_mod
+            except (ImportError, OSError):
+                return {"success": False, "error": "pygetwindow not available (Windows only)"}
+        
         win = gw.getActiveWindow()
         if win:
             return {"success": True, "title": win.title, "process": "unknown"}
@@ -215,6 +221,15 @@ def get_active_window(**kwargs) -> dict:
 
 def _find_window(title: str = "", process: str = ""):
     """Find a window by title or process name. Returns window object or None."""
+    # Lazy import pygetwindow at runtime (Windows-only)
+    global gw
+    if gw is None:
+        try:
+            import pygetwindow as gw_mod
+            gw = gw_mod
+        except (ImportError, OSError):
+            return None
+    
     target = None
     if title:
         for w in gw.getWindowsWithTitle(title):
@@ -283,6 +298,16 @@ def get_system_stats(**kwargs) -> dict:
 
 def screenshot(**kwargs) -> dict:
     try:
+        # Lazy import pyautogui at runtime to avoid DISPLAY errors on Linux/headless
+        global pyautogui
+        if pyautogui is None or isinstance(pyautogui, type(_PyAutoGuiStub)):
+            try:
+                import pyautogui as pag
+                pyautogui = pag
+            except (ImportError, OSError) as e:
+                # Use stub if import fails
+                pass
+        
         region = kwargs.get("region")
         if region:
             img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
@@ -301,6 +326,15 @@ def read_screen(**kwargs) -> dict:
     try:
         import pytesseract
         from PIL import Image
+        # Lazy import pyautogui at runtime to avoid DISPLAY errors on Linux/headless
+        global pyautogui
+        if pyautogui is None or isinstance(pyautogui, type(_PyAutoGuiStub)):
+            try:
+                import pyautogui as pag
+                pyautogui = pag
+            except (ImportError, OSError):
+                pass
+        
         region = kwargs.get("region")
         if region:
             img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
