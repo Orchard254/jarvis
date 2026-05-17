@@ -8,8 +8,10 @@ import logging
 import os
 import re
 import subprocess
-import winreg
 from pathlib import Path
+
+# Lazy import winreg at runtime (Windows-only)
+winreg = None  # type: ignore
 
 from settings import REGISTRY_UNINSTALL_PATHS
 
