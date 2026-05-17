@@ -7,10 +7,6 @@ from typing import Optional
 import settings
 from core.thread_db import get_connection
 
-from skills import skill_embedder
-from skills.skill_embedder import add_skill as embed_skill
-from skills.skill_embedder import delete_skill as delete_embedding
-
 logger = logging.getLogger(__name__)
 
 
@@ -42,16 +38,6 @@ def init_db():
         )
     """)
     conn.commit()
-    import threading
-
-    def _bg_init():
-        try:
-            skill_embedder.init()
-            logger.info("Skill embedder initialised (semantic search active)")
-        except Exception as exc:
-            logger.warning(f"Skill embedder init failed — falling back to SQL search: {exc}")
-
-    threading.Thread(target=_bg_init, daemon=True, name="skill-embedder-init").start()
     logger.info("Skill store DB initialized")
 
 
@@ -94,11 +80,10 @@ def promote_skill(skill_id: str, conn=None):
             return
         intent_label, code = row
         conn.execute(
-            "UPDATE skills SET status = 'active', embedding_generated = 1 WHERE skill_id = ?",
+            "UPDATE skills SET status = 'active' WHERE skill_id = ?",
             (skill_id,),
         )
         conn.commit()
-        embed_skill(skill_id, intent_label, code)
         logger.info(f"Promoted skill {skill_id} to active")
     except Exception as e:
         logger.error(f"Failed to promote skill {skill_id}: {e}")
@@ -164,20 +149,40 @@ def get_candidate_by_intent(intent: str) -> Optional[dict]:
 
 
 def search_by_intent(intent: str) -> Optional[dict]:
-    """Return the best active skill matching intent. Semantic search first, then exact label match."""
+    """Return the best active skill matching intent. Uses SQL keyword + exact match."""
     if not settings.ENABLE_SKILLS:
         return None
 
-    from skills.skill_embedder import search_similar
-
-    matches = search_similar(intent, limit=10)
-    for match in matches:
-        skill = get_skill(match["skill_id"])
-        if skill and skill["status"] == "active":
-            return skill
-
     conn = _connect()
     conn.row_factory = sqlite3.Row
+
+    # Extract meaningful keywords (3+ chars, skip common words)
+    import re
+    skip = {"the", "and", "for", "you", "are", "but", "not", "with", "this",
+            "that", "from", "have", "was", "can", "all", "how", "what", "when",
+            "open", "close", "get", "set", "my", "is", "it", "to", "in", "on",
+            "at", "of", "or", "me", "do", "if", "by", "up", "out", "no", "yes"}
+    intent_lower = intent.lower()
+    keywords = [w for w in re.findall(r'\b\w{3,}\b', intent_lower) if w not in skip]
+
+    if keywords:
+        # Fetch active skills and score by keyword match count
+        rows = conn.execute(
+            "SELECT * FROM skills WHERE status = 'active'"
+        ).fetchall()
+        scored = []
+        for row in rows:
+            label = (row["intent_label"] or "").lower()
+            score = sum(1 for kw in keywords if kw in label)
+            if score > 0:
+                entry = dict(row)
+                entry["match_score"] = score
+                scored.append(entry)
+        if scored:
+            scored.sort(key=lambda x: (x["match_score"], x.get("success_rate", 0)), reverse=True)
+            return scored[0]
+
+    # Fall back to exact match
     row = conn.execute(
         "SELECT * FROM skills WHERE status = 'active' AND lower(intent_label) = lower(?) ORDER BY success_rate DESC LIMIT 1",
         (intent,),
@@ -205,7 +210,6 @@ def delete_skill(skill_id: str) -> bool:
     try:
         conn.execute("DELETE FROM skills WHERE skill_id = ?", (skill_id,))
         conn.commit()
-        delete_embedding(skill_id)
         logger.info(f"Deleted skill {skill_id}")
         return True
     except Exception as e:

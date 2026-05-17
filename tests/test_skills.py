@@ -13,26 +13,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Create temp dirs for each test run
 _temp_root = tempfile.mkdtemp()
 temp_skills_db = Path(_temp_root) / "skills.db"
-temp_skills_chroma = Path(_temp_root) / "chroma"
 
 # Save originals and override settings for testing
 import settings
 _orig_skills_enabled = settings.ENABLE_SKILLS
 _orig_skills_db = settings.SKILLS_DB
-_orig_skills_chroma = settings.SKILLS_CHROMA
 _orig_candidate_cap = settings.SKILL_CANDIDATE_CAP
-_orig_match_threshold = settings.SKILL_MATCH_THRESHOLD
 settings.ENABLE_SKILLS = True
 settings.SKILLS_DB = temp_skills_db
-settings.SKILLS_CHROMA = temp_skills_chroma
 settings.SKILL_CANDIDATE_CAP = 3
-settings.SKILL_MATCH_THRESHOLD = 0.0  # Low threshold for tests
 
 from skills.skill_store import (
     init_db, save_candidate, promote_skill, record_run,
     get_skill, search_by_intent, get_active_skills, prune_candidates
 )
-from skills.skill_embedder import init as init_embedder, search_similar
 from skills.skill_runner import run_skill
 from core.thread_db import close_thread_connections
 
@@ -42,24 +36,18 @@ def setup_and_teardown():
     close_thread_connections()
     if temp_skills_db.exists():
         temp_skills_db.unlink()
-    if temp_skills_chroma.exists():
-        shutil.rmtree(temp_skills_chroma, ignore_errors=True)
     init_db()
     yield
     close_thread_connections()
     if temp_skills_db.exists():
         temp_skills_db.unlink()
-    if temp_skills_chroma.exists():
-        shutil.rmtree(temp_skills_chroma, ignore_errors=True)
 
 
 # Restore original settings after all tests in this file
 def pytest_unconfigure():
     settings.ENABLE_SKILLS = _orig_skills_enabled
     settings.SKILLS_DB = _orig_skills_db
-    settings.SKILLS_CHROMA = _orig_skills_chroma
     settings.SKILL_CANDIDATE_CAP = _orig_candidate_cap
-    settings.SKILL_MATCH_THRESHOLD = _orig_match_threshold
 
 
 def test_skill_lifecycle_crud():
@@ -75,7 +63,6 @@ def test_skill_lifecycle_crud():
     promote_skill(skill_id)
     skill = get_skill(skill_id)
     assert skill["status"] == "active"
-    assert skill["embedding_generated"] == 1
     
     # Test recording runs
     record_run(skill_id, True)
@@ -84,18 +71,15 @@ def test_skill_lifecycle_crud():
     assert skill["success_count"] == 1
 
 
-def test_semantic_search_basic():
-    init_embedder()
-    
+def test_sql_search_basic():
     # Save and promote a skill
-    skill_id = save_candidate("open music app", "import subprocess; subprocess.Popen('notepad.exe')")
+    skill_id = save_candidate("music player", "import subprocess; subprocess.Popen('notepad.exe')")
     promote_skill(skill_id)
     
-    # Search with similar intent
+    # Search with keyword intent
     skill = search_by_intent("play some music")
-    # Note: If ChromaDB/sentence-transformers are not available, this may be None, which is acceptable for test
-    if skill:
-        assert skill["skill_id"] == skill_id
+    assert skill is not None
+    assert skill["skill_id"] == skill_id
 
 
 def test_skill_runner_executes_through_safety(monkeypatch):

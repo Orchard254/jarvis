@@ -1,7 +1,10 @@
 """
 Unified safety funnel. All tool calls pass through here.
+Wraps every tool result in a standard envelope:
+  {success, message, data, timestamp}
 """
 
+import datetime
 import json
 import logging
 from pathlib import Path
@@ -15,14 +18,17 @@ logger = logging.getLogger(__name__)
 
 
 _SCHEMAS_PATH = Path(__file__).parent.parent / "tools" / "schemas.json"
+_SCHEMAS_CACHE = None
 
 
 def _get_tool_schema(tool_name: str) -> dict | None:
     """Return the input schema for *tool_name* from schemas.json, or None."""
+    global _SCHEMAS_CACHE
     try:
-        with open(_SCHEMAS_PATH, encoding="utf-8") as f:
-            all_schemas = json.load(f)
-        entry = all_schemas.get(tool_name, {})
+        if _SCHEMAS_CACHE is None:
+            with open(_SCHEMAS_PATH, encoding="utf-8") as f:
+                _SCHEMAS_CACHE = json.load(f)
+        entry = _SCHEMAS_CACHE.get(tool_name, {})
         return entry.get("input", {})
     except Exception:
         return None
@@ -102,6 +108,13 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
             audit_log.log_blocked(tool_name, args, reason)
             return {"success": False, "blocked": True, "error": reason, "paused": True}
 
+        # A3: Server-side risk classification — block high-risk tools that
+        # haven't been through the approval gate.
+        from safety.risk_classifier import classify_risk
+        if classify_risk(tool_name, args) == "high" and not plan.get("approved"):
+            audit_log.log_blocked(tool_name, args, "High-risk tool requires user approval")
+            return {"success": False, "blocked": True, "error": "High-risk tool requires user approval", "paused": True}
+
     validate_plan = {**(plan or {}), **args}
     valid, reason = plan_validate(validate_plan)
     if not valid:
@@ -109,6 +122,17 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
         return {"success": False, "blocked": True, "error": reason}
 
     clean_args = {k: v for k, v in args.items() if k and k.strip()}
-    result = tool_fn(**clean_args)
+    raw = tool_fn(**clean_args)
+    if not isinstance(raw, dict):
+        raw = {"success": False, "error": f"Tool returned non-dict: {type(raw).__name__}"}
+
+    # Standard envelope: success, message, data, timestamp
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    result = {
+        "success": raw.get("success", False),
+        "message": raw.get("error") or raw.get("status") or raw.get("message", ""),
+        "data": {k: v for k, v in raw.items() if k not in ("success", "error", "status", "message")},
+        "timestamp": now,
+    }
     audit_log.log_call(tool_name, clean_args, result)
     return result

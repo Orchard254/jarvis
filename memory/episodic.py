@@ -6,11 +6,12 @@ Optimized with connection pooling for reduced latency.
 
 import json
 import logging
+import re
 import sqlite3
 import time
 
 from settings import MEMORY_DB
-from memory.db_pool import get_episodic_connection
+from core.thread_db import connection_context
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_episodes_command_text ON episodes(command_text)",
     ]
     
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         c = conn.cursor()
         c.execute(schema)
         for idx in indexes:
@@ -59,7 +60,7 @@ def write(
     user_feedback: str = None,
 ):
     """Write an episode to memory using pooled connection."""
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         c = conn.cursor()
         c.execute(
             """
@@ -84,7 +85,7 @@ def write(
 
 def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
     """Get session events using pooled connection."""
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
@@ -107,7 +108,7 @@ def get_session_events(session_id: str, limit: int = 50) -> list[dict]:
 
 def get_recent(limit: int = 20) -> list[dict]:
     """Get recent events using pooled connection."""
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
@@ -119,7 +120,7 @@ def get_recent(limit: int = 20) -> list[dict]:
 
 def get_successful_commands(limit: int = 20) -> list[dict]:
     """Cross-session query: recent successful command events across all sessions."""
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         rows = c.execute(
@@ -145,7 +146,7 @@ def get_successful_commands(limit: int = 20) -> list[dict]:
 def prune_old(days: int = 90):
     """Delete episodes older than N days; also trim the table to at most 10000 rows."""
     cutoff = time.time() - days * 86400
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         c = conn.cursor()
         c.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
         deleted_time = c.rowcount
@@ -168,7 +169,7 @@ def prune_old(days: int = 90):
 
 def get_command_frequency(limit: int = 20) -> list[dict]:
     """Return the most frequently issued commands across all sessions."""
-    with get_episodic_connection() as conn:
+    with connection_context(MEMORY_DB) as conn:
         c = conn.cursor()
         rows = c.execute(
             """
@@ -180,5 +181,55 @@ def get_command_frequency(limit: int = 20) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    
+
     return [{"command_text": row[0], "count": row[1]} for row in rows]
+
+
+def search_by_similarity(query: str, limit: int = 3) -> list[dict]:
+    """B5: Find past episodes with command text similar to the query.
+
+    Uses keyword-based SQL matching since ChromaDB isn't wired for episodic.
+    Returns the most relevant past outcomes (command + result + success).
+    """
+    # Extract meaningful keywords (3+ chars, skip common words)
+    skip = {"the", "and", "for", "you", "are", "but", "not", "with", "this",
+            "that", "from", "have", "was", "can", "all", "how", "what", "when",
+            "open", "close", "get", "set", "my", "is", "it", "to", "in", "on",
+            "at", "of", "or", "me", "do", "if", "by", "up", "out", "no", "yes"}
+    keywords = [w.lower() for w in re.findall(r'\b\w{3,}\b', query) if w.lower() not in skip]
+    if not keywords:
+        return []
+
+    # Build SQL: score by number of keyword matches, return most relevant
+    with connection_context(MEMORY_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        # Find episodes where command_text contains at least one keyword
+        like_clauses = " OR ".join(f"LOWER(command_text) LIKE ?" for _ in keywords)
+        params = [f"%{kw}%" for kw in keywords]
+        rows = c.execute(
+            f"""
+            SELECT command_text, tool_result, success, timestamp
+            FROM episodes
+            WHERE event_type = 'command' AND command_text IS NOT NULL
+            AND ({like_clauses})
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            params + [limit * 3],  # fetch more, then score
+        ).fetchall()
+
+    # Score by number of matching keywords
+    scored = []
+    for r in rows:
+        cmd = (r["command_text"] or "").lower()
+        score = sum(1 for kw in keywords if kw in cmd)
+        if score > 0:
+            entry = dict(r)
+            if entry.get("tool_result"):
+                entry["tool_result"] = json.loads(entry["tool_result"])
+            entry["match_score"] = score
+            scored.append(entry)
+
+    scored.sort(key=lambda x: x["match_score"], reverse=True)
+    return scored[:limit]

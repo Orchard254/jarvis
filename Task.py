@@ -64,4 +64,5 @@ def get_taskbar_apps():
 
     return taskbar_apps
 
-get_taskbar_apps()
+if __name__ == "__main__":
+    get_taskbar_apps()

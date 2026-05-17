@@ -18,7 +18,10 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore
 import settings
 from settings import WAKE_WORD
 

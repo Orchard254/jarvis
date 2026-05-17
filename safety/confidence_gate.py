@@ -45,13 +45,8 @@ _MILD_UNCERTAINTY_PHRASES = [
     "i expect",
 ]
 
-# Tools where a higher effective threshold is enforced
-_HIGH_RISK_TOOLS = frozenset(
-    {"execute_code"}
-)
-_MEDIUM_RISK_TOOLS = frozenset(
-    {"browser"}
-)
+# Risk classification delegated to risk_classifier.classify_risk()
+# (duplicate lists removed — single source of truth in risk_classifier)
 
 
 def check(plan: dict) -> tuple[bool, str]:
@@ -73,11 +68,10 @@ def check(plan: dict) -> tuple[bool, str]:
     tool_name = plan.get("tool_name", "")
     destructive = plan.get("destructive", False)
 
-    # Override: independently check the plan for destructive patterns regardless
-    # of what the LLM declared, so an LLM cannot bypass the cap by lying.
-    _destructive_tools = frozenset({"shutdown", "restart", "delete_file", "kill_process"})
-    tool_name_from_plan = plan.get("tool_name", "")
-    if tool_name_from_plan in _destructive_tools:
+    # A3: Server-side risk classification — never trust LLM self-reported risk
+    from safety.risk_classifier import classify_risk
+    server_risk = classify_risk(tool_name, plan)
+    if server_risk == "high":
         destructive = True
 
     confidence = float(base_confidence)
@@ -104,12 +98,12 @@ def check(plan: dict) -> tuple[bool, str]:
         confidence = min(confidence, 0.75)
         logger.debug(f"confidence_gate: destructive=True → capped at {confidence:.2f}")
 
-    # ── Threshold selection ────────────────────────────────────────────────
+    # ── Threshold selection — use server-side risk classification ────────────
     threshold = float(CONFIDENCE_THRESHOLD)
-    if tool_name in _HIGH_RISK_TOOLS:
+    if server_risk == "high":
+        threshold = max(threshold, 0.80)
+    elif server_risk == "medium":
         threshold = max(threshold, 0.72)
-    elif tool_name in _MEDIUM_RISK_TOOLS:
-        threshold = max(threshold, 0.68)
 
     if confidence >= threshold:
         return True, ""

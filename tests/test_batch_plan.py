@@ -1,324 +1,362 @@
-
-"""Tests for BATCH_TOOL_PLAN flow: response_parser + tool_loop batch execution."""
+"""Tests for INTENT flow: Jarvis agent + Execution agent expansion."""
 import json
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from brain.response_parser import parse_batch_plan, format_batch_result
+from agents.director import JarvisAgent
+from agents.execution import ExecutionAgent, EXPANDERS
 
 
-# ── parse_batch_plan tests ───────────────────────────────────────────────────
+# ── INTENT parsing tests ─────────────────────────────────────────────────────
 
-def test_parse_valid_plan():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"auto"}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None
-    assert plan["plan_id"] == "p1"
-    assert len(plan["calls"]) == 1
+def test_parse_intent_valid():
+    agent = JarvisAgent()
+    intent = agent._parse_intent('INTENT {"action":"open","target":"chrome"}')
+    assert intent is not None
+    assert intent["action"] == "open"
+    assert intent["target"] == "chrome"
 
 
-def test_parse_no_plan():
-    content = "Hello, how can I help you?"
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert plan is None
-    assert err is None
+def test_parse_intent_no_prefix():
+    agent = JarvisAgent()
+    assert agent._parse_intent("Hello, how can I help?") is None
 
 
-def test_parse_invalid_json():
-    content = 'BATCH_TOOL_PLAN {"plan_id":}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert plan is None
-    assert err is not None
+def test_parse_intent_invalid_json():
+    agent = JarvisAgent()
+    assert agent._parse_intent("INTENT {bad json}") is None
 
 
-def test_parse_unknown_tool():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"nonexistent","params":{},"risk_tier":"low"}]}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert plan is None
-    assert "nonexistent" in err
+def test_parse_intent_empty():
+    agent = JarvisAgent()
+    assert agent._parse_intent("") is None
 
 
-def test_parse_missing_calls():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1"}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert plan is None
-    assert "calls" in err
+def test_parse_intent_extra_whitespace():
+    agent = JarvisAgent()
+    intent = agent._parse_intent('  INTENT  {"action":"close"}  ')
+    assert intent is not None
+    assert intent["action"] == "close"
 
 
-def test_parse_nested_json():
-    """Regression: non-greedy regex or raw_decode must handle nested objects."""
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"{\\"key\\": \\"val\\"}","language":"python"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"sequential"}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None, f"nested JSON failed: {err}"
-    assert plan["calls"][0]["params"]["code"] == '{"key": "val"}'
+def test_parse_intent_trailing_text():
+    """LLM sometimes adds commentary after INTENT — raw_decode handles it."""
+    agent = JarvisAgent()
+    intent = agent._parse_intent('INTENT {"action":"open","target":"notepad"}\n(Note: awaiting execution result...)')
+    assert intent is not None
+    assert intent["action"] == "open"
+    assert intent["target"] == "notepad"
 
 
-def test_parse_adds_missing_correlation():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low"}],"execution_policy":"auto"}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None
-    assert plan["calls"][0]["correlation"] == "c1"
+def test_parse_intent_trailing_text_no_newline():
+    """No newline between INTENT and trailing text."""
+    agent = JarvisAgent()
+    intent = agent._parse_intent('INTENT {"action":"click","x":100}(doing it now)')
+    assert intent is not None
+    assert intent["action"] == "click"
 
 
-def test_parse_default_risk_tier():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"}}]}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None
-    assert plan["calls"][0]["risk_tier"] == "low"
+# ── Execution agent expander tests ───────────────────────────────────────────
 
+def test_expander_open():
+    expander = EXPANDERS.get("open")
+    assert expander is not None
+    steps = expander({"action": "open", "target": "notepad"})
+    assert len(steps) == 3
+    assert steps[0]["tool"] == "get_active_window"
+    assert callable(steps[1])
+    assert steps[2]["tool"] == "get_active_window"
 
-def test_parse_auto_generates_plan_id():
-    content = 'BATCH_TOOL_PLAN {"calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low"}]}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None
-    assert plan["plan_id"] is not None
-    assert len(plan["plan_id"]) > 0
 
+def test_expander_open_callable_resolves():
+    """Verify callable steps accept prior_results argument (matching _run_step)."""
+    expander = EXPANDERS.get("open")
+    steps = expander({"action": "open", "target": "notepad"})
+    # Simulate _run_step: callable(prior_results) -> resolved dict
+    prior = [{"tool": "get_active_window", "success": True, "result": {"data": {"window_title": "SomeApp"}}}]
+    resolved = steps[1](prior)
+    assert isinstance(resolved, dict)
+    assert "tool" in resolved
+    # Target not active, so should return open_app
+    assert resolved["tool"] == "open_app"
 
-def test_parse_high_risk():
-    content = 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"high","preexec_required":true,"correlation":"c1"}],"execution_policy":"sequential"}'
-    plan, err = parse_batch_plan(content, {"execute_code"})
-    assert err is None
-    assert plan["calls"][0]["risk_tier"] == "high"
 
-
-# ── format_batch_result tests ────────────────────────────────────────────────
-
-def test_format_all_ok():
-    results = [{"call_idx": 1, "status": "ok", "output_summary": "done"}]
-    out = format_batch_result("p1", results)
-    assert "BATCH_TOOL_RESULT" in out
-    data = json.loads(out[len("BATCH_TOOL_RESULT "):])
-    assert data["overall_status"] == "success"
-    assert data["plan_id"] == "p1"
-    assert len(data["results"]) == 1
+def test_expander_open_already_active():
+    """When target is already active, callable returns get_active_window."""
+    expander = EXPANDERS.get("open")
+    steps = expander({"action": "open", "target": "someapp"})
+    prior = [{"tool": "get_active_window", "success": True, "result": {"data": {"window_title": "SomeApp Window"}}}]
+    resolved = steps[1](prior)
+    assert resolved["tool"] == "get_active_window"
 
-
-def test_format_all_error():
-    results = [{"call_idx": 1, "status": "error", "error": "fail"}]
-    out = format_batch_result("p1", results)
-    data = json.loads(out[len("BATCH_TOOL_RESULT "):])
-    assert data["overall_status"] == "failure"
-
-
-def test_format_partial():
-    results = [
-        {"call_idx": 1, "status": "ok", "output_summary": "ok"},
-        {"call_idx": 2, "status": "error", "error": "fail"},
-    ]
-    out = format_batch_result("p1", results)
-    data = json.loads(out[len("BATCH_TOOL_RESULT "):])
-    assert data["overall_status"] == "partial_failure"
-
-
-# ── Full tool_loop.run() with mocked LLM ─────────────────────────────────────
-
-import pytest
-from brain.tool_loop import run as tool_loop_run
-
-
-def _mock_tool_result(success=True, output="done", error=None):
-    r = {"success": success, "output": output}
-    if error:
-        r["error"] = error
-    return r
-
-
-def test_batch_plan_success(monkeypatch):
-    """LLM returns BATCH_TOOL_PLAN → tools execute → LLM summarizes."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return {
-                "content": 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"auto"}',
-                "tool_calls": None,
-                "model": "test", "done": True,
-            }
-        return {"content": "Here are the results: x ran successfully.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    executed = []
-    def mock_exec(name, args):
-        executed.append(name)
-        return {"success": True, "output": "ran x"}
-
-    result = tool_loop_run(
-        "run x", [], mock_exec, lambda n, r, e: {"status": "CONFIRMED", "summary": "ok"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert "executed your batch plan" not in result["response"]
-    assert "Here are the results" in result["response"]
-    assert "execute_code" in executed
-
-
-def test_batch_plan_tool_failure(monkeypatch):
-    """Tool fails → BATCH_TOOL_RESULT includes error → LLM gets retry directive."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return {
-                "content": 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"auto"}',
-                "tool_calls": None,
-                "model": "test", "done": True,
-            }
-        return {"content": "The tool failed, I will try a different approach.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    result = tool_loop_run(
-        "run x", [], lambda n, a: {"success": False, "error": "syntax error"},
-        lambda n, r, e: {"status": "FAILED", "summary": "bad"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert result["response"] is not None
-    assert len(result["tool_calls"]) == 1
-    assert result["tool_calls"][0]["result"]["success"] is False
-
-
-def test_batch_plan_parse_error(monkeypatch):
-    """Invalid BATCH_TOOL_PLAN JSON → error fed back → LLM corrects."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return {"content": 'BATCH_TOOL_PLAN {"bad json}', "tool_calls": None, "model": "test", "done": True}
-        if call_count == 2:
-            return {"content": 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"x","language":"python"},"risk_tier":"low","correlation":"c1"}],"execution_policy":"auto"}', "tool_calls": None, "model": "test", "done": True}
-        return {"content": "Done after correction.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    executed = []
-    def mock_exec(name, args):
-        executed.append(name)
-        return {"success": True, "output": "done"}
-
-    result = tool_loop_run(
-        "run x", [], mock_exec, lambda n, r, e: {"status": "CONFIRMED"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert "execute_code" in executed
-
-
-def test_native_fallback(monkeypatch):
-    """Backward compat: native tool_calls still work."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return {"content": "", "tool_calls": [{"id": "c1", "function": {"name": "execute_code", "arguments": {"code": "x", "language": "python"}}}], "model": "test", "done": True}
-        return {"content": "Done.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    executed = []
-    result = tool_loop_run(
-        "run x", [],
-        lambda n, a: (executed.append(n), {"success": True, "output": "done"})[1],
-        lambda n, r, e: {"status": "CONFIRMED"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert "execute_code" in executed
-
-
-def test_direct_response(monkeypatch):
-    """No tools needed → LLM responds directly."""
-    def mock_chat(messages, tools=None, **kwargs):
-        return {"content": "The answer is 42.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    result = tool_loop_run(
-        "what is 42?", [], lambda n, a: {"success": True},
-        lambda n, r, e: {"status": "CONFIRMED"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert "42" in result["response"]
-
-
-def test_failloop_guard(monkeypatch):
-    """Fail-loop guard blocks after 2 consecutive failures on same tool."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count <= 2:
-            return {
-                "content": f'BATCH_TOOL_PLAN {{"plan_id":"p{call_count}","calls":[{{"call_idx":1,"tool":"execute_code","params":{{"code":"x","language":"python"}},"risk_tier":"low","correlation":"c1"}}],"execution_policy":"auto"}}',
-                "tool_calls": None,
-                "model": "test", "done": True,
-            }
-        return {"content": "Tool is blocked, trying something else.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    tool_calls_log = []
-    result = tool_loop_run(
-        "run x", [],
-        lambda n, a: {"success": False, "error": "keeps failing"},
-        lambda n, r, e: {"status": "FAILED"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    # Second call should be blocked by fail-loop guard
-    batch_results = [c for c in result.get("tool_calls", []) if c.get("blocked") == "fail-loop_guard"]
-    assert len(batch_results) >= 0  # guard may or may not have been hit depending on iteration order
-
-
-def test_parallel_execution(monkeypatch):
-    """Multiple independent calls run in parallel."""
-    call_count = 0
-
-    def mock_chat(messages, tools=None, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return {
-                "content": 'BATCH_TOOL_PLAN {"plan_id":"p1","calls":[{"call_idx":1,"tool":"execute_code","params":{"code":"a","language":"python"},"risk_tier":"low","correlation":"c1"},{"call_idx":2,"tool":"execute_code","params":{"code":"b","language":"python"},"risk_tier":"low","correlation":"c2"}],"execution_policy":"parallel"}',
-                "tool_calls": None,
-                "model": "test", "done": True,
-            }
-        return {"content": "Both a and b ran.", "tool_calls": None, "model": "test", "done": True}
-
-    monkeypatch.setattr("brain.ollama_client.chat_stream", mock_chat)
-    monkeypatch.setattr("brain.ollama_client.chat", mock_chat)
-
-    import threading
-    seen = []
-    lock = threading.Lock()
-    def exec_fn(name, args):
-        with lock:
-            seen.append(args["code"])
-        return {"success": True, "output": f"ran {args['code']}"}
-
-    result = tool_loop_run(
-        "run a and b", [], exec_fn, lambda n, r, e: {"status": "CONFIRMED"},
-        mode="interactive_cloud", valid_tool_names={"execute_code"},
-    )
-    assert result["success"] is True
-    assert "a" in seen
-    assert "b" in seen
+
+def test_expander_close_with_target():
+    expander = EXPANDERS.get("close")
+    steps = expander({"action": "close", "target": "chrome"})
+    assert len(steps) == 1
+    assert steps[0]["tool"] == "close_app"
+    assert steps[0]["params"]["name"] == "chrome"
+
+
+def test_expander_close_no_target():
+    expander = EXPANDERS.get("close")
+    steps = expander({"action": "close"})
+    assert len(steps) == 2
+    assert callable(steps[0]) or steps[0]["tool"] == "get_active_window"
+    assert callable(steps[1])
+
+
+def test_expander_search():
+    expander = EXPANDERS.get("search")
+    steps = expander({"action": "search", "query": "cat videos"})
+    assert len(steps) == 3
+    assert steps[0]["tool"] == "open_app"
+    assert "cat" in steps[1]["params"]["text"]
+
+
+def test_expander_search_custom_engine():
+    expander = EXPANDERS.get("search")
+    steps = expander({"action": "search", "query": "music", "engine": "youtube"})
+    assert "youtube" in steps[1]["params"]["text"]
+
+
+def test_expander_click_coordinates():
+    expander = EXPANDERS.get("click")
+    steps = expander({"action": "click", "x": 100, "y": 200})
+    assert len(steps) == 3
+    # Step 1 should be the click
+    click_step = steps[1]
+    assert click_step["tool"] == "click"
+    assert click_step["params"]["x"] == 100
+    assert click_step["params"]["y"] == 200
+
+
+def test_expander_click_text_target():
+    expander = EXPANDERS.get("click")
+    steps = expander({"action": "click", "target": "Submit"})
+    assert len(steps) == 3
+    assert steps[0]["tool"] == "detect_ui_elements"
+    assert steps[0]["params"]["text"] == "Submit"
+    assert callable(steps[1])  # resolve click from detection result
+
+
+def test_expander_type():
+    expander = EXPANDERS.get("type")
+    steps = expander({"action": "type", "text": "hello world"})
+    assert len(steps) == 2
+    assert steps[1]["tool"] == "type_text"
+    assert steps[1]["params"]["text"] == "hello world"
+
+
+def test_expander_scroll():
+    expander = EXPANDERS.get("scroll")
+    steps = expander({"action": "scroll", "direction": "down", "amount": 5})
+    assert len(steps) == 2
+    assert steps[1]["tool"] == "scroll"
+    assert steps[1]["params"]["clicks"] == 5  # positive = down
+
+
+def test_expander_scroll_up():
+    expander = EXPANDERS.get("scroll")
+    steps = expander({"action": "scroll", "direction": "up", "amount": 3})
+    assert steps[1]["params"]["clicks"] == -3  # negative = up
+
+
+def test_expander_scroll_default():
+    expander = EXPANDERS.get("scroll")
+    steps = expander({"action": "scroll"})
+    assert steps[1]["params"]["clicks"] == 3  # default amount=3, direction=down = positive
+
+
+def test_expander_screenshot():
+    expander = EXPANDERS.get("screenshot")
+    steps = expander({"action": "screenshot"})
+    assert len(steps) == 1
+    assert steps[0]["tool"] == "screenshot"
+
+
+def test_expander_read_screen():
+    expander = EXPANDERS.get("read_screen")
+    steps = expander({"action": "read_screen"})
+    assert len(steps) == 1
+    assert steps[0]["tool"] == "read_screen"
+
+
+def test_expander_get_info():
+    expander = EXPANDERS.get("get_info")
+    steps = expander({"action": "get_info", "target": "battery"})
+    assert steps[0]["tool"] == "get_battery"
+
+
+def test_expander_get_info_system():
+    expander = EXPANDERS.get("get_info")
+    steps = expander({"action": "get_info", "target": "system"})
+    assert steps[0]["tool"] == "get_system_stats"
+
+
+def test_expander_get_info_time():
+    expander = EXPANDERS.get("get_info")
+    steps = expander({"action": "get_info", "target": "time"})
+    assert steps[0]["tool"] == "time_calendar"
+    assert steps[0]["params"]["action"] == "get_time"
+
+
+def test_expander_unknown_action():
+    assert "nonexistent" not in EXPANDERS
+
+
+def test_all_actions_registered():
+    expected = {"open", "close", "search", "click", "type", "scroll",
+                "screenshot", "read_screen", "wait", "shutdown", "restart",
+                "get_info", "press_keys", "move_mouse", "list_apps",
+                "open_url", "manage_window"}
+    assert set(EXPANDERS.keys()) == expected
+
+
+# ── Execution agent execution tests ──────────────────────────────────────────
+
+def _mock_exec(tool_name, args):
+    return {"success": True, "output": f"ran {tool_name}", "data": {}}
+
+
+def _mock_verify(tool_name, result, expected):
+    return {"status": "CONFIRMED"}
+
+
+def test_execute_unknown_action():
+    agent = ExecutionAgent(_mock_exec, _mock_verify)
+    result = agent.execute_intent({"action": "bogus"})
+    assert "Unknown action" in result
+
+
+def test_execute_type():
+    agent = ExecutionAgent(_mock_exec, _mock_verify)
+    result = agent.execute_intent({"action": "type", "text": "hello"})
+    assert "type_text" in result
+    assert "ok" in result
+
+
+# ── New expander tests ───────────────────────────────────────────────────────
+
+def test_expander_press_keys():
+    expander = EXPANDERS.get("press_keys")
+    steps = expander({"action": "press_keys", "keys": "ctrl+c"})
+    assert len(steps) == 2
+    assert steps[0]["tool"] == "get_active_window"
+    assert steps[1]["tool"] == "press_keys"
+    assert steps[1]["params"]["keys"] == "ctrl+c"
+
+
+def test_expander_move_mouse():
+    expander = EXPANDERS.get("move_mouse")
+    steps = expander({"action": "move_mouse", "x": 500, "y": 300})
+    assert len(steps) == 2
+    assert steps[1]["tool"] == "move_mouse"
+    assert steps[1]["params"]["x"] == 500
+    assert steps[1]["params"]["y"] == 300
+
+
+def test_expander_list_apps_installed():
+    expander = EXPANDERS.get("list_apps")
+    steps = expander({"action": "list_apps"})
+    assert steps[0]["tool"] == "list_installed_apps"
+
+
+def test_expander_list_apps_running():
+    expander = EXPANDERS.get("list_apps")
+    steps = expander({"action": "list_apps", "target": "running"})
+    assert steps[0]["tool"] == "list_running_apps"
+
+
+def test_expander_open_url():
+    expander = EXPANDERS.get("open_url")
+    steps = expander({"action": "open_url", "url": "https://example.com"})
+    assert len(steps) == 2
+    assert steps[0]["tool"] == "open_app"
+    assert steps[0]["params"]["name"] == "browser"
+    assert steps[1]["tool"] == "open_url"
+    assert steps[1]["params"]["url"] == "https://example.com"
+
+
+def test_expander_manage_window_focus():
+    expander = EXPANDERS.get("manage_window")
+    steps = expander({"action": "manage_window", "action": "focus", "target": "chrome"})
+    assert len(steps) == 2
+    assert steps[1]["tool"] == "focus_window"
+    assert steps[1]["params"]["name"] == "chrome"
+
+
+def test_expander_manage_window_minimize():
+    expander = EXPANDERS.get("manage_window")
+    steps = expander({"action": "manage_window", "target": "notepad"})
+    assert steps[1]["tool"] == "focus_window"  # default action is focus
+
+
+def test_expander_manage_window_close():
+    expander = EXPANDERS.get("manage_window")
+    steps = expander({"action": "manage_window", "action": "close", "target": "calc"})
+    assert steps[1]["tool"] == "close_app"
+    assert steps[1]["params"]["name"] == "calc"
+
+
+# ── Edge case tests ──────────────────────────────────────────────────────────
+
+def test_expander_open_missing_target():
+    expander = EXPANDERS.get("open")
+    steps = expander({"action": "open"})
+    # Should still produce 3 steps even without target
+    assert len(steps) == 3
+    assert steps[0]["tool"] == "get_active_window"
+    assert callable(steps[1])  # check_and_act (will return get_active_window with empty target)
+    assert steps[2]["tool"] == "get_active_window"
+
+
+def test_expander_search_missing_query():
+    expander = EXPANDERS.get("search")
+    steps = expander({"action": "search"})
+    assert len(steps) == 3
+    assert steps[1]["tool"] == "type_text"
+
+
+def test_expander_type_missing_text():
+    expander = EXPANDERS.get("type")
+    steps = expander({"action": "type"})
+    assert steps[1]["params"]["text"] == ""
+
+
+def test_expander_get_info_case_insensitive():
+    expander = EXPANDERS.get("get_info")
+    steps = expander({"action": "get_info", "target": "SYSTEM"})
+    assert steps[0]["tool"] == "get_system_stats"
+
+
+def test_expander_get_info_unknown_target():
+    expander = EXPANDERS.get("get_info")
+    steps = expander({"action": "get_info", "target": "network"})
+    assert steps[0]["tool"] == "get_system_stats"  # falls back to default
+
+
+def test_execute_expander_failure(monkeypatch):
+    """Execution agent aborts after failed step."""
+    def _bad_exec(tool_name, args):
+        return {"success": False, "error": "mock fail"}
+    agent = ExecutionAgent(_bad_exec, _mock_verify)
+    result = agent.execute_intent({"action": "type", "text": "hello"})
+    assert "mock fail" in result
+    assert "0/1" in result  # aborted after 1st step (get_active_window)
+
+
+def test_execute_abort_on_fail():
+    """Failed step aborts remaining steps."""
+    call_log = []
+    def _exec(name, args):
+        call_log.append(name)
+        success = name != "click"
+        return {"success": success, "error": "" if success else "fail"}
+    agent = ExecutionAgent(_exec, _mock_verify)
+    result = agent.execute_intent({"action": "click", "x": 100, "y": 200})
+    # Should abort after click failure, so get_active_window (verify) is skipped
+    assert call_log.count("click") == 1
+    # get_active_window appears twice (before+after click) - only 1st runs
+    assert "partial" in result or "failed" in result

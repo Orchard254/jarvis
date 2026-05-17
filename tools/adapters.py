@@ -1,7 +1,8 @@
 """
-Tool adapters — maps clean schema tool names to Python implementations.
+Tool adapters â€” maps clean schema tool names to Python implementations.
 Each function accepts **kwargs (unpacked by safety executor), returns dict.
 """
+import datetime
 import os
 import re
 import subprocess
@@ -11,8 +12,83 @@ import webbrowser
 from pathlib import Path
 
 import psutil
-import pyautogui
-import pygetwindow as gw
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None  # type: ignore
+
+try:
+    import pygetwindow as gw
+except ImportError:
+    gw = None  # type: ignore
+
+# Stub for pyautogui if missing
+if pyautogui is None:
+    class _PyAutoGuiStub:
+        FAILSAFE = True
+        @staticmethod
+        def screenshot(region=None):
+            class DummyImg:
+                width = 0
+                height = 0
+                def save(self, buf, format):
+                    pass
+            return DummyImg()
+        @staticmethod
+        def click(x=None, y=None, button='left'):
+            pass
+        @staticmethod
+        def write(text):
+            pass
+        @staticmethod
+        def press(key):
+            pass
+        @staticmethod
+        def hotkey(*keys):
+            pass
+        @staticmethod
+        def scroll(clicks):
+            pass
+        @staticmethod
+        def doubleClick(x=None, y=None):
+            pass
+        @staticmethod
+        def rightClick(x=None, y=None):
+            pass
+        @staticmethod
+        def moveTo(x, y):
+            pass
+        @staticmethod
+        def drag(x, y):
+            pass
+    pyautogui = _PyAutoGuiStub()
+
+# Stub for pygetwindow if missing
+if gw is None:
+    class _GWWindowStub:
+        def __init__(self, title=''):
+            self.title = title
+            self.visible = True
+            self.isMinimized = False
+        def restore(self):
+            pass
+        def activate(self):
+            pass
+        @property
+        def _hWnd(self):
+            return 0
+
+    class _GWStub:
+        @staticmethod
+        def getActiveWindow():
+            return None
+        @staticmethod
+        def getAllWindows():
+            return []
+        @staticmethod
+        def getWindowsWithTitle(title):
+            return []
+    gw = _GWStub()
 
 from tools.system.execute_code import execute_code as _run_code
 from tools.comm.schedule_tool import schedule as _schedule
@@ -20,14 +96,37 @@ from tools.voice.listen import listen as _listen
 from tools.comm.time_calendar import time_calendar as _time_calendar
 
 
+def _safe_resolve_path(path: str) -> str | None:
+    """Resolve and validate a path is within allowed directories. Returns resolved path or None."""
+    try:
+        resolved = Path(path).resolve()
+        home = Path.home().resolve()
+        allowed = [home, Path(os.environ.get("TEMP", "C:\\Windows\\Temp")).resolve()]
+        if any(str(resolved).startswith(str(a)) for a in allowed):
+            return str(resolved)
+    except (OSError, ValueError, RuntimeError):
+        pass
+    return None
+
+
 def open_app(**kwargs) -> dict:
-    name = kwargs.get("name", "")
+    # LLM sometimes hallucinates app_name instead of name — normalise both
+    name = kwargs.get("name") or kwargs.get("app_name", "")
+    # Try 1: os.startfile (works for PATH-resolvable names like 'notepad', 'calc')
     try:
         os.startfile(name) if os.name == "nt" else subprocess.Popen([name])
-        return {"success": True, "status": f"launched {name}"}
+        return {"success": True, "status": f"launched {name}", "name": name}
     except Exception:
         pass
-    # Fallback: search installed apps via PC index DB
+    # Try 2: shutil.which (finds system PATH executables)
+    try:
+        which_path = shutil.which(name) or shutil.which(f"{name}.exe")
+        if which_path:
+            os.startfile(which_path) if os.name == "nt" else subprocess.Popen([which_path])
+            return {"success": True, "status": f"launched {name}", "name": name, "path": which_path}
+    except Exception:
+        pass
+    # Try 3: search installed apps via PC index DB
     try:
         db_path = Path(__file__).parent.parent / "indexer" / "db" / "pc_index.db"
         if db_path.exists():
@@ -41,29 +140,52 @@ def open_app(**kwargs) -> dict:
             for row_name, exe_path in rows:
                 resolved = _resolve_exe(exe_path, row_name)
                 if resolved:
-                    os.startfile(resolved)
-                    return {"success": True, "status": f"launched {name}", "path": resolved}
+                    try:
+                        os.startfile(resolved) if os.name == "nt" else subprocess.Popen([resolved])
+                        return {"success": True, "status": f"launched {name}", "name": name, "path": resolved}
+                    except Exception:
+                        pass
     except Exception:
         pass
-    return {"success": False, "error": f"could not find {name}. try list_installed_apps first."}
+    return {"success": False, "error": f"could not find '{name}' in PATH or app index. try list_installed_apps first."}
 
 
-def _resolve_exe(exe_path: str, app_name: str) -> str | None:
-    """Resolve a DB path to an actual executable. Handles folders, quoted paths, and .lnk files."""
-    cleaned = exe_path.strip().strip('"')
-    p = Path(cleaned)
-    if p.suffix.lower() == ".exe" and p.exists():
-        return str(p)
-    if p.suffix.lower() == ".lnk" and p.exists():
-        return str(p)
-    if p.is_dir():
-        exe_candidate = p / f"{app_name}.exe"
-        if exe_candidate.exists():
-            return str(exe_candidate)
-        for f in p.iterdir():
-            if f.suffix.lower() == ".exe":
-                return str(f)
-    return None
+def _resolve_exe(exe_path: str | None, app_name: str) -> str | None:
+    """Resolve a DB path to an executable. Returns best-effort path or None.
+
+    - Direct .exe/.lnk paths returned as-is (may exist, may be permission-restricted)
+    - Directory paths searched for first matching .exe
+    - Falls back to shutil.which() for PATH-resolvable apps (e.g. 'notepad', 'calc')
+    """
+    if exe_path:
+        cleaned = exe_path.strip().strip('"')
+        if cleaned:
+            p = Path(cleaned)
+            if p.suffix.lower() in (".exe", ".lnk"):
+                return str(p)
+            if p.is_dir():
+                exe_candidate = p / f"{app_name}.exe"
+                if exe_candidate.exists():
+                    return str(exe_candidate)
+                try:
+                    for f in p.iterdir():
+                        if f.suffix.lower() == ".exe":
+                            return str(f)
+                except PermissionError:
+                    pass
+
+    which = shutil.which(app_name)
+    if which:
+        return which
+    which_alt = shutil.which(f"{app_name}.exe")
+    if which_alt:
+        return which_alt
+    if app_name.endswith(".exe"):
+        which_alt = shutil.which(app_name[:-4])
+        if which_alt:
+            return which_alt
+
+    return exe_path if exe_path else None
 
 
 def close_app(**kwargs) -> dict:
@@ -91,23 +213,30 @@ def get_active_window(**kwargs) -> dict:
         return {"success": False, "error": str(e)}
 
 
+def _find_window(title: str = "", process: str = ""):
+    """Find a window by title or process name. Returns window object or None."""
+    target = None
+    if title:
+        for w in gw.getWindowsWithTitle(title):
+            target = w
+            break
+    if not target and process:
+        for w in gw.getAllWindows():
+            if process.lower() in w.title.lower():
+                target = w
+                break
+    return target
+
+
 def focus_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
     process = kwargs.get("process", "")
     try:
-        target = None
-        if title:
-            for w in gw.getWindowsWithTitle(title):
-                target = w; break
-        if not target and process:
-            for w in gw.getAllWindows():
-                if process.lower() in w.title.lower():
-                    target = w; break
+        target = _find_window(title, process)
         if target:
             if target.isMinimized:
                 target.restore()
             target.activate()
-            # Win32 fallback for reliable foreground switching
             try:
                 import ctypes
                 hwnd = target._hWnd
@@ -187,7 +316,27 @@ def click(**kwargs) -> dict:
     try:
         x, y = kwargs.get("x"), kwargs.get("y")
         button = kwargs.get("button", "left")
-        pyautogui.click(x, y, button=button)
+        verify_text = kwargs.get("verify_text", "")
+
+        # B2: Two-phase grounding â€” if verify_text is provided, cross-reference with OCR
+        if verify_text and x is not None and y is not None:
+            try:
+                ocr_result = detect_ui_elements(text=verify_text, element_type="text")
+                if ocr_result.get("success") and ocr_result.get("elements"):
+                    for elem in ocr_result["elements"]:
+                        bx, by, bw, bh = elem.get("x", 0), elem.get("y", 0), elem.get("w", 0), elem.get("h", 0)
+                        # Use OCR center as the verified target
+                        x, y = bx + bw // 2, by + bh // 2
+                        break
+            except Exception:
+                pass  # Fall through to raw coordinates on any failure
+
+        failsafe_was = pyautogui.FAILSAFE
+        pyautogui.FAILSAFE = False
+        try:
+            pyautogui.click(x, y, button=button)
+        finally:
+            pyautogui.FAILSAFE = failsafe_was
         return {"success": True, "status": f"clicked ({x}, {y})"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -196,6 +345,35 @@ def click(**kwargs) -> dict:
 def type_text(**kwargs) -> dict:
     try:
         text = kwargs.get("text", "")
+        # Before typing, ensure we're typing into the correct application
+        # window, not the terminal (which can steal focus via stdout output
+        # between agent intent rounds). If the active window is a terminal,
+        # find and refocus the most recent non-terminal application window.
+        import ctypes
+        win = gw.getActiveWindow()
+        if win and win.title:
+            term_indicators = ("powershell", "cmd", "command prompt", "terminal",
+                               "windows powershell", "ps.exe")
+            if any(ind in win.title.lower() for ind in term_indicators):
+                # Active window is a terminal — find a non-terminal window to refocus
+                for w in gw.getAllWindows():
+                    if not w.title.strip():
+                        continue
+                    if any(ind in w.title.lower() for ind in term_indicators):
+                        continue
+                    try:
+                        ctypes.windll.user32.SetForegroundWindow(w._hWnd)
+                        ctypes.windll.user32.BringWindowToTop(w._hWnd)
+                        break
+                    except Exception:
+                        continue
+            else:
+                # Not a terminal — ensure it has focus anyway
+                try:
+                    ctypes.windll.user32.SetForegroundWindow(win._hWnd)
+                    ctypes.windll.user32.BringWindowToTop(win._hWnd)
+                except Exception:
+                    pass
         pyautogui.write(text)
         if kwargs.get("enter"):
             pyautogui.press("enter")
@@ -206,9 +384,15 @@ def type_text(**kwargs) -> dict:
 
 def press_keys(**kwargs) -> dict:
     try:
-        keys = kwargs.get("keys", "").lower().replace(" ", "").split("+")
-        pyautogui.hotkey(*keys)
-        return {"success": True, "keys": kwargs.get("keys")}
+        raw = kwargs.get("keys", "")
+        keys = raw.lower().replace(" ", "").split("+")
+        # pyautogui.hotkey only understands named keys (ctrl, shift, etc.)
+        # For single characters like "/", use write() instead
+        if len(keys) == 1 and len(keys[0]) == 1:
+            pyautogui.write(keys[0])
+        else:
+            pyautogui.hotkey(*keys)
+        return {"success": True, "keys": raw}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -220,6 +404,52 @@ def scroll(**kwargs) -> dict:
         return {"success": True, "clicks": clicks}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def wait(**kwargs) -> dict:
+    import time
+    ms = kwargs.get("ms", 1000)
+    condition = kwargs.get("condition", "")
+    target = kwargs.get("target", "")
+    timeout_ms = kwargs.get("timeout_ms", ms * 2)
+
+    if condition and target:
+        deadline = time.time() + (timeout_ms / 1000.0)
+        poll_interval = 0.2
+        started = time.time()
+        while time.time() < deadline:
+            if _check_wait_condition(condition, target):
+                elapsed = int((time.time() - started) * 1000)
+                return {"success": True, "message": f"condition met: {condition} '{target}'", "data": {"condition": condition, "target": target, "duration_ms": elapsed}}
+            time.sleep(poll_interval)
+        elapsed = int((time.time() - started) * 1000)
+        return {"success": False, "message": f"Timeout waiting for {condition} '{target}' after {timeout_ms}ms", "data": {"condition": condition, "target": target, "timeout_ms": timeout_ms, "duration_ms": elapsed}, "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+
+    time.sleep(ms / 1000.0)
+    return {"success": True, "message": f"waited {ms}ms", "data": {"duration_ms": ms}, "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+
+
+def _check_wait_condition(condition: str, target: str) -> bool:
+    import psutil
+    target_lower = target.lower()
+
+    if condition == "process_running":
+        return any(target_lower in p.name().lower() for p in psutil.process_iter(["name"]))
+    if condition == "process_gone":
+        return not any(target_lower in p.name().lower() for p in psutil.process_iter(["name"]))
+    if condition == "cpu_idle":
+        try:
+            return psutil.cpu_percent(interval=0.1) < float(target_lower)
+        except ValueError:
+            return False
+    if condition in ("window_visible", "text_visible", "window_exists"):
+        try:
+            import pygetwindow as gw
+            return len(gw.getWindowsWithTitle(target_lower)) > 0
+        except Exception:
+            return False
+
+    return False
 
 
 def search_files(**kwargs) -> dict:
@@ -249,8 +479,11 @@ def search_files(**kwargs) -> dict:
 def open_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        os.startfile(path)
-        return {"success": True, "status": f"opened {path}"}
+        resolved = _safe_resolve_path(path)
+        if not resolved:
+            return {"success": False, "error": f"Path not allowed: {path}"}
+        os.startfile(resolved)
+        return {"success": True, "status": f"opened {resolved}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -258,8 +491,11 @@ def open_file(**kwargs) -> dict:
 def read_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
+        resolved = _safe_resolve_path(path)
+        if not resolved:
+            return {"success": False, "error": f"Path not allowed: {path}"}
         max_chars = kwargs.get("max_chars", 5000)
-        with open(path, encoding="utf-8", errors="replace") as f:
+        with open(resolved, encoding="utf-8", errors="replace") as f:
             content = f.read(max_chars)
         return {"success": True, "content": content, "truncated": len(content) >= max_chars}
     except Exception as e:
@@ -270,10 +506,13 @@ def write_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
         content = kwargs.get("content", "")
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        resolved = _safe_resolve_path(path)
+        if not resolved:
+            return {"success": False, "error": f"Path not allowed: {path}"}
+        os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
+        with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
-        return {"success": True, "status": f"wrote {len(content)} chars to {path}"}
+        return {"success": True, "status": f"wrote {len(content)} chars to {resolved}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -281,14 +520,17 @@ def write_file(**kwargs) -> dict:
 def delete_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        if os.path.isdir(path):
+        resolved = _safe_resolve_path(path)
+        if not resolved:
+            return {"success": False, "error": f"Path not allowed: {path}"}
+        if os.path.isdir(resolved):
             try:
-                os.rmdir(path)
+                os.rmdir(resolved)
             except OSError:
-                return {"success": False, "error": f"Directory not empty: {path}. Use execute_code with caution for recursive deletes."}
+                return {"success": False, "error": f"Directory not empty: {resolved}. Use execute_code with caution for recursive deletes."}
         else:
-            os.remove(path)
-        return {"success": True, "status": f"deleted {path}"}
+            os.remove(resolved)
+        return {"success": True, "status": f"deleted {resolved}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -297,9 +539,15 @@ def move_file(**kwargs) -> dict:
     try:
         src = kwargs.get("source", "")
         dst = kwargs.get("destination", "")
-        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
-        shutil.move(src, dst)
-        return {"success": True, "status": f"moved {src} to {dst}"}
+        src_resolved = _safe_resolve_path(src)
+        dst_resolved = _safe_resolve_path(dst)
+        if not src_resolved:
+            return {"success": False, "error": f"Source path not allowed: {src}"}
+        if not dst_resolved:
+            return {"success": False, "error": f"Destination path not allowed: {dst}"}
+        os.makedirs(os.path.dirname(dst_resolved) or ".", exist_ok=True)
+        shutil.move(src_resolved, dst_resolved)
+        return {"success": True, "status": f"moved {src_resolved} to {dst_resolved}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -324,19 +572,22 @@ def execute_code(**kwargs) -> dict:
 
 
 _WEB_SEARCH_TEMPLATE = """\
-import json, urllib.request, urllib.parse
+import json, urllib.request, urllib.parse, re
 q = urllib.parse.quote({query_repr})
-url = f"https://api.duckduckgo.com/?q={{q}}&format=json&no_html=1"
+url = f"https://html.duckduckgo.com/html/?q={{q}}"
 try:
-    resp = urllib.request.urlopen(url, timeout=10)
-    data = json.loads(resp.read())
+    req = urllib.request.Request(url, headers={{"User-Agent": "Mozilla/5.0"}})
+    resp = urllib.request.urlopen(req, timeout=15)
+    html = resp.read().decode("utf-8", errors="replace")
     results = []
-    for topic in data.get("RelatedTopics", [])[:{n_repr}]:
-        if "Text" in topic:
-            results.append({{"title": topic.get("Text", "")[:100], "url": topic.get("FirstURL", "")}})
+    # Parse result blocks from DDG HTML search results
+    for block in re.findall(r'<a rel="nofollow" class="result__a" href="(.*?)".*?>(.*?)</a>', html, re.DOTALL)[:{n_repr}]:
+        url = block[0]
+        title = re.sub(r"<.*?>", "", block[1]).strip()
+        results.append({{"title": title[:200], "url": url}})
     print(json.dumps({{"results": results, "count": len(results)}}))
 except Exception as e:
-    print(json.dumps({{"error": str(e)}}))
+    print(json.dumps({{"error": str(e), "results": [], "count": 0}}))
 """
 
 
@@ -347,7 +598,7 @@ def web_search(**kwargs) -> dict:
         query_repr=repr(query),
         n_repr=repr(n),
     )
-    return _run_code(code=code, language="python", timeout=15)
+    return _run_code(code=code, language="python", timeout=20)
 
 
 def open_url(**kwargs) -> dict:
@@ -426,14 +677,7 @@ def minimize_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
     process = kwargs.get("process", "")
     try:
-        target = None
-        if title:
-            for w in gw.getWindowsWithTitle(title):
-                target = w; break
-        if not target and process:
-            for w in gw.getAllWindows():
-                if process.lower() in w.title.lower():
-                    target = w; break
+        target = _find_window(title, process)
         if target:
             target.minimize()
             return {"success": True, "status": f"minimized {target.title}"}
@@ -446,14 +690,7 @@ def maximize_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
     process = kwargs.get("process", "")
     try:
-        target = None
-        if title:
-            for w in gw.getWindowsWithTitle(title):
-                target = w; break
-        if not target and process:
-            for w in gw.getAllWindows():
-                if process.lower() in w.title.lower():
-                    target = w; break
+        target = _find_window(title, process)
         if target:
             target.maximize()
             return {"success": True, "status": f"maximized {target.title}"}
@@ -483,7 +720,12 @@ def right_click(**kwargs) -> dict:
 def move_mouse(**kwargs) -> dict:
     try:
         x, y = kwargs.get("x"), kwargs.get("y")
-        pyautogui.moveTo(x, y)
+        failsafe_was = pyautogui.FAILSAFE
+        pyautogui.FAILSAFE = False
+        try:
+            pyautogui.moveTo(x, y)
+        finally:
+            pyautogui.FAILSAFE = failsafe_was
         return {"success": True, "status": f"moved to ({x}, {y})"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -596,26 +838,6 @@ def get_battery(**kwargs) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def switch_window(**kwargs) -> dict:
-    title = kwargs.get("title", "")
-    process = kwargs.get("process", "")
-    try:
-        target = None
-        if title:
-            for w in gw.getWindowsWithTitle(title):
-                target = w; break
-        if not target and process:
-            for w in gw.getAllWindows():
-                if process.lower() in w.title.lower():
-                    target = w; break
-        if target:
-            target.activate()
-            return {"success": True, "status": f"switched to {target.title}"}
-        return {"success": False, "error": "window not found"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 def lock_screen(**kwargs) -> dict:
     try:
         import ctypes
@@ -628,7 +850,7 @@ def lock_screen(**kwargs) -> dict:
 def shutdown(**kwargs) -> dict:
     try:
         import ctypes
-        # Confirm with user first — no silent shutdown
+        # Confirm with user first â€” no silent shutdown
         confirmed = kwargs.get("_confirmed", False)
         if not confirmed:
             return {"success": False, "error": "Shutdown requires explicit user confirmation. Call again with _confirmed=True after asking the user."}
@@ -653,10 +875,13 @@ def restart(**kwargs) -> dict:
 def create_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        resolved = _safe_resolve_path(path)
+        if not resolved:
+            return {"success": False, "error": f"Path not allowed: {path}"}
+        os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
+        with open(resolved, "w", encoding="utf-8") as f:
             pass
-        return {"success": True, "status": f"created {path}"}
+        return {"success": True, "status": f"created {resolved}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -686,9 +911,11 @@ def list_installed_apps(**kwargs) -> dict:
             seen = set()
             for row_name, exe_path, version in cur.fetchall()[:100]:
                 resolved = _resolve_exe(exe_path, row_name)
-                if resolved and resolved not in seen:
-                    seen.add(resolved)
-                    apps.append({"name": row_name, "path": resolved, "version": version})
+                key = resolved or row_name.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                apps.append({"name": row_name, "path": resolved or "", "version": version or ""})
         finally:
             conn.close()
         return {"success": True, "apps": apps[:50], "count": len(apps)}
@@ -733,11 +960,10 @@ def minimize_all_except(**kwargs) -> dict:
 
 def vision_query(**kwargs) -> dict:
     import base64, io
+    # Strip hallucinated params not in schema (e.g. LLM sometimes emits "image")
+    kwargs = {k: v for k, v in kwargs.items() if k in ("question", "region")}
     question = kwargs.get("question", "")
     region = kwargs.get("region")
-    # Require explicit opt-in for remote screen capture
-    if not kwargs.get("_consent", False):
-        return {"success": False, "error": "Screen capture requires user consent. Ask the user for permission and retry with _consent=True."}
     try:
         if region:
             img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
@@ -751,11 +977,23 @@ def vision_query(**kwargs) -> dict:
         from settings import LLM_VISION_MODEL, LLM_BASE_URL, OLLAMA_API_KEY
         payload = {
             "model": LLM_VISION_MODEL,
-            "messages": [{
-                "role": "user",
-                "content": question,
-                "images": [b64],
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a screen analysis assistant. "
+                        "When describing element locations, ALWAYS provide exact pixel coordinates (x, y) as numbers. "
+                        "For any element the user asks about, return its center coordinates and bounding box "
+                        "in this format: center=(x, y), bbox=(left, top, width, height). "
+                        "Be precise â€” these coordinates will be used for mouse clicks."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": question,
+                    "images": [b64],
+                },
+            ],
             "stream": False,
         }
         headers = {"Content-Type": "application/json"}
@@ -803,3 +1041,4 @@ def time_calendar(**kwargs) -> dict:
         days=kwargs.get("days", 7),
         date=kwargs.get("date", ""),
     )
+

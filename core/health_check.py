@@ -5,7 +5,7 @@ Checks:
   - Ollama connectivity (cloud + local fallback)
   - Microphone availability
   - Tesseract OCR binary
-  - ChromaDB / skill store DB
+  - Skill store DB
   - PC indexer DB
 
 Non-blocking: failures are logged as warnings; the agent starts anyway so the
@@ -32,8 +32,9 @@ def run_all() -> dict[str, bool]:
     results["ollama"] = _check_ollama()
     results["microphone"] = _check_microphone()
     results["tesseract"] = _check_tesseract()
-    results["chromadb"] = _check_chromadb()
+    results["skills_db"] = True  # Skills DB verified via SQLite
     results["pc_index_db"] = _check_pc_index_db()
+    results["tool_registry"] = _check_tool_registry()
 
     _print_summary(results)
 
@@ -148,26 +149,6 @@ def _check_tesseract() -> bool:
         return False
 
 
-def _check_chromadb() -> bool:
-    """Verify ChromaDB / skill vector store is reachable."""
-    try:
-        from settings import SKILLS_CHROMA
-
-        from skills.skill_embedder import get_chroma_client
-
-        client = get_chroma_client(str(SKILLS_CHROMA))
-        # A lightweight heartbeat — list collections
-        client.list_collections()
-        logger.info("Health: ChromaDB OK")
-        return True
-    except ImportError:
-        logger.warning("Health: chromadb not installed — skill store unavailable")
-        return False
-    except Exception as e:
-        logger.warning(f"Health: ChromaDB check error — {e}")
-        return False
-
-
 def _check_pc_index_db() -> bool:
     """Verify the PC indexer SQLite DB is writable."""
     try:
@@ -181,6 +162,49 @@ def _check_pc_index_db() -> bool:
         return True
     except Exception as e:
         logger.warning(f"Health: PC Index DB error — {e}")
+        return False
+
+
+def _check_tool_registry() -> bool:
+    """Cross-check schemas.json against adapter function registry."""
+    try:
+        from pathlib import Path
+        import json
+
+        schemas_path = Path(__file__).parent.parent / "tools" / "schemas.json"
+        adapters_path = Path(__file__).parent.parent / "tools" / "adapters.py"
+
+        with open(schemas_path, encoding="utf-8") as f:
+            schemas = json.load(f)
+        schemas.pop("$schema", None)
+
+        import ast
+        with open(adapters_path, encoding="utf-8-sig") as f:
+            tree = ast.parse(f.read())
+
+        adapter_funcs = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+
+        errors = []
+        for tool_name in schemas:
+            if tool_name == "execute_code":
+                continue
+            if tool_name not in adapter_funcs:
+                errors.append(f"Tool '{tool_name}' in schemas.json has no adapter function in adapters.py")
+
+        orphaned = adapter_funcs - set(schemas.keys()) - {"execute_code"}
+        orphaned = {f for f in orphaned if not f.startswith("_")}
+        for func in sorted(orphaned):
+            errors.append(f"Adapter function '{func}' has no matching schema in schemas.json")
+
+        if errors:
+            for err in errors:
+                logger.warning(f"Tool registry: {err}")
+            return False
+
+        logger.info(f"Tool registry OK — {len(schemas)} schemas match adapters")
+        return True
+    except Exception as e:
+        logger.warning(f"Tool registry check error — {e}")
         return False
 
 

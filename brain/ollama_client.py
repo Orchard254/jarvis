@@ -7,6 +7,7 @@ import datetime
 import json
 import logging
 import random
+import sys
 import time
 
 import requests
@@ -26,6 +27,87 @@ logger = logging.getLogger(__name__)
 
 class OllamaError(Exception):
     pass
+
+
+def _parse_message(msg: dict) -> str:
+    return (msg.get("content") or "").strip()
+
+
+def _parse_thinking(msg: dict) -> str:
+    return msg.get("reasoning_content") or msg.get("thinking") or ""
+
+
+def _parse_tool_calls(tool_calls_raw: list) -> list[dict]:
+    tool_calls = []
+    for tc in tool_calls_raw:
+        fn = tc.get("function", {})
+        args = fn.get("arguments", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        tool_calls.append(
+            {
+                "id": tc.get("id", f"call_{len(tool_calls)}"),
+                "function": {"name": fn.get("name", ""), "arguments": args},
+            }
+        )
+    return tool_calls
+
+
+def _parse_response(data: dict) -> tuple:
+    if "choices" in data and data["choices"]:
+        choice = data["choices"][0]
+        msg = choice.get("message", {})
+        tool_calls_raw = msg.get("tool_calls") or []
+        thinking = _parse_thinking(msg)
+    else:
+        msg = data.get("message", {})
+        tool_calls_raw = msg.get("tool_calls") or []
+        thinking = _parse_thinking(msg)
+
+    if thinking:
+        logger.debug(f"[thinking] {thinking[:200]}{chr(46)*3 if len(thinking) > 200 else ''}")
+
+    content = _parse_message(msg)
+    tool_calls = _parse_tool_calls(tool_calls_raw)
+    model = data.get("model", "")
+    return content, tool_calls, thinking, model
+
+
+def _build_payload(
+    messages: list[dict],
+    model: str,
+    temperature: float = 0.2,
+    stream: bool = False,
+    tools: list[dict] = None,
+    use_think: bool = None,
+    budget: int = None,
+    effort: str = None,
+) -> dict:
+    payload = {
+        "model": model or LLM_MODEL,
+        "messages": messages,
+        "stream": stream,
+        "temperature": temperature,
+        "max_tokens": OLLAMA_MAX_TOKENS,
+    }
+    if tools:
+        payload["tools"] = tools
+    if use_think:
+        payload["think"] = True
+        payload["thinking_budget"] = budget
+    if effort:
+        payload["reasoning_effort"] = effort
+    return payload
+
+
+def _resolve_endpoint(base_url: str) -> str:
+    base_url = base_url.rstrip("/")
+    if "/api/chat" in base_url or "/v1" in base_url:
+        return base_url
+    return f"{base_url}/chat/completions"
 
 
 # Simple tracker for mock LLM
@@ -92,14 +174,7 @@ def chat(
     if effort:
         payload["reasoning_effort"] = effort
 
-    # Determine the correct endpoint - use /chat/completions for OpenAI-compatible API
-    base_url = LLM_BASE_URL.rstrip("/")
-    if "/api/chat" in base_url or "/v1" in base_url:
-        endpoint = base_url
-    else:
-        endpoint = f"{base_url}/chat/completions"
-
-    # Exponential backoff retry logic
+    endpoint = _resolve_endpoint(LLM_BASE_URL)
     retry_count = 0
     while retry_count < max_retries:
         try:
@@ -108,67 +183,25 @@ def chat(
             )
             resp.raise_for_status()
             data = resp.json()
-
-            # Handle OpenAI-compatible response format
-            if "choices" in data and data["choices"]:
-                choice = data["choices"][0]
-                msg = choice.get("message", {})
-                tool_calls_raw = msg.get("tool_calls") or []
-                # Extract thinking content if present (OpenAI reasoning format)
-                thinking = msg.get("reasoning_content") or msg.get("thinking") or ""
-            else:
-                # Fallback to original Ollama format
-                msg = data.get("message", {})
-                tool_calls_raw = msg.get("tool_calls") or []
-                # Ollama native thinking field
-                thinking = msg.get("thinking") or ""
-
-            if thinking:
-                logger.debug(f"[thinking] {thinking[:200]}{'...' if len(thinking) > 200 else ''}")
-
-            tool_calls = []
-            for tc in tool_calls_raw:
-                fn = tc.get("function", {})
-                args = fn.get("arguments", {})
-                if isinstance(args, str):
-                    try:
-                        args = json.loads(args)
-                    except json.JSONDecodeError:
-                        args = {}
-                tool_calls.append(
-                    {
-                        "id": tc.get("id", f"call_{len(tool_calls)}"),
-                        "function": {"name": fn.get("name", ""), "arguments": args},
-                    }
-                )
-
+            content, tool_calls, _, model_raw = _parse_response(data)
             return {
-                "content": (msg.get("content") or "").strip(),
+                "content": content,
                 "tool_calls": tool_calls if tool_calls else None,
-                "model": data.get("model", model or LLM_MODEL),
+                "model": model_raw or model or LLM_MODEL,
                 "done": True,
             }
 
         except Exception as e:
             retry_count += 1
-            if retry_count >= max_retries:
+            if retry_count > max_retries:
                 logger.error(f"Cloud LLM unavailable after {max_retries} retries: {e}")
                 if FALLBACK_TO_LOCAL:
                     logger.info("Falling back to local Ollama instance...")
                     try:
-                        local_payload = {
-                            "model": OLLAMA_LOCAL_MODEL,
-                            "messages": messages,
-                            "stream": False,
-                            "temperature": temperature,
-                        }
-                        if tools:
-                            local_payload["tools"] = tools
-                        local_base_url = OLLAMA_LOCAL_URL.rstrip("/")
-                        if "/api/chat" in local_base_url or "/v1" in local_base_url:
-                            local_endpoint = local_base_url
-                        else:
-                            local_endpoint = f"{local_base_url}/chat/completions"
+                        local_payload = _build_payload(
+                            messages, model=OLLAMA_LOCAL_MODEL, temperature=temperature, tools=tools
+                        )
+                        local_endpoint = _resolve_endpoint(OLLAMA_LOCAL_URL)
                         resp = requests.post(
                             local_endpoint,
                             json=local_payload,
@@ -176,36 +209,11 @@ def chat(
                             timeout=LLM_TIMEOUT,
                         )
                         resp.raise_for_status()
-                        data = resp.json()
-                        if "choices" in data:
-                            choice = data["choices"][0]
-                            msg = choice.get("message", {})
-                            tool_calls_raw = msg.get("tool_calls") or []
-                        else:
-                            msg = data.get("message", {})
-                            tool_calls_raw = msg.get("tool_calls") or []
-                        tool_calls = []
-                        for tc in tool_calls_raw:
-                            fn = tc.get("function", {})
-                            args = fn.get("arguments", {})
-                            if isinstance(args, str):
-                                try:
-                                    args = json.loads(args)
-                                except json.JSONDecodeError:
-                                    args = {}
-                            tool_calls.append(
-                                {
-                                    "id": tc.get("id", f"call_{len(tool_calls)}"),
-                                    "function": {
-                                        "name": fn.get("name", ""),
-                                        "arguments": args,
-                                    },
-                                }
-                            )
+                        content, tool_calls, _, model_raw = _parse_response(resp.json())
                         return {
-                            "content": (msg.get("content") or "").strip(),
+                            "content": content,
                             "tool_calls": tool_calls if tool_calls else None,
-                            "model": data.get("model", OLLAMA_LOCAL_MODEL),
+                            "model": model_raw or OLLAMA_LOCAL_MODEL,
                             "done": True,
                         }
                     except Exception as local_e:
@@ -229,7 +237,9 @@ def chat(
                     f"Request failed (attempt {retry_count}/{max_retries}), "
                     f"retrying in {wait_total:.1f}s: {e}"
                 )
-            time.sleep(wait_total)
+            deadline = time.monotonic() + wait_total
+            while time.monotonic() < deadline:
+                time.sleep(min(0.1, deadline - time.monotonic()))
 
 
 def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
@@ -304,9 +314,10 @@ def _mock_chat(messages: list[dict], tools: list[dict] = None) -> dict:
         ]
         _mock_tools_called = True
     elif "write" in lower_msg and "jarvis_test.txt" in lower_msg:
-        import tempfile
+        import os
 
-        test_file = os.path.join(tempfile.gettempdir(), "jarvis_test.txt")
+        desktop = os.path.expanduser("~/Desktop")
+        test_file = os.path.join(desktop, "jarvis_test.txt")
         tool_calls = [
             {
                 "id": "call_0",
@@ -356,35 +367,22 @@ def chat_stream(
     budget = thinking_budget if thinking_budget is not None else THINKING_BUDGET
     effort = reasoning_effort if reasoning_effort is not None else REASONING_EFFORT
 
+    # Bump recursion limit for streaming — some HTTP clients/deep JSON
+    # can trigger recursion in chunked-encoding read loops.
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(20000)
     try:
         headers = {"Content-Type": "application/json"}
         if OLLAMA_API_KEY:
             headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
 
-        payload = {
-            "model": model or LLM_MODEL,
-            "messages": messages,
-            "stream": True,
-            "temperature": temperature,
-            "max_tokens": OLLAMA_MAX_TOKENS,
-        }
-        if tools:
-            payload["tools"] = tools
-
-        if use_think:
-            payload["think"] = True
-            payload["thinking_budget"] = budget
-        if effort:
-            payload["reasoning_effort"] = effort
-
-        base_url = LLM_BASE_URL.rstrip("/")
-        if "/api/chat" in base_url or "/v1" in base_url:
-            endpoint = base_url
-        else:
-            endpoint = f"{base_url}/chat/completions"
+        payload = _build_payload(
+            messages, model=(model or LLM_MODEL), temperature=temperature,
+            stream=True, tools=tools, use_think=use_think, budget=budget, effort=effort,
+        )
+        endpoint = _resolve_endpoint(LLM_BASE_URL)
 
         content_parts: list[str] = []
-        # index -> {"id": str, "name": str, "arguments": str}
         tc_accumulator: dict[int, dict] = {}
         is_openai_format: bool | None = None
 
@@ -393,85 +391,77 @@ def chat_stream(
         )
         resp.raise_for_status()
 
-        for raw_line in resp.iter_lines():
-            if not raw_line:
+        # Use manual chunked reading (not iter_lines()) to avoid potential
+        # recursion in chunked-encoded streaming responses.
+        # decode_content=True ensures gzip/deflate is handled transparently.
+        buf = b""
+        for chunk in resp.raw.stream(1024, decode_content=True):
+            if not chunk:
                 continue
-            # OpenAI SSE lines start with "data: "
-            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
-            if line.startswith("data:"):
-                line = line[5:].strip()
-            if line in ("", "[DONE]"):
-                continue
+            buf += chunk
+            while b"\n" in buf:
+                raw_line, buf = buf.split(b"\n", 1)
+                line = raw_line.decode("utf-8", errors="replace").strip("\r ")
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if line in ("", "[DONE]"):
+                    continue
 
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-            # Auto-detect response format on first real chunk
-            if is_openai_format is None:
-                is_openai_format = "choices" in data
+                if is_openai_format is None:
+                    is_openai_format = "choices" in data
 
-            if is_openai_format:
-                choice = (data.get("choices") or [{}])[0]
-                delta = choice.get("delta", {})
-                finish = choice.get("finish_reason")
+                if is_openai_format:
+                    choice = (data.get("choices") or [{}])[0]
+                    delta = choice.get("delta", {})
+                    finish = choice.get("finish_reason")
 
-                # Accumulate content
-                chunk = delta.get("content") or ""
-                if chunk:
-                    content_parts.append(chunk)
-                    if print_chunks:
-                        print(chunk, end="", flush=True)
+                    chunk_text = delta.get("content") or ""
+                    if chunk_text:
+                        content_parts.append(chunk_text)
+                        if print_chunks:
+                            print(chunk_text, end="", flush=True)
 
-                # Accumulate tool_call deltas
-                for tc_delta in delta.get("tool_calls") or []:
-                    idx = tc_delta.get("index", 0)
-                    if idx not in tc_accumulator:
-                        tc_accumulator[idx] = {"id": "", "name": "", "arguments": ""}
-                    if tc_delta.get("id"):
-                        tc_accumulator[idx]["id"] = tc_delta["id"]
-                    fn = tc_delta.get("function", {})
-                    if fn.get("name"):
-                        tc_accumulator[idx]["name"] += fn["name"]
-                    if fn.get("arguments"):
-                        tc_accumulator[idx]["arguments"] += fn["arguments"]
+                    for tc_delta in delta.get("tool_calls") or []:
+                        idx = tc_delta.get("index", 0)
+                        if idx not in tc_accumulator:
+                            tc_accumulator[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.get("id"):
+                            tc_accumulator[idx]["id"] = tc_delta["id"]
+                        fn = tc_delta.get("function", {})
+                        if fn.get("name"):
+                            tc_accumulator[idx]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            tc_accumulator[idx]["arguments"] += fn["arguments"]
 
-                if finish in ("stop", "tool_calls", "length"):
-                    break
+                    if finish in ("stop", "tool_calls", "length"):
+                        break
+                else:
+                    msg = data.get("message", {})
+                    chunk_text = msg.get("content") or ""
+                    if chunk_text:
+                        content_parts.append(chunk_text)
+                        if print_chunks:
+                            print(chunk_text, end="", flush=True)
 
-            else:
-                # Ollama native format
-                msg = data.get("message", {})
-                chunk = msg.get("content") or ""
-                if chunk:
-                    content_parts.append(chunk)
-                    if print_chunks:
-                        print(chunk, end="", flush=True)
+                    for tc in _parse_tool_calls(msg.get("tool_calls") or []):
+                        idx = len(tc_accumulator)
+                        tc_accumulator[idx] = {
+                            "id": tc["id"],
+                            "name": tc["function"]["name"],
+                            "arguments": json.dumps(tc["function"]["arguments"]),
+                        }
 
-                # Ollama native tool_calls appear on the final done=True chunk
-                for tc in msg.get("tool_calls") or []:
-                    fn = tc.get("function", {})
-                    args = fn.get("arguments", {})
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except json.JSONDecodeError:
-                            args = {}
-                    idx = len(tc_accumulator)
-                    tc_accumulator[idx] = {
-                        "id": tc.get("id", f"call_{idx}"),
-                        "name": fn.get("name", ""),
-                        "arguments": json.dumps(args),  # re-encode for unified path
-                    }
-
-                if data.get("done"):
-                    break
+                    if data.get("done"):
+                        break
 
         if print_chunks and content_parts:
-            print()  # final newline
+            print()
 
-        # Convert accumulator to tool_calls list
         tool_calls: list[dict] = []
         for idx in sorted(tc_accumulator.keys()):
             entry = tc_accumulator[idx]
@@ -493,11 +483,16 @@ def chat_stream(
             "done": True,
         }
 
+    except RecursionError:
+        logger.warning("chat_stream: streaming hit recursion limit — falling back to chat()")
+        return chat(messages, tools, model, temperature)
     except Exception as stream_err:
         logger.warning(
             f"chat_stream: streaming failed ({stream_err}) — falling back to chat()"
         )
         return chat(messages, tools, model, temperature)
+    finally:
+        sys.setrecursionlimit(old_limit)
 
 
 def health_check() -> bool:
@@ -508,18 +503,10 @@ def health_check() -> bool:
             list_url = (
                 f"{base_url}/models" if "/v1" in base_url else f"{base_url}/api/tags"
             )
-            resp = requests.get(list_url, timeout=5)
-            # 200 = healthy, 401/404 = reachable but needs auth/wrong path
-            return resp.status_code in (200, 401)
-        except requests.ConnectionError:
-            return False  # server unreachable
-        except requests.RequestException:
+            return requests.get(list_url, timeout=5).status_code == 200
+        except Exception:
             # Fallback to simple ping
-            try:
-                resp = requests.get(base_url, timeout=5)
-                return resp.status_code in (200, 401, 405)
-            except requests.ConnectionError:
-                return False
+            return requests.get(base_url, timeout=5).status_code in [200, 401, 404, 405]
     except Exception:
         return False
 

@@ -50,4 +50,3 @@ htmlcov/
 # NPM artifacts (Python project)
 package-lock.json
 node_modules/
-```

@@ -36,6 +36,10 @@ from settings import LOG_FILE, LOG_LEVEL, LOGS_DIR
 
 LOGS_DIR.mkdir(exist_ok=True)
 Path("data").mkdir(exist_ok=True)
+from settings import NOTES_DIR, REMINDERS_DIR, CONFIG_DIR
+NOTES_DIR.mkdir(parents=True, exist_ok=True)
+REMINDERS_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 _fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _console_handler = PromptAwareStreamHandler(sys.stdout)
@@ -116,8 +120,8 @@ signal.signal(signal.SIGTERM, handle_exit)
 def _cleanup():
     pc_indexer.stop()
     try:
-        from memory.db_pool import shutdown_pools as _sp
-        _sp()
+        from core.thread_db import close_all_connections
+        close_all_connections()
     except Exception:
         pass
 
@@ -138,13 +142,12 @@ def main():
 
     from settings import OLLAMA_API_KEY
 
-    leaked_pattern = "b3ad7ee1e4614eee89cb85dcfe1451d1.4a-cPAqHQnD-OHBwj9qHbg8d"
-    if OLLAMA_API_KEY == leaked_pattern:
-        print("\n⚠️  WARNING: You're using a leaked placeholder OLLAMA_API_KEY!")
+    if not OLLAMA_API_KEY:
+        print("\n⚠️  WARNING: OLLAMA_API_KEY is not set in .env!")
         print(
-            "    Please update your .env file with your actual API key from https://ollama.com/settings/api-keys"
+            "    Please set your API key in .env: OLLAMA_API_KEY=your_key_here"
         )
-        print("    Continuing with placeholder (limited functionality)...\n")
+        print("    Continuing with limited functionality...\n")
 
     # ── Startup health check ───────────────────────────────────────────────
     from core.health_check import run_all as run_health_check

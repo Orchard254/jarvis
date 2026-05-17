@@ -1,6 +1,7 @@
 
+from pathlib import Path
 import sys
-sys.path.insert(0, r'c:\Users\macha\OneDrive\Desktop\Ai\jarvis')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tools.system import execute_code
 
 code = """import subprocess, time, os, sys

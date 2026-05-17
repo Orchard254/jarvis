@@ -1,5 +1,11 @@
 """
-Tier 3 Multi-Agent Collaborative System — currently unused.
-The main orchestrator uses the brain's tool loop directly.
-These agents are available for future integration.
+Agents — Jarvis (brain) and Execution (hands).
+
+Jarvis handles conversation, reasoning, memory, and high-level planning.
+Execution handles tool orchestration, micro-planning, verification, and retries.
 """
+
+from agents.director import JarvisAgent
+from agents.execution import ExecutionAgent
+
+__all__ = ["JarvisAgent", "ExecutionAgent"]

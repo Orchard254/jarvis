@@ -58,7 +58,6 @@ LLM_VISION_MODEL = get_env_str("OLLAMA_VISION_MODEL", "gemma3:27b-cloud")
 LLM_BASE_URL = get_env_str("OLLAMA_CLOUD_URL", "https://api.ollama.com/api/chat")
 OLLAMA_LOCAL_URL = get_env_str("OLLAMA_LOCAL_URL", "http://localhost:11434")
 OLLAMA_LOCAL_MODEL = get_env_str("OLLAMA_LOCAL_MODEL", "llama3")
-OLLAMA_CLOUD_URL = get_env_str("OLLAMA_CLOUD_URL", "https://api.ollama.com/api/chat")
 OLLAMA_API_KEY = get_env_str("OLLAMA_API_KEY", "")
 OLLAMA_MODE = get_env_str("OLLAMA_MODE", "auto")
 OLLAMA_TEMPERATURE = get_env_float("OLLAMA_TEMPERATURE", 0.7)
@@ -93,13 +92,33 @@ VISION_TO_TEXT_MODE = get_env_bool("VISION_TO_TEXT_MODE", True)
 
 # ── Iteration & Mode Caps (Cloud-Optimized) ────────────────
 # Read from .env with explicit type conversion
-_max_rounds = get_env_int("MAX_AGENT_ROUNDS", 3)
+_max_rounds = get_env_int("MAX_AGENT_ROUNDS", 10)
 ITERATION_CAPS = {
-    "interactive_cloud": 10,  # Balances complex tasks vs cost
-    "interactive_local": 12,
-    "autonomous_cloud": 8,  # Lower for autonomous (safety first)
-    "autonomous_local": 10,
+    "interactive_cloud": _max_rounds,
+    "interactive_local": _max_rounds + 2,
+    "autonomous_cloud": max(4, _max_rounds - 2),
+    "autonomous_local": _max_rounds,
 }
+
+# ── Risk Classification (single source of truth) ──────
+HIGH_RISK_TOOLS = frozenset({
+    "delete_file",
+    "execute_code",
+    "shutdown",
+    "restart",
+    "kill_process",
+    "write_file",
+    "move_file",
+    "run_python",
+    "control_input",
+})
+MEDIUM_RISK_TOOLS = frozenset({
+    "send_message",
+    "open_url",
+    "download_file",
+    "browser",
+    "schedule",
+})
 
 # ── Safety & Sandboxing ────────────────────────────────
 EXECUTE_CODE_TIMEOUT = get_env_int("EXECUTE_CODE_TIMEOUT", 30)
@@ -279,7 +298,7 @@ MAX_VERIFICATION_RETRIES = get_env_int("MAX_VERIFICATION_RETRIES", 2)
 # ── PC Indexer ─────────────────────────────────────────
 INDEX_REFRESH_APPS = get_env_int("INDEX_REFRESH_APPS", 14400)
 INDEX_REFRESH_FILES = get_env_int("INDEX_REFRESH_FILES", 7200)
-STATE_MONITOR_INTERVAL = get_env_int("STATE_MONITOR_INTERVAL", 10)
+STATE_MONITOR_INTERVAL = get_env_int("STATE_MONITOR_INTERVAL", 1)
 DB_WAL_MODE = get_env_bool("DB_WAL_MODE", True)
 DB_BUSY_TIMEOUT = get_env_int("DB_BUSY_TIMEOUT", 5000)
 

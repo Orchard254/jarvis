@@ -51,14 +51,20 @@ class Scheduler:
         self._load_recurring_from_db()
 
     def schedule(self, command: str, cron_expression: str, task_id: str | None = None) -> str:
-        from uuid import uuid4
-        task_id = task_id or str(uuid4())
         scheduled_for = self._parse_cron(cron_expression)
         if scheduled_for is None:
             raise ValueError(f"Unrecognized schedule: '{cron_expression}'")
 
+        # Use the ID returned by create_task so that autonomous_tasks, self._scheduled,
+        # and recurring_schedules all share the same task_id.
+        # Previously a separate uuid4() was generated here and the create_task() return
+        # value was discarded, causing the three stores to track different IDs.
+        if task_id is None:
+            task_id = create_task(command, scheduled_for=scheduled_for)
+        else:
+            create_task(command, scheduled_for=scheduled_for)
+
         self._scheduled[task_id] = {"command": command, "cron": cron_expression, "next_run": scheduled_for}
-        create_task(command, scheduled_for=scheduled_for)
 
         if cron_expression.lower().startswith("every"):
             self._persist_recurring(task_id, command, cron_expression, scheduled_for)
@@ -119,10 +125,12 @@ class Scheduler:
                 command = entry["command"]
                 cron = entry["cron"]
                 logger.info(f"scheduler: recurring '{task_id[:8]}' due — '{command[:40]}'")
-                try:
-                    self._orchestrator(command)
-                except Exception as exc:
-                    logger.error(f"scheduler: recurring '{task_id[:8]}' failed: {exc}")
+
+                # Route through _handle_task so recurring tasks also go through
+                # the approval gate (previously they called self._orchestrator()
+                # directly, bypassing approval entirely).
+                task = {"task_id": task_id, "command": command, "confidence_required": 0.85}
+                self._handle_task(task)
 
                 if cron.lower().startswith("every"):
                     next_run = self._parse_cron(cron)
@@ -146,8 +154,10 @@ class Scheduler:
             update_task(task_id, "failed", error="Denied by approval gate")
             return
 
+        # NOTE: claim_task() (called before _handle_task) already transitioned
+        # the task to 'running' and set started_at. Calling update_task("running")
+        # here again would overwrite the original started_at timestamp, so it is removed.
         logger.info(f"scheduler: executing task '{task_id[:8]}' — '{command[:40]}...'")
-        update_task(task_id, "running")
         try:
             result = self._orchestrator(command)
             action_log = []

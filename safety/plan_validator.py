@@ -16,7 +16,8 @@ _DANGEROUS: list[tuple[str, str]] = [
     (r"subprocess.*?['\"]rm['\"].*?['\"]-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf list)"),
     # Python subprocess with rm -rf in shell-string form (e.g. "rm -rf /")
     (r"subprocess\.(?:run|Popen|call)\(.*?['\"]rm\s+-[rRfF]+", "Destructive recursive delete via subprocess (rm -rf shell string)"),
-    # Python os.system / os.popen with rm -rf
+    # Python os.system / os.popen — blanket block (all forms are dangerous)
+    (r"os\.(?:system|popen)\s*\(", "Shell execution via os.system/popen (all forms blocked)"),
     (r"os\.(?:system|popen)\(.*?rm\s+-[rRfF]+", "Destructive recursive delete via os.system/popen (rm -rf)"),
     (r"\bdel\s+/[sStTfFqQ]", "Destructive del command"),
     (r"\brd\s+/[sS]", "Recursive directory removal (rd /s)"),
