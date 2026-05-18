@@ -79,25 +79,37 @@ MAX_CONTEXT_TOKENS = get_env_int(
 # responds.  Dramatically improves multi-step planning and complex tasks.
 # thinking_budget controls max tokens spent thinking (separate from output).
 # reasoning_effort: "low" (fast) | "medium" (balanced) | "high" (best quality).
-THINKING_ENABLED = get_env_bool("THINKING_ENABLED", True)
-THINKING_BUDGET = get_env_int("THINKING_BUDGET", 8000)
-REASONING_EFFORT = get_env_str("REASONING_EFFORT", "medium")
+THINKING_ENABLED = get_env_bool("THINKING_ENABLED", False)
+THINKING_BUDGET = get_env_int("THINKING_BUDGET", 1024)
+REASONING_EFFORT = get_env_str("REASONING_EFFORT", "low")
 # 0 = send every tool schema on each LLM call (recommended for cloud models).
 # Set e.g. 8 when using a small local model with tight context.
 LLM_TOOL_SCHEMA_LIMIT = get_env_int("LLM_TOOL_SCHEMA_LIMIT", 0)
-# User/assistant/tool messages merged before the current turn in the ReAct loop.
-TOOL_LOOP_HISTORY_MESSAGES = get_env_int("TOOL_LOOP_HISTORY_MESSAGES", 24)
 MAX_SCREENSHOTS_IN_CONTEXT = get_env_int("MAX_SCREENSHOTS_IN_CONTEXT", 0)
 VISION_TO_TEXT_MODE = get_env_bool("VISION_TO_TEXT_MODE", True)
 
-# ── Iteration & Mode Caps (Cloud-Optimized) ────────────────
-# Read from .env with explicit type conversion
-_max_rounds = get_env_int("MAX_AGENT_ROUNDS", 10)
-ITERATION_CAPS = {
-    "interactive_cloud": _max_rounds,
-    "interactive_local": _max_rounds + 2,
-    "autonomous_cloud": max(4, _max_rounds - 2),
-    "autonomous_local": _max_rounds,
+# ── Agent Registry (single source of truth) ────────────
+# Each entry defines an agent: its model, prompt template, tool access, and role.
+# Adding a new agent = one entry here + one prompt file in prompts/.
+AGENTS: dict[str, dict] = {
+    "director": {
+        "description": "CEO — conversational frontend; delegates actions to ops",
+        "model": LLM_MODEL,
+        "prompt_template": "jarvis",
+        "tools": ["delegate", "get_system_info"],
+        "capabilities": ["chat", "summarize", "delegate"],
+        "temperature": 0.3,
+        "agent_class": "agents.director.JarvisAgent",
+    },
+    "executor": {
+        "description": "Operations — plans and executes tool sequences; no conversation",
+        "model": EXECUTOR_MODEL,
+        "prompt_template": "executor",
+        "tools": "__all__",
+        "capabilities": ["execute"],
+        "temperature": 0.1,
+        "agent_class": "agents.execution.ExecutionAgent",
+    },
 }
 
 # ── Risk Classification (single source of truth) ──────

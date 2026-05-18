@@ -7,5 +7,6 @@ Execution handles tool orchestration, micro-planning, verification, and retries.
 
 from agents.director import JarvisAgent
 from agents.execution import ExecutionAgent
+from core.agent_registry import AgentRegistry
 
-__all__ = ["JarvisAgent", "ExecutionAgent"]
+__all__ = ["JarvisAgent", "ExecutionAgent", "AgentRegistry"]

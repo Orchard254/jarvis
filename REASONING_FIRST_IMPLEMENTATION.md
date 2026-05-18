@@ -198,7 +198,7 @@ Can store reasoning traces for:
 ### Rollout Strategy
 1. Deploy with monitoring on tool call reduction
 2. Gather metrics on reasoning vs. execution tasks
-3. Tune classifier thresholds based on real usage
+3. (Classifier thresholds not applicable — Director LLM decides tool necessity natively)
 4. Expand reasoning capabilities based on patterns
 
 ## Conclusion

@@ -35,6 +35,7 @@ def run_all() -> dict[str, bool]:
     results["skills_db"] = True  # Skills DB verified via SQLite
     results["pc_index_db"] = _check_pc_index_db()
     results["tool_registry"] = _check_tool_registry()
+    results["agent_registry"] = _check_agent_registry()
 
     _print_summary(results)
 
@@ -205,6 +206,22 @@ def _check_tool_registry() -> bool:
         return True
     except Exception as e:
         logger.warning(f"Tool registry check error — {e}")
+        return False
+
+
+def _check_agent_registry() -> bool:
+    """Verify AgentRegistry has all expected agents registered."""
+    try:
+        from core.agent_registry import AgentRegistry
+        info = AgentRegistry.get_info()
+        count = info["agent_count"]
+        if count == 0:
+            logger.warning("Agent registry: no agents registered")
+            return False
+        logger.info(f"Agent registry OK — {count} agent(s) registered")
+        return True
+    except Exception as e:
+        logger.warning(f"Agent registry check error — {e}")
         return False
 
 

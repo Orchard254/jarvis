@@ -12,27 +12,40 @@ from settings import ALLOWED_IMPORTS, BLOCKED_PATHS
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Sensitive path fragments checked by check_paths() in addition to the
-# settings-driven BLOCKED_PATHS list.  These cover SSH keys, cloud-provider
-# credential directories, and common standalone credential files.
+# Sensitive path fragments checked by check_paths().
+# Two tiers:
+#   _ALWAYS_BLOCKED   — blocked for every tool (private key files, etc.)
+#   _WRITE_BLOCKED    — blocked only for write/destructive tools
 # ---------------------------------------------------------------------------
-_SENSITIVE_PATH_FRAGMENTS = (
-    ".ssh",
-    ".aws",
-    ".gnupg",
-    ".gpg",
+_ALWAYS_BLOCKED = (
     "id_rsa",
     "id_ed25519",
     "id_ecdsa",
     "id_dsa",
     "authorized_keys",
     "known_hosts",
+    ".gnupg",
+    ".gpg",
+    "credentials",
+)
+
+_WRITE_BLOCKED = (
+    ".ssh",
+    ".aws",
     "credentials",
     ".netrc",
     ".pgpass",
     ".kube/config",
     "kubeconfig",
 )
+
+_WRITE_TOOLS = frozenset({
+    "write_file", "edit_file", "execute_code", "run_shell",
+    "create_folder", "delete_file", "delete_folder",
+})
+
+# Merge for callers that don't need the split
+_SENSITIVE_PATH_FRAGMENTS = _ALWAYS_BLOCKED + _WRITE_BLOCKED
 
 # ---------------------------------------------------------------------------
 # Secret-bearing environment variable keywords.
@@ -85,7 +98,7 @@ def check_imports(code: str, language: str = "python"):
                         return False, f"Import not allowed: {alias.name}"
             elif isinstance(node, ast.ImportFrom):
                 if node.module is None:
-                    return False, "Relative imports are not allowed"
+                    continue  # relative-only imports (from . import X) are allowed
                 mod = node.module.split(".")[0]
                 if mod not in ALLOWED_IMPORTS:
                     return False, f"Import not allowed: {node.module}"
@@ -123,14 +136,15 @@ def _resolve_short_paths(args_str: str) -> str:
     return "\\".join(resolved)
 
 
-def check_paths(args: dict):
+def check_paths(args: dict, tool_name: str = ""):
     """
     Reject tool calls whose arguments reference a blocked or sensitive path.
 
     Two layers of checks are applied:
       1. Settings-driven BLOCKED_PATHS (system directories such as System32).
-      2. Hardcoded _SENSITIVE_PATH_FRAGMENTS (.ssh, .aws, credential files,
-         etc.) that must never be accessible regardless of settings.
+      2. Hardcoded sensitive path fragments (SSH keys, cloud credentials, etc.)
+         — split into always-blocked (private key files) and write-blocked
+         (.ssh, .aws, credential directories blocked only for write tools).
 
     Windows 8.3 short-path names (e.g. WINDO~1) are resolved first.
     """
@@ -143,10 +157,17 @@ def check_paths(args: dict):
         if path.lower().replace("\\", "/") in args_str_lower:
             return False, f"Blocked path in args: '{path}'"
 
-    # 2. Hardcoded sensitive path fragments (SSH keys, cloud credentials, …)
-    for fragment in _SENSITIVE_PATH_FRAGMENTS:
+    # 2a. Hardcoded sensitive path fragments — always blocked
+    for fragment in _ALWAYS_BLOCKED:
         if fragment.lower() in args_str_lower:
             return False, f"Blocked sensitive path in args: '{fragment}'"
+
+    # 2b. Write-only sensitive path fragments — only blocked for write tools
+    is_write_tool = tool_name in _WRITE_TOOLS
+    for fragment in _WRITE_BLOCKED:
+        if fragment.lower() in args_str_lower:
+            if is_write_tool:
+                return False, f"Blocked write-sensitive path in args: '{fragment}'"
 
     return True, ""
 

@@ -1,11 +1,10 @@
 # JARVIS — Agent Session Context
 
 ## Architecture
-- **JARVIS** (ReAct tool loop) is the sole agent. No sub-agents. No Supervisor pipeline.
-- `brain/tool_loop.py` — Max 10 iterations per request, structured logging to `logs/tool_loop.ndjson`, system prompt always included in every LLM call.
-- `core/orchestrator.py` — Routes input through classifier (fast-path) or tool loop.
-- `core/system_state.py` — Tracks active_window, mouse pos, CPU/RAM/disk/battery. Updated after every tool call. Injected as `## Live State` system message before each LLM iteration.
-- `core/classifier.py` — Fast-path intent classifier for special commands (summary, skills_status, listen, etc.).
+- **Two agents**: Director (CEO, `gpt-oss:120b-cloud`) decides and summarises; Execution (Ops, `nemotron-3-nano:30b-cloud`) acts.
+- `agents/director.py` — Single-pass CEO agent with one `delegate` tool (native function-calling). Decides whether a task needs tools or is pure chat.
+- `agents/execution.py` — Ops agent using native tool-calling (56 tool schemas). No conversation, no expanders, no hardcoded Python sequences.
+- `core/orchestrator.py` — Routes: admin fast-path → Director → (if delegate) → Execution → Director summary.
 
 ## Tool System
 - **56 registered tools** across 4 levels (hierarchy in `prompts/jarvis.yaml`).
@@ -23,25 +22,23 @@
 7. **list_installed_apps**: Includes apps with null `path` (previously dropped silently).
 
 ## Key Files
-- `core/orchestrator.py` — Main routing, SystemState integration, state-aware wait
-- `brain/tool_loop.py` — ReAct loop engine
-- `brain/prompt_builder.py` — Prompt construction, `build_state_context()`
-- `brain/structured_log.py` — JSON-Lines logger
-- `brain/tool_validator.py` — Tool result validation
+- `core/orchestrator.py` — Main routing, lazy_init, Director→Execution→Director flow
+- `agents/director.py` — CEO agent (JarvisAgent.process, JarvisAgent.summarize)
+- `agents/execution.py` — Ops agent (ExecutionAgent.execute_task)
+- `brain/prompt_builder.py` — Prompt construction, 60s cache for Director prompt
 - `tools/adapters.py` — All tool adapter functions (56 tools)
 - `tools/schemas.json` — Tool definitions
 - `safety/executor.py` — Tool output envelope, try/except wrapper
 - `verification/verifier.py` — OS-level state verification with polling
-- `prompts/jarvis.yaml` — System prompt with tool hierarchy rules
+- `prompts/jarvis.yaml` — Director system prompt (1121 chars)
+- `prompts/executor.yaml` — Execution system prompt (~3896 chars)
 - `indexer/db/pc_index.db` — PC app index (1,237 apps, 904 null exe_path)
 
 ## Important Behaviors
+- Background threads (indexer, scheduler) are deferred to `_lazy_init()` — start on first `handle()` call, not at import time.
+- Director receives `tools=[delegate_tool]`; Execution receives `tools=TOOL_SCHEMAS` (56 tools).
+- Chat-only inputs: 1 LLM call (Director). Action tasks: 3 calls max (Director → Execution → Director).
 - Memory is read-only (for system state, app index). No episode history loaded into LLM context.
 - Wait tool is state-aware: `_execute_wrapper` checks SystemState before calling wait (skips polling if already satisfied).
-- Classifier fast-path handles: `summary`, `skills_status`, `listen`, `status`, `stop`, `shutdown`, `help`, `history`, `clear`.
+- Admin fast-path handles: `summary`, `skills_status`, `status`, `stop`, `shutdown`, `help`, `history`, `clear` — no LLM call needed.
 - Structured logging captures: tool_call, tool_retry, guard_triggered, loop_iteration, loop_complete.
-
-## Not Implemented Yet
-- Sub-agents / Director pattern (planned but deferred)
-- Empty `__init__.py` re-exports (blocked by circular imports in `skills/` package)
-- Agentic pre-authorization for tools (planned but deferred per "don't expand features, harden runtime")

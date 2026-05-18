@@ -219,15 +219,13 @@ def _build_verified_intent(self, reasoning_trace) -> dict:
 
 ```python
 class ExecutionAgent:
-    def execute_intent(self, intent: dict) -> str:
-        """Execute with built-in verification."""
+    def execute_task(self, task: str) -> list[dict]:
+        """Execute a natural-language task using native tool-calling LLM."""
         
-        # Extract verification criteria
-        verification_plan = intent.get('verification', {})
-        expected_outcome = intent.get('expected_outcome', {})
+        # The LLM receives 56 tool schemas and plans/steps independently.
+        # No hardcoded Python expanders, no EXPANDERS registry.
         
-        # Get expander (deterministic, no LLM)
-        expander_fn = EXPANDERS.get(intent['action'])
+        # Each call returns a list of {tool, args, result} dicts
         
         if not expander_fn:
             return self._llm_fallback(intent)

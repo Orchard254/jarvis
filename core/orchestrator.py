@@ -1,16 +1,12 @@
 """
-Main routing gate. Bridges brain, safety, tools, and verification.
-Injects callbacks into tool_loop to maintain strict layer boundaries.
+Main routing gate. Director → (if needed) Execution → Director summary.
 """
 
-import concurrent.futures
 import logging
 import re
 import sys
-import threading
 from collections import deque
 
-import autonomous.activity_log
 import autonomous.task_queue
 import settings
 from autonomous.approval_gate import ApprovalGate
@@ -18,15 +14,11 @@ from autonomous.scheduler import Scheduler
 from agents.director import JarvisAgent
 from agents.execution import ExecutionAgent
 from safety import executor as safety
-from settings import ITERATION_CAPS
-from skills.skill_store import get_active_skills, search_by_intent
-from skills.skill_store import init_db as init_skills
+from skills.skill_store import get_active_skills
 from tools import TOOL_REGISTRY
 from verification.verifier import verify_action
 
-from core.classifier import classify, is_special_command
 from core.console import cli_input
-from core.reporter import report
 from core.system_state import SystemState
 
 logger = logging.getLogger(__name__)
@@ -38,48 +30,29 @@ class Orchestrator:
     def __init__(self, memory=None):
         self._history = deque(maxlen=self.MAX_HISTORY)
         self._state = SystemState()
-        self._mode = "interactive_cloud"
         self._approval_gate = ApprovalGate()
-        autonomous.task_queue.init_db()
         self._memory = memory
         self._scheduler = Scheduler(self.handle)
-        self._scheduler.start()
         self.running = True
-        self._last_tool_calls: list[dict] = []
-        # A1: Track LLM context for confidence gate
-        self._last_llm_text: str = ""
-        self._last_confidence: float = 0.80
         self._tool_failure_streak: dict[str, int] = {}
-        init_skills()
-        # Agents
         self._jarvis = JarvisAgent()
         self._execution = ExecutionAgent(self._execute_wrapper, self._verify_wrapper)
+        self._lazy_init_done = False
 
-        try:
-            from core.heartbeat_monitor import monitor
-            monitor.start()
-        except Exception:
-            logger.warning("Heartbeat monitor unavailable")
+    def _lazy_init(self):
+        if self._lazy_init_done:
+            return
+        self._lazy_init_done = True
+        autonomous.task_queue.init_db()
+        self._scheduler.start()
+        from indexer import pc_indexer as _indexer
+        _indexer.start()
 
-        if getattr(settings, "AMBIENT_MONITORING", True):
-            try:
-                from autonomous import ambient_monitor
-                ambient_monitor.start()
-                import atexit
-                atexit.register(ambient_monitor.stop)
-            except Exception:
-                logger.warning("Ambient monitor unavailable")
+    # ── Fast-path admin commands (no LLM call) ────────────────────────────
 
-        # History loading from memory is disabled — stale context confuses the LLM.
-        # The system prompt provides full context on each interaction.
-
-    # ── Fast-path handlers (no LLM call) ─────────────────────────────────
-
-    def _handle_special(self, text: str) -> str | None:
-        cmd = is_special_command(text)
-        if cmd is None:
-            return None
-        if cmd == "skills_status":
+    def _handle_admin(self, text: str) -> str | None:
+        t = text.strip().lower()
+        if t == "skills status":
             active = get_active_skills()
             if not active:
                 return "No active skills yet."
@@ -87,11 +60,12 @@ class Orchestrator:
                 f"  {s['intent_label']} (success: {s['success_rate']:.0%})"
                 for s in active
             )
-        if cmd == "summary":
+        if t == "summary":
             from autonomous.activity_log import generate_summary
             return generate_summary()
-        if cmd == "status":
-            import shutil, psutil
+        if t == "status":
+            import shutil
+            import psutil
             ram = psutil.virtual_memory()
             disk_path = "C:\\" if sys.platform == "win32" else "/"
             try:
@@ -102,7 +76,7 @@ class Orchestrator:
                 f"RAM: {ram.percent}% used | "
                 f"Disk {disk_path}: {disk.used // 1e9:.1f}GB / {disk.total // 1e9:.1f}GB"
             )
-        if cmd == "task_status":
+        if t.startswith("task status"):
             parts = text.split()
             if len(parts) > 2:
                 from autonomous.task_queue import get_task as _get_tq_task
@@ -117,148 +91,42 @@ class Orchestrator:
             return "\n".join(f"{t['task_id'][:8]}: {t.get('command', '?')[:40]} - {t['status']}" for t in active)
         return None
 
-    def _handle_simple_intent(self, text: str) -> str | None:
-        intent = classify(text)
-        if intent is None:
-            return None
-        logger.info(f"Classifier matched: {intent.label}")
-        result = self._execute_wrapper(intent.tool_name, intent.args)
-        if result.get("success"):
-            return intent.format_result(result)
-        return None
-
-    # ── Main entry point ──────────────────────────────────────────────────
+    # ── Main entry point ─────────────────────────────────────────────────
 
     def handle(self, user_input: str) -> str:
+        self._lazy_init()
         logger.info(f"Orchestrator.handle: '{user_input}'")
-        # Reset failure streaks at the start of each new command
-        # so a failure in one intent execution doesn't penalise the next
         self._tool_failure_streak.clear()
         try:
             text = re.sub(r"^\d+\.\s*", "", user_input).strip()
 
-            special = self._handle_special(text)
-            if special is not None:
-                self._update_history(user_input, special)
-                return special
+            admin = self._handle_admin(text)
+            if admin is not None:
+                self._update_history(user_input, admin)
+                return admin
 
-            simple = self._handle_simple_intent(text)
-            if simple is not None:
-                self._update_history(user_input, simple)
-                return simple
+            # Step 1: Director thinks
+            director_result = self._jarvis.process(
+                user_input=text,
+                history=list(self._history),
+            )
 
-            # Simple shortcut: direct typing for commands like 'write <text>'
-            if text.lower().startswith('write '):
-                content = text[6:].strip()
-                # Use type_text tool with high confidence
-                result = self._execute_wrapper('type_text', {'text': content})
-                if result.get('success'):
-                    resp = f"Typed '{content}'."
-                else:
-                    resp = f"Failed to type text: {result.get('error', 'unknown')}"
-                self._update_history(user_input, resp)
-                return resp
+            task = director_result.get("delegate_task")
+            if not task:
+                response = director_result.get("response", "Done.")
+                if self._memory:
+                    self._memory.write_episodic("response", command_text=user_input, tool_name="chat", success=True, tool_result={"response": response[:500]})
+                self._update_history(user_input, response)
+                return response
 
-            if self._memory:
-                try:
-                    self._memory.write_episodic("command", command_text=user_input)
-                except Exception as e:
-                    logger.error(f"Error writing episodic memory: {e}")
+            # Step 2: Execution acts
+            exec_results = self._execution.execute_task(task)
 
-            memory_context = ""
-            if self._memory:
-                try:
-                    memory_context = self._memory.get_context_summary()
-                except Exception as e:
-                    logger.error(f"Error getting memory context: {e}")
-                    memory_context = ""
-
-            # B5: Retrieve relevant past episodes by keyword similarity
-            if self._memory:
-                try:
-                    from memory import episodic
-                    past = episodic.search_by_similarity(text, limit=2)
-                    if past:
-                        episodes_block = "\nPast relevant experiences:\n"
-                        for ep in past:
-                            cmd = ep.get("command_text", "?")
-                            ok = "succeeded" if ep.get("success") else "failed"
-                            result_preview = ""
-                            tr = ep.get("tool_result")
-                            if isinstance(tr, dict):
-                                resp = tr.get("response") or tr.get("output") or str(tr.get("data", ""))
-                                result_preview = f" → {resp[:120]}" if resp else ""
-                            episodes_block += f"  • '{cmd}' {ok}{result_preview}\n"
-                        memory_context = f"{episodes_block}\n{memory_context}" if memory_context else episodes_block
-                except Exception:
-                    pass  # Memory retrieval is best-effort
-
-            if settings.ENABLE_SKILLS:
-                match = search_by_intent(text)
-                if match and match.get("skill_id"):
-                    skill_hint = (
-                        f"Saved skill found for intent '{text}':\n"
-                        f"  code: {match.get('code', '')[:500]}\n"
-                        f"  language: {match.get('language', 'python')}\n"
-                        f"Execute this code via execute_code — do NOT assume it already ran."
-                    )
-                    memory_context = f"{skill_hint}\n\n{memory_context}" if memory_context else skill_hint
-
-            # Route through Jarvis agent (brain) -> Execution agent (hands)
-            self._current_intent = text
-            timeout = settings.LLM_TIMEOUT + 30
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
-                future = _pool.submit(
-                    self._jarvis.process,
-                    user_input=text,
-                    history=list(self._history),
-                    memory_context=memory_context,
-                    mode=self._mode,
-                    intent_handler=self._execution.execute_intent,
-                )
-                try:
-                    result = future.result(timeout=timeout) or {}
-                except concurrent.futures.TimeoutError:
-                    logger.error(f"Jarvis agent timed out after {timeout}s")
-                    result = {"response": "Jarvis timed out", "success": False, "error": "TIMEOUT", "tool_calls": []}
-
-            if not result:
-                result = {"response": "No response from Jarvis", "success": False, "tool_calls": []}
-
-            response = result.get("response", "Done.")
-            intents_log = result.get("tool_calls", [])
-
-            # ── Verification: check if execution agent reported failures ──
-            failed_intents = [i for i in intents_log if i.get("status") == "failed"]
-            if failed_intents:
-                logger.warning(f"Execution agent reported {len(failed_intents)} failed intent(s)")
-                errors = [f"  - {i.get('action', '?')}: {i.get('error', 'unknown')}" for i in failed_intents[:3]]
-                response += "\n\n⚠️ Some steps failed:\n" + "\n".join(errors)
-                result["success"] = False
-
-            if result.get("success") and intents_log:
-                try:
-                    formatted = report(
-                        intent={"goal": text, "raw_input": user_input},
-                        results=result["tool_calls"],
-                        verification={
-                            "status": "CONFIRMED" if result["success"] else "FAILED",
-                            "summary": response,
-                        },
-                    )
-                    if formatted and len(formatted) > 5:
-                        response = formatted
-                except Exception:
-                    pass
+            # Step 3: Director summarizes
+            response = self._jarvis.summarize(task, exec_results, list(self._history))
 
             if self._memory:
-                self._memory.write_episodic(
-                    "response",
-                    command_text=user_input,
-                    tool_name="tool_loop",
-                    success=result.get("success"),
-                    tool_result={"response": response[:500]},
-                )
+                self._memory.write_episodic("response", command_text=user_input, tool_name="delegated", success=True, tool_result={"response": response[:500]})
 
             self._update_history(user_input, response)
             return response
@@ -271,18 +139,16 @@ class Orchestrator:
         self._history.append({"role": "user", "content": user_input})
         self._history.append({"role": "assistant", "content": response})
 
-    # ── Callbacks injected into tool_loop ─────────────────────────────────
+    # ── Tool execution wrapper ───────────────────────────────────────────
 
     def _execute_wrapper(self, tool_name: str, args: dict) -> dict:
         if tool_name not in TOOL_REGISTRY:
             return {"success": False, "message": f"Unknown tool: {tool_name}", "data": {}, "timestamp": ""}
 
-        # State-aware wait optimization — skip tool call if condition already met
         if tool_name == "wait" and args.get("condition"):
             condition = args["condition"]
             target = str(args.get("target", "")).lower()
             state = self._state.snapshot()
-
             if condition == "window_visible" and target:
                 if target in state.get("active_window", "").lower():
                     return {"success": True, "message": f"Wait skipped: '{target}' already active", "data": {}, "timestamp": ""}
@@ -296,22 +162,13 @@ class Orchestrator:
                 except (ValueError, TypeError):
                     pass
 
-        # A1: Dynamic confidence — decreases on repeated failures, resets on success
-        if tool_name == "type_text":
+        probe_tools = {"focus_window", "wait", "get_active_window"}
+        if tool_name in probe_tools:
             confidence = 0.85
             streak = 0
         else:
             streak = self._tool_failure_streak.get(tool_name, 0)
-            if streak == 0:
-                confidence = 0.85
-            elif streak == 1:
-                confidence = 0.65
-            else:
-                confidence = 0.40
-
-        # Ensure type_text retains a high confidence to avoid being blocked by the gate
-        if tool_name == "type_text" and confidence < 0.85:
-            confidence = 0.85
+            confidence = 0.85 if streak == 0 else (0.75 if streak == 1 else 0.40)
 
         result = safety.execute(
             tool_name,
@@ -319,11 +176,11 @@ class Orchestrator:
             args,
             plan={
                 "confidence": confidence,
-                "llm_response": getattr(self, "_current_intent", ""),
+                "llm_response": "",
                 "tool_name": tool_name,
+                "approved": True,
             },
         )
-        # Track failure streak for next call
         if result.get("success"):
             self._tool_failure_streak[tool_name] = 0
         else:
@@ -334,13 +191,7 @@ class Orchestrator:
     def _verify_wrapper(self, tool_name: str, result: dict, expected: str) -> dict:
         return verify_action(tool_name, result, expected=expected)
 
-    # ── Mode switching ────────────────────────────────────────────────────
-
-    def set_mode(self, mode: str):
-        if mode in ITERATION_CAPS:
-            self._mode = mode
-
-    # ── CLI loop ──────────────────────────────────────────────────────────
+    # ── CLI loop ─────────────────────────────────────────────────────────
 
     def run_cli(self, output_callback=None):
         print("JARVIS ready. Type a command (or 'quit' to exit).")

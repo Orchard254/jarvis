@@ -14,6 +14,7 @@ from indexer.state_monitor import monitor_loop
 logger = logging.getLogger(__name__)
 _writer = IndexWriter()
 _stop_event = threading.Event()
+_started = False
 
 def init_db():
     from core.thread_db import get_connection, close_thread_connections
@@ -46,6 +47,10 @@ def init_db():
     logger.info("PC Index DB initialized (WAL mode)")
 
 def start():
+    global _started
+    if _started:
+        return
+    _started = True
     logger.info("Starting PC Indexer...")
     init_db()
     _writer.start()

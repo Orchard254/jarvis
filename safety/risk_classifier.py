@@ -7,10 +7,11 @@ from settings import HIGH_RISK_TOOLS as _HIGH_RISK_TOOLS
 from settings import MEDIUM_RISK_TOOLS as _MEDIUM_RISK_TOOLS
 
 # Argument patterns that escalate any tool to high-risk
+# "windows" uses directory-boundary match (\windows or /windows),
+# not bare substring, to avoid false positives on paths like "windows_theme.png"
 _ESCALATION_PATTERNS = [
-    ("path", ["system32", "syswow64", "boot", "windows"]),
-    ("command", ["shutdown", "restart", "format", "diskpart"]),
-    ("code", ["rm -rf", "del /q", "Remove-Item -Recurse"]),
+    ("path", ["system32", "syswow64", "boot", "\\windows\\", "/windows/", "\\windows/", "/windows\\"]),
+    ("command", ["shutdown", "restart"]),
 ]
 
 

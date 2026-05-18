@@ -84,7 +84,7 @@ else:
 
 ### Reasoning-First Architecture:
 - Pure reasoning tasks bypass tool loops (40%+ of tasks)
-- Tool necessity classifier prevents unnecessary calls
+- LLM natively determines tool necessity (no hardcoded classifier)
 - Batched execution for required tools
 - Context preservation across interactions
 

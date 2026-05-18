@@ -109,7 +109,10 @@ logger = logging.getLogger("jarvis")
 
 def handle_exit(signum, frame):
     logger.info("Shutting down JARVIS...")
-    pc_indexer.stop()
+    try:
+        pc_indexer.stop()
+    except Exception:
+        pass
     sys.exit(0)
 
 
@@ -118,7 +121,10 @@ signal.signal(signal.SIGTERM, handle_exit)
 
 
 def _cleanup():
-    pc_indexer.stop()
+    try:
+        pc_indexer.stop()
+    except Exception:
+        pass
     try:
         from core.thread_db import close_all_connections
         close_all_connections()
@@ -163,7 +169,6 @@ def main():
     )
 
     audit_log.setup()
-    pc_indexer.start()
 
     mem = memory_manager.MemoryManager(session_id="prod_cli_01")
 

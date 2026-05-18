@@ -98,20 +98,13 @@ class ReasoningEngine:
         )
 ```
 
-### 2. Tool Necessity Classifier
+### 2. Tool Necessity (Handled by LLM)
 ```python
-class ToolNecessityClassifier:
-    """
-    Determines if a task truly requires tools or can be solved by reasoning.
-    """
-    
-    CATEGORIES = {
-        'PURE_REASONING': [
-            'logical deduction',
-            'mathematical proof (simple)',
-            'code review',
-            'algorithm design',
-            'pattern recognition',
+# No hardcoded classifier — the Director LLM decides natively
+# whether a task needs tools (via delegate) or is pure chat.
+# 
+# Director receives tools=[delegate_tool]; if it calls delegate,
+# Execution handles the rest with its own 56-tool schema set.
             'semantic analysis'
         ],
         'COMPUTATIONAL_ASSIST': [
@@ -229,12 +222,10 @@ def process_request(user_request: str) -> Response:
     trace = reasoning_engine.analyze(user_request)
     
     # Phase 2: Assess Tool Necessity
-    classifier = ToolNecessityClassifier()
-    category = classifier.classify(user_request, trace)
+    # (Handled natively by Director LLM — no hardcoded classifier)
     
-    if category == 'PURE_REASONING':
-        # Return answer based on reasoning alone
-        return synthesize_answer(trace)
+    # The Director receives a single `delegate` tool. If it calls it,
+    # Execution handles the task; otherwise Director responds directly.
     
     # Phase 3: Minimal Tool Execution (only if necessary)
     if category in ['COMPUTATIONAL_ASSIST', 'EXTERNAL_DATA_REQUIRED', 'EXECUTION_REQUIRED']:
@@ -304,7 +295,7 @@ def process_request(user_request: str) -> Response:
 ### Phase 1: Foundation (Week 1-2)
 - Implement ReasoningEngine class
 - Create reasoning-first prompts
-- Build ToolNecessityClassifier
+- (Tool necessity handled natively by Director LLM — no separate classifier needed)
 
 ### Phase 2: Optimization (Week 3-4)
 - Develop BatchedToolExecutor

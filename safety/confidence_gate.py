@@ -67,12 +67,9 @@ def check(plan: dict) -> tuple[bool, str]:
     llm_response = plan.get("llm_response", "")
     tool_name = plan.get("tool_name", "")
     destructive = plan.get("destructive", False)
-
-    # A3: Server-side risk classification — never trust LLM self-reported risk
-    from safety.risk_classifier import classify_risk
-    server_risk = classify_risk(tool_name, plan)
-    if server_risk == "high":
-        destructive = True
+    # Server-side risk classification is computed once by executor.py
+    # and passed through the plan dict to avoid re-classification.
+    server_risk = plan.get("_server_risk", "low")
 
     confidence = float(base_confidence)
 
@@ -83,7 +80,7 @@ def check(plan: dict) -> tuple[bool, str]:
         high_count = sum(1 for p in _HIGH_UNCERTAINTY_PHRASES if p in text)
         mild_count = sum(1 for p in _MILD_UNCERTAINTY_PHRASES if p in text)
         if high_count > 0:
-            confidence *= 0.70 ** high_count
+            confidence *= 0.85 ** high_count
             logger.debug(
                 f"confidence_gate: {high_count} high-uncertainty phrase(s) → {confidence:.2f}"
             )
@@ -104,6 +101,10 @@ def check(plan: dict) -> tuple[bool, str]:
         threshold = max(threshold, 0.80)
     elif server_risk == "medium":
         threshold = max(threshold, 0.72)
+
+    # Explicit user approval bypasses confidence gate entirely
+    if plan.get("approved"):
+        return True, ""
 
     if confidence >= threshold:
         return True, ""

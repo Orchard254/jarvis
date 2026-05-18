@@ -368,24 +368,3 @@ def stop() -> None:
     _get_detector().stop_listening()
 
 
-# ── Convenience functions — reference API ─────────────────────────────────────
-
-
-def get_wake_word_detection(
-    wake_words: Optional[List[str]] = None,
-    threshold: Optional[float] = None,
-) -> WakeWordDetector:
-    det = _get_detector()
-    if threshold is not None:
-        det.set_threshold(threshold)
-    return det
-
-
-def start_wake_word_detection(callback: Callable[[str], None]) -> None:
-    det = _get_detector()
-    det.add_callback(callback)
-    det.start_listening()
-
-
-def stop_wake_word_detection() -> None:
-    _get_detector().stop_listening()
