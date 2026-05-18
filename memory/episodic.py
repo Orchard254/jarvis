@@ -169,20 +169,25 @@ def prune_old(days: int = 90):
 
 def get_command_frequency(limit: int = 20) -> list[dict]:
     """Return the most frequently issued commands across all sessions."""
-    with connection_context(MEMORY_DB) as conn:
-        c = conn.cursor()
-        rows = c.execute(
-            """
-            SELECT command_text, COUNT(*) AS count
-            FROM episodes
-            WHERE event_type = 'command' AND command_text IS NOT NULL
-            GROUP BY command_text
-            ORDER BY count DESC LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+    try:
+        with connection_context(MEMORY_DB) as conn:
+            c = conn.cursor()
+            rows = c.execute(
+                """
+                SELECT command_text, COUNT(*) AS count
+                FROM episodes
+                WHERE event_type = 'command' AND command_text IS NOT NULL
+                GROUP BY command_text
+                ORDER BY count DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
 
-    return [{"command_text": row[0], "count": row[1]} for row in rows]
+        return [{"command_text": row[0], "count": row[1]} for row in rows]
+    except sqlite3.DatabaseError as e:
+        logger.error(f"Database error in get_command_frequency: {e}")
+        # Return empty list on database errors to allow system to continue
+        return []
 
 
 def search_by_similarity(query: str, limit: int = 3) -> list[dict]:

@@ -160,9 +160,18 @@ class Orchestrator:
                 return resp
 
             if self._memory:
-                self._memory.write_episodic("command", command_text=user_input)
+                try:
+                    self._memory.write_episodic("command", command_text=user_input)
+                except Exception as e:
+                    logger.error(f"Error writing episodic memory: {e}")
 
-            memory_context = self._memory.get_context_summary() if self._memory else ""
+            memory_context = ""
+            if self._memory:
+                try:
+                    memory_context = self._memory.get_context_summary()
+                except Exception as e:
+                    logger.error(f"Error getting memory context: {e}")
+                    memory_context = ""
 
             # B5: Retrieve relevant past episodes by keyword similarity
             if self._memory:
