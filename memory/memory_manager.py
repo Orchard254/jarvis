@@ -70,13 +70,17 @@ class MemoryManager:
     def get_context_summary(self) -> str:
         """Returns a short text summary of relevant preferences and frequent commands
         for prompt injection."""
-        lines = []
-        prefs = semantic.get_all()
-        if prefs:
-            pref_lines = [f"{k}: {v}" for k, v in list(prefs.items())[:5]]
-            lines.append("User preferences: " + "; ".join(pref_lines))
-        freq = episodic.get_command_frequency(limit=5)
-        if freq:
-            cmd_texts = [entry["command_text"] for entry in freq]
-            lines.append("Frequently used commands: " + "; ".join(cmd_texts))
-        return "\n".join(lines)
+        try:
+            lines = []
+            prefs = semantic.get_all()
+            if prefs:
+                pref_lines = [f"{k}: {v}" for k, v in list(prefs.items())[:5]]
+                lines.append("User preferences: " + "; ".join(pref_lines))
+            freq = episodic.get_command_frequency(limit=5)
+            if freq:
+                cmd_texts = [entry["command_text"] for entry in freq]
+                lines.append("Frequently used commands: " + "; ".join(cmd_texts))
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error in get_context_summary: {e}")
+            return ""  # Return empty string on error to allow system to continue

@@ -8,10 +8,14 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
-# Lazy import winreg at runtime (Windows-only)
-winreg = None  # type: ignore
+# Import winreg properly on Windows only
+if sys.platform == "win32":
+    import winreg  # type: ignore
+else:
+    winreg = None  # type: ignore
 
 from settings import REGISTRY_UNINSTALL_PATHS
 
@@ -19,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 
 def scan_registry():
+    """Scan Windows registry for installed applications."""
     apps = []
+    if not winreg:
+        logger.warning("winreg not available (not on Windows), skipping registry scan")
+        return apps
+    
     for hive, paths in [
         (winreg.HKEY_LOCAL_MACHINE, REGISTRY_UNINSTALL_PATHS),
         (winreg.HKEY_CURRENT_USER, REGISTRY_UNINSTALL_PATHS),

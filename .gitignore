@@ -1,2 +1,38 @@
-# Documentation
-DUAL_AGENT_ARCHITECTURE.md
+```
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database WAL and SHM files
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+
+# Local environment files
+.env*
+!.env.example
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Temporary files
+*.tmp
+*.temp
+```

@@ -75,7 +75,13 @@ _SYSTEM_PROCS = {
 # â”€â”€ Window enumeration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _get_raw_windows() -> list[dict]:
-    import win32gui, win32process, psutil
+    """Enumerate visible windows on Windows OS."""
+    try:
+        import win32gui, win32process, psutil
+    except ImportError:
+        logger.debug("win32gui/win32process/psutil not available, skipping window enumeration")
+        return []
+    
     results = []
     def callback(hwnd, _):
         try:
@@ -158,10 +164,27 @@ def read_pc_state(**kwargs) -> dict:
 # â”€â”€ Periodic capture loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def capture_state() -> dict:
+    """Capture current PC state (foreground window, taskbar apps, etc.)."""
     try:
         user_apps = _get_taskbar_apps()
         raw_windows = _get_raw_windows()
-        import win32gui, win32process, psutil
+        
+        # Try to import Windows-specific modules
+        try:
+            import win32gui, win32process, psutil
+        except ImportError:
+            logger.debug("win32gui/win32process/psutil not available, using limited state capture")
+            return {
+                "captured_at": time.time(),
+                "focused_title": "",
+                "focused_process": "",
+                "taskbar_apps": user_apps if user_apps else [],
+                "all_windows": raw_windows if raw_windows else [],
+                "success": True,
+                "limited": True,
+                "reason": "Windows-specific modules not available"
+            }
+        
         focused = ""
         focused_proc = ""
         try:
