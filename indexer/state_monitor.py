@@ -1,4 +1,4 @@
-﻿"""
+"""
 Captures live desktop state every N seconds. Caches in memory, pushes to write queue.
 """
 
@@ -14,7 +14,7 @@ _latest_snapshot = {}
 _lock = threading.Lock()
 
 
-# â”€â”€ Background task snapshot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Background task snapshot ──────────────────────────────────────────────────
 
 _bg_lock = threading.Lock()
 _bg_processes_imported = False
@@ -62,7 +62,7 @@ def _background_tasks() -> list[dict]:
     return result
 
 
-# â”€â”€ System process filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── System process filter ────────────────────────────────────────────────────
 
 _SYSTEM_PROCS = {
     "SystemSettings.exe", "ShellExperienceHost.exe", "SearchHost.exe",
@@ -72,16 +72,10 @@ _SYSTEM_PROCS = {
 }
 
 
-# â”€â”€ Window enumeration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Window enumeration ───────────────────────────────────────────────────────
 
 def _get_raw_windows() -> list[dict]:
-    """Enumerate visible windows on Windows OS."""
-    try:
-        import win32gui, win32process, psutil
-    except ImportError:
-        logger.debug("win32gui/win32process/psutil not available, skipping window enumeration")
-        return []
-    
+    import win32gui, win32process, psutil
     results = []
     def callback(hwnd, _):
         try:
@@ -111,7 +105,7 @@ def _get_taskbar_apps() -> list[dict]:
     return apps
 
 
-# â”€â”€ Clipboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Clipboard ────────────────────────────────────────────────────────────────
 
 def _get_clipboard(max_chars: int = 500) -> str:
     try:
@@ -128,7 +122,7 @@ def _get_clipboard(max_chars: int = 500) -> str:
     return ""
 
 
-# â”€â”€ Public API: full desktop snapshot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Public API: full desktop snapshot ────────────────────────────────────────
 
 def read_pc_state(**kwargs) -> dict:
     try:
@@ -161,66 +155,36 @@ def read_pc_state(**kwargs) -> dict:
         return {"success": False, "error": f"Internal error: {str(e)}"}
 
 
-# â”€â”€ Periodic capture loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Periodic capture loop ────────────────────────────────────────────────────
 
 def capture_state() -> dict:
-    """Capture current PC state (foreground window, taskbar apps, etc.)."""
+    user_apps = _get_taskbar_apps()
+    raw_windows = _get_raw_windows()
+    import win32gui, win32process, psutil
+    focused = ""
+    focused_proc = ""
     try:
-        user_apps = _get_taskbar_apps()
-        raw_windows = _get_raw_windows()
-        
-        # Try to import Windows-specific modules
-        try:
-            import win32gui, win32process, psutil
-        except ImportError:
-            logger.debug("win32gui/win32process/psutil not available, using limited state capture")
-            return {
-                "captured_at": time.time(),
-                "focused_title": "",
-                "focused_process": "",
-                "taskbar_apps": user_apps if user_apps else [],
-                "all_windows": raw_windows if raw_windows else [],
-                "success": True,
-                "limited": True,
-                "reason": "Windows-specific modules not available"
-            }
-        
-        focused = ""
-        focused_proc = ""
-        try:
-            hwnd = win32gui.GetForegroundWindow()
-            if hwnd:
-                focused = win32gui.GetWindowText(hwnd)
-                try:
-                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                    focused_proc = psutil.Process(pid).name()
-                except Exception:
-                    focused_proc = "unknown"
-        except Exception:
-            pass
-        return {
-            "captured_at": time.time(),
-            "windows_json": json.dumps(user_apps[:25]),
-            "processes_json": json.dumps(list({w["process"] for w in user_apps})[:20]),
-            "focused_app": focused,
-            "focused_process": focused_proc,
-            "app_count": len(user_apps),
-            "window_count": len(raw_windows),
-            "clipboard": _get_clipboard(),
-        }
-    except Exception as e:
-        logger.error(f"capture_state error: {e}", exc_info=True)
-        # Return minimal structure with required fields as empty JSON strings
-        return {
-            "captured_at": time.time(),
-            "windows_json": json.dumps([]),
-            "processes_json": json.dumps([]),
-            "focused_app": "",
-            "focused_process": "",
-            "app_count": 0,
-            "window_count": 0,
-            "clipboard": _get_clipboard(),
-        }
+        hwnd = win32gui.GetForegroundWindow()
+        if hwnd:
+            focused = win32gui.GetWindowText(hwnd)
+            try:
+                _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                focused_proc = psutil.Process(pid).name()
+            except Exception:
+                focused_proc = "unknown"
+    except Exception:
+        pass
+    return {
+        "captured_at": time.time(),
+        "windows_json": json.dumps(user_apps[:25]),
+        "processes_json": json.dumps(list({w["process"] for w in user_apps})[:20]),
+        "focused_app": focused,
+        "focused_process": focused_proc,
+        "app_count": len(user_apps),
+        "window_count": len(raw_windows),
+        "clipboard": _get_clipboard(),
+    }
+
 
 def monitor_loop(writer, stop_event):
     global _latest_snapshot
@@ -249,4 +213,3 @@ def get_latest() -> dict:
         except Exception:
             snap["processes"] = []
     return snap
-

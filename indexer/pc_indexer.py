@@ -3,7 +3,6 @@
 Background indexer orchestrator. Starts scanners, manages DB schema, handles lifecycle.
 """
 import logging
-import settings
 import threading
 from settings import PC_INDEX_DB, DB_BUSY_TIMEOUT, INDEX_REFRESH_APPS, INDEX_REFRESH_FILES
 from indexer.write_queue import IndexWriter
@@ -14,7 +13,6 @@ from indexer.state_monitor import monitor_loop
 logger = logging.getLogger(__name__)
 _writer = IndexWriter()
 _stop_event = threading.Event()
-_started = False
 
 def init_db():
     from core.thread_db import get_connection, close_thread_connections
@@ -47,20 +45,12 @@ def init_db():
     logger.info("PC Index DB initialized (WAL mode)")
 
 def start():
-    global _started
-    if _started:
-        return
-    _started = True
     logger.info("Starting PC Indexer...")
     init_db()
     _writer.start()
     
-    if getattr(settings, "ENABLE_BACKGROUND_SCANNING", True):
-        threading.Thread(target=_app_loop, daemon=True, name="app-scanner").start()
-        threading.Thread(target=_file_loop, daemon=True, name="file-scanner").start()
-    else:
-        logger.info("Background scanning disabled — app/file scanners not started")
-    
+    threading.Thread(target=_app_loop, daemon=True, name="app-scanner").start()
+    threading.Thread(target=_file_loop, daemon=True, name="file-scanner").start()
     threading.Thread(target=monitor_loop, args=(_writer, _stop_event), daemon=True, name="state-monitor").start()
     logger.info("PC Indexer background threads running")
 
@@ -84,4 +74,3 @@ def _file_loop():
         if not _stop_event.is_set():
             try: scan_files(_writer)
             except Exception as e: logger.error(f"File scan failed: {e}")
-

@@ -5,7 +5,7 @@ Checks:
   - Ollama connectivity (cloud + local fallback)
   - Microphone availability
   - Tesseract OCR binary
-  - Skill store DB
+  - ChromaDB / skill store DB
   - PC indexer DB
 
 Non-blocking: failures are logged as warnings; the agent starts anyway so the
@@ -32,10 +32,9 @@ def run_all() -> dict[str, bool]:
     results["ollama"] = _check_ollama()
     results["microphone"] = _check_microphone()
     results["tesseract"] = _check_tesseract()
-    results["skills_db"] = True  # Skills DB verified via SQLite
+    results["chromadb"] = _check_chromadb()
     results["pc_index_db"] = _check_pc_index_db()
     results["tool_registry"] = _check_tool_registry()
-    results["agent_registry"] = _check_agent_registry()
 
     _print_summary(results)
 
@@ -150,6 +149,26 @@ def _check_tesseract() -> bool:
         return False
 
 
+def _check_chromadb() -> bool:
+    """Verify ChromaDB / skill vector store is reachable."""
+    try:
+        from settings import SKILLS_CHROMA
+
+        from skills.skill_embedder import get_chroma_client
+
+        client = get_chroma_client(str(SKILLS_CHROMA))
+        # A lightweight heartbeat — list collections
+        client.list_collections()
+        logger.info("Health: ChromaDB OK")
+        return True
+    except ImportError:
+        logger.warning("Health: chromadb not installed — skill store unavailable")
+        return False
+    except Exception as e:
+        logger.warning(f"Health: ChromaDB check error — {e}")
+        return False
+
+
 def _check_pc_index_db() -> bool:
     """Verify the PC indexer SQLite DB is writable."""
     try:
@@ -180,10 +199,10 @@ def _check_tool_registry() -> bool:
         schemas.pop("$schema", None)
 
         import ast
-        with open(adapters_path, encoding="utf-8-sig") as f:
+        with open(adapters_path, encoding="utf-8") as f:
             tree = ast.parse(f.read())
 
-        adapter_funcs = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        adapter_funcs = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
 
         errors = []
         for tool_name in schemas:
@@ -206,22 +225,6 @@ def _check_tool_registry() -> bool:
         return True
     except Exception as e:
         logger.warning(f"Tool registry check error — {e}")
-        return False
-
-
-def _check_agent_registry() -> bool:
-    """Verify AgentRegistry has all expected agents registered."""
-    try:
-        from core.agent_registry import AgentRegistry
-        info = AgentRegistry.get_info()
-        count = info["agent_count"]
-        if count == 0:
-            logger.warning("Agent registry: no agents registered")
-            return False
-        logger.info(f"Agent registry OK — {count} agent(s) registered")
-        return True
-    except Exception as e:
-        logger.warning(f"Agent registry check error — {e}")
         return False
 
 

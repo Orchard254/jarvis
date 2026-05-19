@@ -30,13 +30,19 @@ import sys
 import time as _time
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+import yaml
 
-from settings import LLM_MODEL, MAX_CONTEXT_TOKENS
+from settings import (
+    ALLOWED_IMPORTS,
+    EXECUTE_CODE_TIMEOUT,
+    ITERATION_CAPS,
+    LLM_MODEL,
+    LLM_TOOL_SCHEMA_LIMIT,
+    LOG_FILE,
+    MAX_CONTEXT_TOKENS,
+)
 from tools import TOOL_SCHEMAS as _FULL_SCHEMAS, get_schemas_by_stage
+from skills.stdlib import STDLIB_MANIFEST
 from settings import TOOL_STAGE
 
 # Apply stage filtering — expose only tools <= TOOL_STAGE
@@ -44,10 +50,6 @@ if TOOL_STAGE > 0:
     TOOL_SCHEMAS = get_schemas_by_stage(TOOL_STAGE)
 else:
     TOOL_SCHEMAS = _FULL_SCHEMAS
-
-# Register default agents so every prompt can reference them
-from core.agent_registry import AgentRegistry, register_defaults
-register_defaults()
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,11 @@ def _hw() -> dict:
             freq = psutil.cpu_freq()
             freq_s = f"{freq.max / 1000:.1f} GHz" if freq else "?"
 
+            battery = psutil.sensors_battery()
+            battery_pct = round(battery.percent, 0) if battery else None
+            battery_plugged = battery.power_plugged if battery else None
+            battery_warn = battery_pct is not None and battery_pct < 20 and not battery_plugged
+
             hw = {
                 "cpu": f"{cpu_p}-core / {cpu_l}-thread @ {freq_s}",
                 "ram_gb": f"{ram.total / 1e9:.1f}",
@@ -103,6 +110,9 @@ def _hw() -> dict:
                 "disk_free": f"{disk.free / 1e9:.1f}",
                 "disk_pct": f"{(1 - disk.free / disk.total) * 100:.0f}",
                 "disk_warn": (disk.free / disk.total) < 0.15,
+                "battery_pct": battery_pct,
+                "battery_plugged": battery_plugged,
+                "battery_warn": battery_warn,
             }
         except Exception as exc:
             logger.debug(f"prompt_builder: hardware probe failed — {exc}")
@@ -116,6 +126,9 @@ def _hw() -> dict:
                 "disk_free": "?",
                 "disk_pct": "?",
                 "disk_warn": False,
+                "battery_pct": None,
+                "battery_plugged": None,
+                "battery_warn": False,
             }
 
         _hw_cache = hw
@@ -128,111 +141,167 @@ def _hw() -> dict:
 
 # ── Prompt cache ──────────────────────────────────────────────────────────────
 _prompt_cache: dict[str, str] = {}
-_prompt_mtimes: dict[str, float] = {}
 _PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
 
 def _load_prompt(name: str) -> str:
-    """Load a prompt template from the prompts/ directory (mtime-cached). Assembles sections."""
-    path = _PROMPT_DIR / f"{name}.yaml"
-    mtime = path.stat().st_mtime if path.exists() else 0
-    if name not in _prompt_cache or _prompt_mtimes.get(name) != mtime:
+    """Load a prompt template from the prompts/ directory (cached). Assembles sections."""
+    if name not in _prompt_cache:
+        path = _PROMPT_DIR / f"{name}.yaml"
         try:
             with open(path, encoding="utf-8") as f:
-                if yaml is None:
-                    logger.warning("yaml library not available; reading raw prompt for %s", name)
-                    # Return raw file content (unformatted) when yaml is missing
-                    return f.read()
                 data = yaml.safe_load(f) or {}
-        except Exception as exc:
+        except (yaml.YAMLError, FileNotFoundError) as exc:
             logger.warning(f"prompt_builder: failed to load '{name}': {exc}")
             return f"[{name} prompt unavailable]"
         sections = data.get("sections", {})
         _prompt_cache[name] = "\n\n".join(
             v.strip() for v in sections.values() if v.strip()
         )
-        _prompt_mtimes[name] = mtime
     return _prompt_cache[name]
 
 
-
-
-_prompt_cache_str: str = ""
-_prompt_cache_ts: float = 0.0
-_PROMPT_CACHE_TTL = 60.0
+def build_stdlib_skills_block() -> str:
+    """Build a compact reference of all skills.stdlib modules for the system prompt."""
+    lines = []
+    for mod_key, info in STDLIB_MANIFEST.items():
+        try:
+            fns = ", ".join(info.get("functions", []))
+            summary = info.get("summary", "no description")
+            module = info.get("module", mod_key)
+            lines.append(
+                f"  from {module} import {fns}\n"
+                f"      → {summary}"
+            )
+        except Exception as exc:
+            logger.debug(f"prompt_builder: skipping stdlib entry '{mod_key}' — {exc}")
+    return "\n".join(lines) if lines else "  (no stdlib skills registered)"
 
 
 def build_system_prompt() -> str:
     """
     Build the full situational-awareness system prompt.
     Hardware stats are re-read from psutil every 60 s (cached otherwise).
-    Result is cached with TTL to avoid re-formatting on every LLM call.
     """
-    global _prompt_cache_str, _prompt_cache_ts
-    if _prompt_cache_str and (_time.time() - _prompt_cache_ts) < _PROMPT_CACHE_TTL:
-        return _prompt_cache_str
-
     hw = _hw()
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    home = Path.home()
+
+    imports_str = ", ".join(sorted(ALLOWED_IMPORTS))
 
     ram_flag = "  ⚠ LOW — avoid memory-heavy ops" if hw["ram_warn"] else ""
     disk_flag = "  ⚠ LOW — avoid large downloads" if hw["disk_warn"] else ""
+    battery_str = f"{hw['battery_pct']}%{' (plugged)' if hw['battery_plugged'] else ''}" if hw['battery_pct'] is not None else "N/A"
+    battery_flag = "  ⚠ LOW — consider plugging in" if hw["battery_warn"] else ""
 
-    info = AgentRegistry.get_info()
-
+    tool_list = _build_tool_list()
     prompt_template = _load_prompt("jarvis")
-    try:
-        _prompt_cache_str = prompt_template.format(
-            model=LLM_MODEL,
-            ctx_k=MAX_CONTEXT_TOKENS // 1000,
-            now=now,
-            hostname=socket.gethostname(),
-            user=os.environ.get("USERNAME", os.environ.get("USER", "user")),
-            os_name=platform.system(),
-            os_ver=platform.version()[:30],
-            desktop=str(Path.home() / "Desktop"),
-            downloads=str(Path.home() / "Downloads"),
-            documents=str(Path.home() / "Documents"),
-            ram_flag=ram_flag,
-            disk_flag=disk_flag,
-            cpu=hw["cpu"],
-            ram_gb=hw["ram_gb"],
-            ram_free=hw["ram_free"],
-            ram_pct=hw["ram_pct"],
-            disk_gb=hw["disk_gb"],
-            disk_free=hw["disk_free"],
-            disk_pct=hw["disk_pct"],
-            tool_count=info["tool_count"],
-            tool_domains=info["tool_domains"],
-            agent_count=info["agent_count"],
-            agent_info=info["agent_info"],
-        )
-        _prompt_cache_ts = _time.time()
-        return _prompt_cache_str
-    except Exception as exc:
-        logger.warning(f"build_system_prompt formatting failed: {exc}")
-        return prompt_template
+
+    replacements = {
+        "{model}": LLM_MODEL,
+        "{ctx_k}": str(MAX_CONTEXT_TOKENS // 1000),
+        "{now}": now,
+        "{hostname}": socket.gethostname(),
+        "{user}": os.environ.get("USERNAME", os.environ.get("USER", "user")),
+        "{os_name}": platform.system(),
+        "{os_ver}": platform.version()[:30],
+        "{cpu}": hw["cpu"],
+        "{ram_gb}": hw["ram_gb"],
+        "{ram_free}": hw["ram_free"],
+        "{ram_used_pct}": hw["ram_pct"],
+        "{ram_flag}": ram_flag,
+        "{disk_gb}": hw["disk_gb"],
+        "{disk_free}": hw["disk_free"],
+        "{disk_pct}": hw["disk_pct"],
+        "{disk_flag}": disk_flag,
+        "{battery}": battery_str,
+        "{battery_flag}": battery_flag,
+        "{desktop}": str(home / "Desktop"),
+        "{downloads}": str(home / "Downloads"),
+        "{documents}": str(home / "Documents"),
+        "{tool_list}": tool_list,
+    }
+    for key, value in replacements.items():
+        prompt_template = prompt_template.replace(key, value)
+    return prompt_template
 
 
-def build_executor_prompt() -> str:
-    info = AgentRegistry.get_info()
-    prompt_template = _load_prompt("executor")
-    tool_list = "\n".join(
-        f"  {s['function']['name']}: {s['function'].get('description', '').split('.')[0]}"
-        for s in TOOL_SCHEMAS
-    )
-    try:
-        return prompt_template.format(
-            tools=tool_list,
-            tool_count=info["tool_count"],
-            agent_info=info["agent_info"],
-        )
-    except Exception as exc:
-        logger.warning(f"build_executor_prompt formatting failed: {exc}")
-        return prompt_template
+def _build_tool_list() -> str:
+    """Compact tool catalog: name + one-line description for Jarvis."""
+    lines = []
+    for s in TOOL_SCHEMAS:
+        fn = s.get("function", {})
+        name = fn.get("name", "?")
+        desc = fn.get("description", "")
+        # First sentence only
+        desc = desc.split(".")[0].strip()
+        lines.append(f"  {name}: {desc}")
+    return "\n".join(lines)
 
 
+def _effective_schema_cap(max_tools: int | None) -> int:
+    """Compute how many schemas may be attached to one chat request."""
+    total = len(TOOL_SCHEMAS)
+    if max_tools is not None:
+        if max_tools <= 0:
+            return total
+        return min(max_tools, total)
+    lim = LLM_TOOL_SCHEMA_LIMIT
+    if lim <= 0:
+        return total
+    return min(lim, total)
 
 
+def build_state_context(state: dict | None) -> str:
+    """Format a SystemState snapshot as a compact context block for the LLM."""
+    if not state:
+        return ""
+    parts = []
+    win = state.get("active_window", "")
+    mouse = state.get("mouse_position", (0, 0))
+    cpu = state.get("cpu_percent", 0)
+    ram = state.get("ram_percent", 0)
+    disk = state.get("disk_percent", 0)
+    bat = state.get("battery_percent")
+    act = state.get("last_action", "")
+    ts = state.get("timestamp", "")
+
+    if win:
+        parts.append(f"Active window: {win}")
+    parts.append(f"Mouse: ({mouse[0]}, {mouse[1]})")
+    parts.append(f"CPU: {cpu}% | RAM: {ram}% | Disk: {disk}%")
+    if bat is not None:
+        plugged = state.get("battery_plugged")
+        parts.append(f"Battery: {bat}%{' (plugged)' if plugged else ''}")
+    if act:
+        parts.append(f"Last action: {act} @ {ts[:19]}")
+    return " | ".join(parts)
 
 
+def get_pruned_schemas(
+    suggested_tools: list[str],
+    max_tools: int | None = None,
+) -> list[dict]:
+    """
+    Return tool schemas for the LLM ``tools`` payload.
+
+    When ``max_tools`` is None, ``LLM_TOOL_SCHEMA_LIMIT`` applies: non-positive
+    means no cap (full ``TOOL_SCHEMAS``). When pruning is active, suggested
+    tools are included first, then remaining slots follow registry order.
+    """
+    cap = _effective_schema_cap(max_tools)
+    if not suggested_tools:
+        return TOOL_SCHEMAS[:cap]
+
+    suggested_set = set(suggested_tools)
+    pruned = [s for s in TOOL_SCHEMAS if s["function"]["name"] in suggested_set]
+    already = {s["function"]["name"] for s in pruned}
+    for schema in TOOL_SCHEMAS:
+        if len(pruned) >= cap:
+            break
+        name = schema["function"]["name"]
+        if name not in already:
+            pruned.append(schema)
+            already.add(name)
+
+    return pruned[:cap]

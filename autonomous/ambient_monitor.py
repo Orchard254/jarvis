@@ -10,6 +10,8 @@ import logging
 import platform
 import threading
 import time
+import asyncio
+from core.event_bus import event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +35,7 @@ except ImportError:
     DISK_WARN_THRESHOLD = 92
     MONITOR_INTERVAL = 15
 
-def _notify_user(message: str, urgency: str = "normal") -> dict:
-    logger.warning(f"ambient_monitor [{urgency.upper()}]: {message}")
-    return {"success": False, "reason": "notify_user_unavailable"}
+
 
 _COOLDOWN = 600  # 10 minutes between repeat alerts
 
@@ -45,7 +45,11 @@ _cpu_spike_start: "float | None" = None
 _last_alert: dict[str, float] = {}
 
 
-def start() -> dict:
+_main_event_loop: asyncio.AbstractEventLoop | None = None
+
+def start(main_loop: asyncio.AbstractEventLoop) -> dict:
+    global _thread, _main_event_loop
+    _main_event_loop = main_loop
     global _thread
     if not AMBIENT_MONITORING:
         return {"success": False, "reason": "disabled_by_settings"}
@@ -54,7 +58,7 @@ def start() -> dict:
     if _thread and _thread.is_alive():
         return {"success": True, "reason": "already_running"}
     _stop_event.clear()
-    _thread = threading.Thread(target=_monitor_loop, daemon=True, name="ambient-monitor")
+    _thread = threading.Thread(target=_monitor_loop, daemon=True, name="ambient-monitor", args=(_main_event_loop,))
     _thread.start()
     return {"success": True}
 
@@ -67,19 +71,18 @@ def stop() -> dict:
     return {"success": True}
 
 
-def _alert(event_key: str, message: str, urgency: str):
+def _alert(event_key: str, message: str, urgency: str, main_loop: asyncio.AbstractEventLoop):
     now = time.time()
     if now - _last_alert.get(event_key, 0) < _COOLDOWN:
         return
-    try:
-        _notify_user(message, urgency)
-    except Exception as exc:
-        logger.error(f"ambient_monitor: notify_user raised: {exc}")
+    # Publish event instead of direct notification
+    event_payload = {"message": message, "urgency": urgency, "event_key": event_key}
+    asyncio.run_coroutine_threadsafe(event_bus.publish("system_alert", event_payload, "ambient_monitor"), main_loop)
     _last_alert[event_key] = now
     logger.info(f"ambient_monitor: alert [{urgency}] — {message}")
 
 
-def _check_battery():
+def _check_battery(main_loop: asyncio.AbstractEventLoop):
     if _psutil is None:
         return
     battery = _psutil.sensors_battery()
@@ -92,12 +95,12 @@ def _check_battery():
         _last_alert.pop("battery_warn", None)
         return
     if pct <= BATTERY_CRITICAL_THRESHOLD:
-        _alert("battery_critical", f"Battery critically low: {pct:.0f}% — plug in immediately!", "high")
+        _alert("battery_critical", f"Battery critically low: {pct:.0f}% — plug in immediately!", "high", main_loop)
     elif pct <= BATTERY_WARN_THRESHOLD:
-        _alert("battery_warn", f"Battery low: {pct:.0f}% remaining.", "normal")
+        _alert("battery_warn", f"Battery low: {pct:.0f}% remaining.", "normal", main_loop)
 
 
-def _check_cpu(now: float):
+def _check_cpu(now: float, main_loop: asyncio.AbstractEventLoop):
     global _cpu_spike_start
     if _psutil is None:
         return
@@ -106,12 +109,12 @@ def _check_cpu(now: float):
         if _cpu_spike_start is None:
             _cpu_spike_start = now
         elif now - _cpu_spike_start >= CPU_SPIKE_DURATION:
-            _alert("cpu_spike", f"CPU at {cpu_pct:.0f}% for {int(now - _cpu_spike_start)}s", "high")
+            _alert("cpu_spike", f"CPU at {cpu_pct:.0f}% for {int(now - _cpu_spike_start)}s", "high", main_loop)
     else:
         _cpu_spike_start = None
 
 
-def _check_memory():
+def _check_memory(main_loop: asyncio.AbstractEventLoop):
     if _psutil is None:
         return
     mem = _psutil.virtual_memory()
@@ -121,10 +124,10 @@ def _check_memory():
         return
     free_mb = mem.available // (1024 ** 2)
     urgency = "high" if pct >= 95 else "normal"
-    _alert("memory_warn", f"Memory at {pct:.0f}% ({free_mb} MB free).", urgency)
+    _alert("memory_warn", f"Memory at {pct:.0f}% ({free_mb} MB free).", urgency, main_loop)
 
 
-def _check_disk():
+def _check_disk(main_loop: asyncio.AbstractEventLoop):
     if _psutil is None:
         return
     root = "C:\\" if platform.system() == "Windows" else "/"
@@ -138,29 +141,30 @@ def _check_disk():
         return
     free_gb = usage.free / (1024 ** 3)
     urgency = "high" if pct >= 98 else "normal"
-    _alert("disk_warn", f"Disk {root!r} is {pct:.0f}% full ({free_gb:.1f} GB free).", urgency)
+    _alert("disk_warn", f"Disk {root!r} is {pct:.0f}% full ({free_gb:.1f} GB free).", urgency, main_loop)
 
 
-def _monitor_loop():
+def _monitor_loop(main_loop: asyncio.AbstractEventLoop):
     logger.info("ambient_monitor: loop started")
     if _psutil is not None:
         _psutil.cpu_percent(interval=None)
+
     while not _stop_event.is_set():
         now = time.time()
         try:
-            _check_battery()
+            _check_battery(main_loop)
         except Exception:
             pass
         try:
-            _check_cpu(now)
+            _check_cpu(now, main_loop)
         except Exception:
             pass
         try:
-            _check_memory()
+            _check_memory(main_loop)
         except Exception:
             pass
         try:
-            _check_disk()
+            _check_disk(main_loop)
         except Exception:
             pass
         _stop_event.wait(MONITOR_INTERVAL)

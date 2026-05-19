@@ -36,10 +36,6 @@ from settings import LOG_FILE, LOG_LEVEL, LOGS_DIR
 
 LOGS_DIR.mkdir(exist_ok=True)
 Path("data").mkdir(exist_ok=True)
-from settings import NOTES_DIR, REMINDERS_DIR, CONFIG_DIR
-NOTES_DIR.mkdir(parents=True, exist_ok=True)
-REMINDERS_DIR.mkdir(parents=True, exist_ok=True)
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 _fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _console_handler = PromptAwareStreamHandler(sys.stdout)
@@ -109,10 +105,7 @@ logger = logging.getLogger("jarvis")
 
 def handle_exit(signum, frame):
     logger.info("Shutting down JARVIS...")
-    try:
-        pc_indexer.stop()
-    except Exception:
-        pass
+    pc_indexer.stop()
     sys.exit(0)
 
 
@@ -121,13 +114,10 @@ signal.signal(signal.SIGTERM, handle_exit)
 
 
 def _cleanup():
+    pc_indexer.stop()
     try:
-        pc_indexer.stop()
-    except Exception:
-        pass
-    try:
-        from core.thread_db import close_all_connections
-        close_all_connections()
+        from memory.db_pool import shutdown_pools as _sp
+        _sp()
     except Exception:
         pass
 
@@ -148,12 +138,14 @@ def main():
 
     from settings import OLLAMA_API_KEY
 
-    if not OLLAMA_API_KEY:
-        print("\n⚠️  WARNING: OLLAMA_API_KEY is not set in .env!")
-        print(
-            "    Please set your API key in .env: OLLAMA_API_KEY=your_key_here"
-        )
-        print("    Continuing with limited functionality...\n")
+    if OLLAMA_API_KEY and OLLAMA_API_KEY.count(".") == 1 and len(OLLAMA_API_KEY) >= 32:
+        import re as _re
+        if _re.match(r"^[a-f0-9]{32}\.[a-zA-Z0-9_-]{20,}$", OLLAMA_API_KEY):
+            pass  # valid key format, OK
+        else:
+            print("\n⚠️  WARNING: OLLAMA_API_KEY appears to be a leaked placeholder!")
+            print("    Please update your .env file with your actual API key from https://ollama.com/settings/api-keys")
+            print("    Continuing with placeholder (limited functionality)...\n")
 
     # ── Startup health check ───────────────────────────────────────────────
     from core.health_check import run_all as run_health_check
@@ -169,6 +161,7 @@ def main():
     )
 
     audit_log.setup()
+    pc_indexer.start()
 
     mem = memory_manager.MemoryManager(session_id="prod_cli_01")
 

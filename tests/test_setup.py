@@ -10,7 +10,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 def test_settings_imports():
     import settings
     required_keys = [
-        "LLM_MODEL", "MAX_CONTEXT_TOKENS", "VERIFICATION_MODE",
+        "LLM_MODEL", "MAX_CONTEXT_TOKENS", "ITERATION_CAPS", "VERIFICATION_MODE",
         "MAX_RAM_PERCENT", "DB_WAL_MODE", "DB_BUSY_TIMEOUT", "TOOL_RETRY_LIMITS",
         "EXECUTE_CODE_TIMEOUT", "SKILL_MATCH_THRESHOLD", "WAKE_WORD", "LOG_FILE"
     ]
@@ -44,8 +44,7 @@ def test_jarvis_entry_point():
     assert hasattr(module, "main")
 
 def test_env_file_exists():
-    if not (PROJECT_ROOT / ".env").exists():
-        pytest.skip(".env not required for CI")
+    assert (PROJECT_ROOT / ".env").exists() or not "Skipping — .env not required for CI"
 
 def test_requirements_has_critical_deps():
     reqs = (PROJECT_ROOT / "requirements.txt").read_text().lower()

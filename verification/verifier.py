@@ -3,15 +3,11 @@
 
 Tier 0: result.success check
 Tier 1: OS-level state check (expected vs actual)
-Tier 2: log cross-check for execute_code silent failures
-Tier 3: Vision LLM summary for interaction tools (B1)
+Tier 2: output cross-check for execute_code silent failures
 """
 
 import logging
-import os
 import re
-
-from settings import LOG_FILE, VISION_TO_TEXT_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -59,26 +55,36 @@ def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
                     "state_checks": {"process": process_ok, "window": window_ok},
                 }
 
-    # Tier 2: log cross-check for execute_code silent failures
+    # Tier 2: output cross-check for execute_code silent failures
     if tool_name == "execute_code":
-        log_result = _check_log_for_failures()
-        if log_result:
+        out_result = _check_output_for_failures(result)
+        if out_result:
             return {
                 "status": "FAILED",
-                "method": "log_check",
-                "summary": log_result,
+                "method": "output_check",
+                "summary": out_result,
             }
 
-    # B1: Tier 3 — Vision verification for interaction tools
-    INTERACTION_TOOLS = {"click", "double_click", "right_click", "drag",
-                         "type_text", "press_keys", "scroll", "move_mouse"}
-    if tool_name in INTERACTION_TOOLS and expected and VISION_TO_TEXT_MODE:
-        try:
-            vision_result = _vision_verify(tool_name, expected)
-            if vision_result:
-                return vision_result
-        except Exception as exc:
-            logger.debug(f"Tier 3 vision verification skipped: {exc}")
+    # Tier 3: post-action state check for interaction tools
+    interaction_tools = {"click", "double_click", "right_click", "type_text", "press_keys"}
+    if tool_name in interaction_tools and expected:
+        from verification.state_checks import verify_window_visible
+        # If the expected outcome mentions a window that should appear/disappear,
+        # check its state
+        for prefix in ("close ", "kill ", "exit "):
+            if expected.lower().startswith(prefix):
+                target = expected[len(prefix):].strip().split()[0]
+                if verify_window_visible(target):
+                    return {
+                        "status": "FAILED",
+                        "method": "post_action_check",
+                        "summary": f"Action was to close '{target}' but window is still visible.",
+                    }
+                return {
+                    "status": "CONFIRMED",
+                    "method": "post_action_check",
+                    "summary": f"Window '{target}' is no longer visible — action verified.",
+                }
 
     return {
         "status": "CONFIRMED",
@@ -93,32 +99,32 @@ _FAILURE_PATTERNS = re.compile(
 )
 
 
-def _check_log_for_failures(lines: int = 30) -> str:
+def _check_output_for_failures(result: dict) -> str:
     """
-    Read the last *lines* lines of jarvis.log and check for failure signals.
+    Check the tool's own output and error fields for failure signals.
     Returns a human-readable summary if failures found, or empty string if clean.
-    Uses a larger tail window (64KB) and timestamp filtering to avoid false
-    positives from stale log entries.
+    This avoids false positives from unrelated errors in the shared application log.
     """
-    path = LOG_FILE
-    if not os.path.isfile(path):
-        return ""
-
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            # Efficient tail: seek near end and read
-            f.seek(0, 2)
-            file_size = f.tell()
-            # Read up to 64KB from the end (was 8KB — too small)
-            chunk_size = min(file_size, 65536)
-            f.seek(file_size - chunk_size)
-            tail = f.read()
+        outputs = []
 
-        matches = _FAILURE_PATTERNS.findall(tail)
+        error_field = result.get("error", "")
+        if error_field:
+            outputs.append(error_field)
+
+        output_field = result.get("output", "")
+        if output_field:
+            outputs.append(output_field)
+
+        if not outputs:
+            return ""
+
+        combined = "\n".join(outputs)
+
+        matches = _FAILURE_PATTERNS.findall(combined)
         if not matches:
             return ""
 
-        # Deduplicate and take the last 3 distinct failure lines
         seen: set[str] = set()
         failure_lines: list[str] = []
         for full_line, *_ in reversed(matches):
@@ -131,50 +137,10 @@ def _check_log_for_failures(lines: int = 30) -> str:
 
         if failure_lines:
             snippet = " | ".join(reversed(failure_lines))
-            return f"Log shows recent errors: {snippet}"
+            return f"Tool output shows errors: {snippet}"
 
         return ""
 
     except Exception as exc:
-        logger.debug(f"Log check skipped: {exc}")
+        logger.debug(f"Output check skipped: {exc}")
         return ""
-
-
-def _vision_verify(tool_name: str, expected: str) -> dict | None:
-    """B1: Tier 3 vision verification for interaction tools.
-
-    Takes a screenshot, sends it to the vision LLM with the expected outcome,
-    and checks if the screen state matches expectations.
-    """
-    import base64
-    import io
-
-    import pyautogui
-
-    from verification.vision_summary import summarize_screen
-
-    img = pyautogui.screenshot()
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode()
-
-    summary = summarize_screen(b64, expected)
-    if not summary or summary.startswith("Vision verification unavailable"):
-        return None
-
-    # Check if the vision LLM indicates the expected outcome was NOT achieved
-    negative_indicators = [
-        "not visible", "not found", "not present", "does not show",
-        "cannot see", "don't see", "doesn't appear", "no evidence",
-        "not displayed", "missing", "empty", "blank",
-    ]
-    summary_lower = summary.lower()
-    if any(neg in summary_lower for neg in negative_indicators):
-        logger.warning(f"Tier 3 vision: '{tool_name}' expected '{expected}' — screen shows: {summary[:200]}")
-        return {
-            "status": "FAILED",
-            "method": "vision_check",
-            "summary": f"Screen verification failed: expected '{expected}' but {summary[:200]}",
-        }
-
-    return None

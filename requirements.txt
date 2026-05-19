@@ -25,6 +25,28 @@ openwakeword
 pytesseract
 pytest
 
+# Data analysis & math
+numpy
+pandas
+
+# Config parsing (loaded unconditionally)
+PyYAML
+
+# TTS engines (conditional — edge-tts primary, pyttsx3 fallback)
+edge-tts
+pygame
+pyttsx3
+
+# Audio control (conditional)
+pycaw
+comtypes
+screen-brightness-control
+
+# Progress bars (optional, used during skill embedding)
+tqdm
+
 # Calendar (time_calendar tool) — both optional; ics backend needs icalendar
 icalendar
 tzlocal
+pyperclip
+watchdog

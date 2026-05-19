@@ -324,3 +324,18 @@ def _fallback_pyttsx3(text: str, blocking: bool) -> bool:
         logger.error(f"TTS(pyttsx3 fallback): failed — {exc}")
         return False
 
+
+def _fallback_piper(text: str, blocking: bool) -> bool:
+    """Delegate to the Piper module, then fall back to pyttsx3 on failure."""
+    logger.info("TTS: trying Piper, will fall back to pyttsx3")
+    try:
+        from output.tts_piper import speak_piper  # noqa: PLC0415
+
+        result = speak_piper(text, blocking)
+        if not result:
+            logger.info("TTS: Piper returned False, falling back to pyttsx3")
+            return _fallback_pyttsx3(text, blocking)
+        return result
+    except Exception as exc:
+        logger.warning(f"TTS(piper): failed ({exc}), falling back to pyttsx3")
+        return _fallback_pyttsx3(text, blocking)

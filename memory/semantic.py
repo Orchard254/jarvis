@@ -9,8 +9,7 @@ import json
 import logging
 import time
 
-from core.thread_db import connection_context
-from settings import MEMORY_DB
+from memory.db_pool import get_semantic_connection
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ def init_db():
         )
     """
     
-    with connection_context(MEMORY_DB) as conn:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         c.execute(schema)
         conn.commit()
@@ -37,7 +36,7 @@ def init_db():
 
 def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
     """Insert or replace a preference (was named 'set', which shadowed the builtin)."""
-    with connection_context(MEMORY_DB) as conn:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         c.execute(
             """
@@ -53,7 +52,7 @@ def upsert(key: str, value, confidence: float = 1.0, source: str = "explicit"):
 
 def fetch(key: str, default=None):
     """Return a preference value by key (was named 'get', which shadowed the builtin)."""
-    with connection_context(MEMORY_DB) as conn:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         row = c.execute(
             "SELECT value FROM preferences WHERE key = ?", (key,)
@@ -65,7 +64,7 @@ def fetch(key: str, default=None):
 
 
 def get_all() -> dict:
-    with connection_context(MEMORY_DB) as conn:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         rows = c.execute("SELECT key, value FROM preferences").fetchall()
     
@@ -141,7 +140,7 @@ def infer_if_consistent(key: str, observed_value, min_occurrences: int = 5):
     value_json = json.dumps(observed_value)
     now = time.time()
     
-    with connection_context(MEMORY_DB) as conn:
+    with get_semantic_connection() as conn:
         c = conn.cursor()
         # Ensure the tally table exists (created lazily alongside the main schema)
         c.execute("""

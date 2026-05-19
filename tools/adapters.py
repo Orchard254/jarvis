@@ -1,5 +1,5 @@
 """
-Tool adapters â€” maps clean schema tool names to Python implementations.
+Tool adapters — maps clean schema tool names to Python implementations.
 Each function accepts **kwargs (unpacked by safety executor), returns dict.
 """
 import datetime
@@ -11,104 +11,24 @@ import shutil
 import webbrowser
 from pathlib import Path
 
-import psutil
-
-# Defer pyautogui import to runtime to avoid DISPLAY errors on Linux/headless systems
-pyautogui = None  # type: ignore
-
-# Defer pygetwindow import to runtime (Windows-only)
-gw = None  # type: ignore
-
-# Stub for pyautogui if missing
-if pyautogui is None:
-    class _PyAutoGuiStub:
-        FAILSAFE = True
-        @staticmethod
-        def screenshot(region=None):
-            class DummyImg:
-                width = 0
-                height = 0
-                def save(self, buf, format):
-                    pass
-            return DummyImg()
-        @staticmethod
-        def click(x=None, y=None, button='left'):
-            pass
-        @staticmethod
-        def write(text):
-            pass
-        @staticmethod
-        def press(key):
-            pass
-        @staticmethod
-        def hotkey(*keys):
-            pass
-        @staticmethod
-        def scroll(clicks):
-            pass
-        @staticmethod
-        def doubleClick(x=None, y=None):
-            pass
-        @staticmethod
-        def rightClick(x=None, y=None):
-            pass
-        @staticmethod
-        def moveTo(x, y):
-            pass
-        @staticmethod
-        def drag(x, y):
-            pass
-    pyautogui = _PyAutoGuiStub()
-
-# Stub for pygetwindow if missing
-if gw is None:
-    class _GWWindowStub:
-        def __init__(self, title=''):
-            self.title = title
-            self.visible = True
-            self.isMinimized = False
-        def restore(self):
-            pass
-        def activate(self):
-            pass
-        @property
-        def _hWnd(self):
-            return 0
-
-    class _GWStub:
-        @staticmethod
-        def getActiveWindow():
-            return None
-        @staticmethod
-        def getAllWindows():
-            return []
-        @staticmethod
-        def getWindowsWithTitle(title):
-            return []
-    gw = _GWStub()
-
 from tools.system.execute_code import execute_code as _run_code
-from tools.comm.schedule_tool import schedule as _schedule
-from tools.voice.listen import listen as _listen
-from tools.comm.time_calendar import time_calendar as _time_calendar
 
-
-def _safe_resolve_path(path: str) -> str | None:
-    """Resolve and validate a path is within allowed directories. Returns resolved path or None."""
+# DPI awareness for coordinate accuracy on Windows
+_SCREEN_SCALE = 1.0
+if os.name == "nt":
     try:
-        resolved = Path(path).resolve()
-        home = Path.home().resolve()
-        allowed = [home, Path(os.environ.get("TEMP", "C:\\Windows\\Temp")).resolve()]
-        if any(str(resolved).startswith(str(a)) for a in allowed):
-            return str(resolved)
-    except (OSError, ValueError, RuntimeError):
+        import ctypes
+        ctypes.windll.user32.SetProcessDPIAware()
+        hdc = ctypes.windll.user32.GetDC(0)
+        dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
+        ctypes.windll.user32.ReleaseDC(0, hdc)
+        _SCREEN_SCALE = dpi / 96.0
+    except Exception:
         pass
-    return None
 
 
 def open_app(**kwargs) -> dict:
-    # LLM sometimes hallucinates app_name instead of name — normalise both
-    name = kwargs.get("name") or kwargs.get("app_name", "")
+    name = kwargs.get("name", "")
     # Try 1: os.startfile (works for PATH-resolvable names like 'notepad', 'calc')
     try:
         os.startfile(name) if os.name == "nt" else subprocess.Popen([name])
@@ -148,12 +68,7 @@ def open_app(**kwargs) -> dict:
 
 
 def _resolve_exe(exe_path: str | None, app_name: str) -> str | None:
-    """Resolve a DB path to an executable. Returns best-effort path or None.
-
-    - Direct .exe/.lnk paths returned as-is (may exist, may be permission-restricted)
-    - Directory paths searched for first matching .exe
-    - Falls back to shutil.which() for PATH-resolvable apps (e.g. 'notepad', 'calc')
-    """
+    """Resolve a DB path to an executable. Returns best-effort path or None."""
     if exe_path:
         cleaned = exe_path.strip().strip('"')
         if cleaned:
@@ -202,15 +117,7 @@ def close_app(**kwargs) -> dict:
 
 def get_active_window(**kwargs) -> dict:
     try:
-        # Lazy import pygetwindow at runtime (Windows-only)
-        global gw
-        if gw is None:
-            try:
-                import pygetwindow as gw_mod
-                gw = gw_mod
-            except (ImportError, OSError):
-                return {"success": False, "error": "pygetwindow not available (Windows only)"}
-        
+        import pygetwindow as gw
         win = gw.getActiveWindow()
         if win:
             return {"success": True, "title": win.title, "process": "unknown"}
@@ -219,39 +126,56 @@ def get_active_window(**kwargs) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def _find_window(title: str = "", process: str = ""):
-    """Find a window by title or process name. Returns window object or None."""
-    # Lazy import pygetwindow at runtime (Windows-only)
-    global gw
-    if gw is None:
-        try:
-            import pygetwindow as gw_mod
-            gw = gw_mod
-        except (ImportError, OSError):
-            return None
-    
-    target = None
-    if title:
+def get_window_bounds(**kwargs) -> dict:
+    """Get the position and size of a window by title."""
+    title = kwargs.get("title", "")
+    try:
+        import pygetwindow as gw
         for w in gw.getWindowsWithTitle(title):
-            target = w
-            break
-    if not target and process:
-        for w in gw.getAllWindows():
-            if process.lower() in w.title.lower():
-                target = w
-                break
-    return target
+            return {
+                "success": True,
+                "title": w.title,
+                "left": w.left,
+                "top": w.top,
+                "width": w.width,
+                "height": w.height,
+                "right": w.right,
+                "bottom": w.bottom,
+            }
+        return {"success": False, "error": "window not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def focus_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
-    process = kwargs.get("process", "")
+    process = kwargs.get("process", "") or kwargs.get("process_name", "")
     try:
-        target = _find_window(title, process)
+        import pygetwindow as gw
+        target = None
+        if title:
+            for w in gw.getWindowsWithTitle(title):
+                target = w; break
+        if not target and title and not process:
+            if " - " in title:
+                app_hint = title.rsplit(" - ", 1)[-1].strip()
+                if app_hint:
+                    for w in gw.getAllWindows():
+                        if w.title.lower().endswith(f" - {app_hint.lower()}"):
+                            target = w; break
+                    if not target:
+                        for w in gw.getAllWindows():
+                            if app_hint.lower() in w.title.lower():
+                                target = w; break
+        if not target and process:
+            for w in gw.getAllWindows():
+                if process.lower() in w.title.lower():
+                    target = w; break
         if target:
             if target.isMinimized:
                 target.restore()
             target.activate()
+            # Win32 fallback for reliable foreground switching
             try:
                 import ctypes
                 hwnd = target._hWnd
@@ -259,7 +183,15 @@ def focus_window(**kwargs) -> dict:
                 ctypes.windll.user32.SetForegroundWindow(hwnd)
             except Exception:
                 pass
-            return {"success": True, "status": f"focused {target.title}"}
+            return {
+                "success": True,
+                "status": f"focused {target.title}",
+                "title": target.title,
+                "left": target.left,
+                "top": target.top,
+                "width": target.width,
+                "height": target.height,
+            }
         return {"success": False, "error": "window not found"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -267,6 +199,7 @@ def focus_window(**kwargs) -> dict:
 
 def list_running_apps(**kwargs) -> dict:
     try:
+        import pygetwindow as gw
         windows = []
         for w in gw.getAllWindows():
             if w.title.strip():
@@ -278,6 +211,7 @@ def list_running_apps(**kwargs) -> dict:
 
 def get_system_stats(**kwargs) -> dict:
     try:
+        import psutil
         cpu = psutil.cpu_percent(interval=0.5)
         ram = psutil.virtual_memory()
         disk = psutil.disk_usage("/" if os.name != "nt" else "C:\\")
@@ -298,16 +232,7 @@ def get_system_stats(**kwargs) -> dict:
 
 def screenshot(**kwargs) -> dict:
     try:
-        # Lazy import pyautogui at runtime to avoid DISPLAY errors on Linux/headless
-        global pyautogui
-        if pyautogui is None or isinstance(pyautogui, type(_PyAutoGuiStub)):
-            try:
-                import pyautogui as pag
-                pyautogui = pag
-            except (ImportError, OSError) as e:
-                # Use stub if import fails
-                pass
-        
+        import pyautogui
         region = kwargs.get("region")
         if region:
             img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
@@ -324,17 +249,9 @@ def screenshot(**kwargs) -> dict:
 
 def read_screen(**kwargs) -> dict:
     try:
+        import pyautogui
         import pytesseract
         from PIL import Image
-        # Lazy import pyautogui at runtime to avoid DISPLAY errors on Linux/headless
-        global pyautogui
-        if pyautogui is None or isinstance(pyautogui, type(_PyAutoGuiStub)):
-            try:
-                import pyautogui as pag
-                pyautogui = pag
-            except (ImportError, OSError):
-                pass
-        
         region = kwargs.get("region")
         if region:
             img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
@@ -348,23 +265,9 @@ def read_screen(**kwargs) -> dict:
 
 def click(**kwargs) -> dict:
     try:
+        import pyautogui
         x, y = kwargs.get("x"), kwargs.get("y")
         button = kwargs.get("button", "left")
-        verify_text = kwargs.get("verify_text", "")
-
-        # B2: Two-phase grounding â€” if verify_text is provided, cross-reference with OCR
-        if verify_text and x is not None and y is not None:
-            try:
-                ocr_result = detect_ui_elements(text=verify_text, element_type="text")
-                if ocr_result.get("success") and ocr_result.get("elements"):
-                    for elem in ocr_result["elements"]:
-                        bx, by, bw, bh = elem.get("x", 0), elem.get("y", 0), elem.get("w", 0), elem.get("h", 0)
-                        # Use OCR center as the verified target
-                        x, y = bx + bw // 2, by + bh // 2
-                        break
-            except Exception:
-                pass  # Fall through to raw coordinates on any failure
-
         failsafe_was = pyautogui.FAILSAFE
         pyautogui.FAILSAFE = False
         try:
@@ -378,37 +281,10 @@ def click(**kwargs) -> dict:
 
 def type_text(**kwargs) -> dict:
     try:
+        import pyautogui
         text = kwargs.get("text", "")
-        # Before typing, ensure we're typing into the correct application
-        # window, not the terminal (which can steal focus via stdout output
-        # between agent intent rounds). If the active window is a terminal,
-        # find and refocus the most recent non-terminal application window.
-        import ctypes
-        win = gw.getActiveWindow()
-        if win and win.title:
-            term_indicators = ("powershell", "cmd", "command prompt", "terminal",
-                               "windows powershell", "ps.exe")
-            if any(ind in win.title.lower() for ind in term_indicators):
-                # Active window is a terminal — find a non-terminal window to refocus
-                for w in gw.getAllWindows():
-                    if not w.title.strip():
-                        continue
-                    if any(ind in w.title.lower() for ind in term_indicators):
-                        continue
-                    try:
-                        ctypes.windll.user32.SetForegroundWindow(w._hWnd)
-                        ctypes.windll.user32.BringWindowToTop(w._hWnd)
-                        break
-                    except Exception:
-                        continue
-            else:
-                # Not a terminal — ensure it has focus anyway
-                try:
-                    ctypes.windll.user32.SetForegroundWindow(win._hWnd)
-                    ctypes.windll.user32.BringWindowToTop(win._hWnd)
-                except Exception:
-                    pass
-        pyautogui.write(text)
+        interval = kwargs.get("interval", 0.02)
+        pyautogui.write(text, interval=interval)
         if kwargs.get("enter"):
             pyautogui.press("enter")
         return {"success": True, "typed": len(text)}
@@ -418,10 +294,9 @@ def type_text(**kwargs) -> dict:
 
 def press_keys(**kwargs) -> dict:
     try:
+        import pyautogui
         raw = kwargs.get("keys", "")
         keys = raw.lower().replace(" ", "").split("+")
-        # pyautogui.hotkey only understands named keys (ctrl, shift, etc.)
-        # For single characters like "/", use write() instead
         if len(keys) == 1 and len(keys[0]) == 1:
             pyautogui.write(keys[0])
         else:
@@ -433,6 +308,7 @@ def press_keys(**kwargs) -> dict:
 
 def scroll(**kwargs) -> dict:
     try:
+        import pyautogui
         clicks = kwargs.get("clicks", -3)
         pyautogui.scroll(clicks)
         return {"success": True, "clicks": clicks}
@@ -454,32 +330,79 @@ def wait(**kwargs) -> dict:
         while time.time() < deadline:
             if _check_wait_condition(condition, target):
                 elapsed = int((time.time() - started) * 1000)
-                return {"success": True, "message": f"condition met: {condition} '{target}'", "data": {"condition": condition, "target": target, "duration_ms": elapsed}}
+                return {
+                    "success": True,
+                    "message": f"condition met: {condition} '{target}'",
+                    "data": {"condition": condition, "target": target, "duration_ms": elapsed},
+                }
             time.sleep(poll_interval)
         elapsed = int((time.time() - started) * 1000)
-        return {"success": False, "message": f"Timeout waiting for {condition} '{target}' after {timeout_ms}ms", "data": {"condition": condition, "target": target, "timeout_ms": timeout_ms, "duration_ms": elapsed}, "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        return {
+            "success": False,
+            "message": f"Timeout waiting for {condition} '{target}' after {timeout_ms}ms",
+            "data": {"condition": condition, "target": target, "timeout_ms": timeout_ms, "duration_ms": elapsed},
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
 
     time.sleep(ms / 1000.0)
-    return {"success": True, "message": f"waited {ms}ms", "data": {"duration_ms": ms}, "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    return {
+        "success": True,
+        "message": f"waited {ms}ms",
+        "data": {"duration_ms": ms},
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
 
 
 def _check_wait_condition(condition: str, target: str) -> bool:
+    """
+    Check a named wait condition.
+
+    Supported conditions:
+      process_running  — target is a process name substring
+      process_gone     — target is a process name substring
+      cpu_idle         — target is a numeric threshold (e.g. "20" means CPU < 20%)
+      window_visible   — target is a window title substring (checked via pygetwindow)
+      window_exists    — alias for window_visible
+      text_visible     — target is a text string; OCR-checks the screen for its presence
+    """
     import psutil
     target_lower = target.lower()
 
     if condition == "process_running":
-        return any(target_lower in p.name().lower() for p in psutil.process_iter(["name"]))
+        return any(target_lower in (p.info.get("name") or "").lower()
+                   for p in psutil.process_iter(["name"]))
+
     if condition == "process_gone":
-        return not any(target_lower in p.name().lower() for p in psutil.process_iter(["name"]))
+        return not any(target_lower in (p.info.get("name") or "").lower()
+                       for p in psutil.process_iter(["name"]))
+
     if condition == "cpu_idle":
+        # FIX: target must be parsed as a float, not compared as a string
         try:
-            return psutil.cpu_percent(interval=0.1) < float(target_lower)
-        except ValueError:
-            return False
-    if condition in ("window_visible", "text_visible", "window_exists"):
+            threshold = float(target)
+        except (ValueError, TypeError):
+            threshold = 20.0
+        return psutil.cpu_percent(interval=0.2) < threshold
+
+    if condition in ("window_visible", "window_exists"):
         try:
             import pygetwindow as gw
-            return len(gw.getWindowsWithTitle(target_lower)) > 0
+            return any(
+                target_lower in w.title.lower()
+                for w in gw.getAllWindows()
+                if w.title.strip()
+            )
+        except Exception:
+            return False
+
+    if condition == "text_visible":
+        # FIX: Use OCR to actually check screen text, not window titles
+        try:
+            import pyautogui
+            import pytesseract
+            img = pyautogui.screenshot()
+            screen_text = pytesseract.image_to_string(img).lower()
+            return target_lower in screen_text
         except Exception:
             return False
 
@@ -490,7 +413,6 @@ def search_files(**kwargs) -> dict:
     try:
         pattern = kwargs.get("pattern", "")
         location = kwargs.get("location", str(Path.home() / "Desktop"))
-        # Prevent path traversal
         location_resolved = Path(location).resolve()
         home = Path.home().resolve()
         if not str(location_resolved).startswith(str(home)):
@@ -513,11 +435,8 @@ def search_files(**kwargs) -> dict:
 def open_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        resolved = _safe_resolve_path(path)
-        if not resolved:
-            return {"success": False, "error": f"Path not allowed: {path}"}
-        os.startfile(resolved)
-        return {"success": True, "status": f"opened {resolved}"}
+        os.startfile(path)
+        return {"success": True, "status": f"opened {path}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -525,13 +444,17 @@ def open_file(**kwargs) -> dict:
 def read_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        resolved = _safe_resolve_path(path)
-        if not resolved:
-            return {"success": False, "error": f"Path not allowed: {path}"}
         max_chars = kwargs.get("max_chars", 5000)
-        with open(resolved, encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read(max_chars)
-        return {"success": True, "content": content, "truncated": len(content) >= max_chars}
+        total_size = os.path.getsize(path)
+        return {
+            "success": True,
+            "content": content,
+            "truncated": len(content) >= max_chars,
+            "total_bytes": total_size,
+            "chars_read": len(content),
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -540,13 +463,10 @@ def write_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
         content = kwargs.get("content", "")
-        resolved = _safe_resolve_path(path)
-        if not resolved:
-            return {"success": False, "error": f"Path not allowed: {path}"}
-        os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
-        with open(resolved, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return {"success": True, "status": f"wrote {len(content)} chars to {resolved}"}
+        return {"success": True, "status": f"wrote {len(content)} chars to {path}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -554,17 +474,14 @@ def write_file(**kwargs) -> dict:
 def delete_file(**kwargs) -> dict:
     try:
         path = kwargs.get("path", "")
-        resolved = _safe_resolve_path(path)
-        if not resolved:
-            return {"success": False, "error": f"Path not allowed: {path}"}
-        if os.path.isdir(resolved):
+        if os.path.isdir(path):
             try:
-                os.rmdir(resolved)
+                os.rmdir(path)
             except OSError:
-                return {"success": False, "error": f"Directory not empty: {resolved}. Use execute_code with caution for recursive deletes."}
+                return {"success": False, "error": f"Directory not empty: {path}. Use execute_code with caution for recursive deletes."}
         else:
-            os.remove(resolved)
-        return {"success": True, "status": f"deleted {resolved}"}
+            os.remove(path)
+        return {"success": True, "status": f"deleted {path}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -573,15 +490,9 @@ def move_file(**kwargs) -> dict:
     try:
         src = kwargs.get("source", "")
         dst = kwargs.get("destination", "")
-        src_resolved = _safe_resolve_path(src)
-        dst_resolved = _safe_resolve_path(dst)
-        if not src_resolved:
-            return {"success": False, "error": f"Source path not allowed: {src}"}
-        if not dst_resolved:
-            return {"success": False, "error": f"Destination path not allowed: {dst}"}
-        os.makedirs(os.path.dirname(dst_resolved) or ".", exist_ok=True)
-        shutil.move(src_resolved, dst_resolved)
-        return {"success": True, "status": f"moved {src_resolved} to {dst_resolved}"}
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        shutil.move(src, dst)
+        return {"success": True, "status": f"moved {src} to {dst}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -605,34 +516,169 @@ def execute_code(**kwargs) -> dict:
     )
 
 
-_WEB_SEARCH_TEMPLATE = """\
-import json, urllib.request, urllib.parse, re
-q = urllib.parse.quote({query_repr})
-url = f"https://html.duckduckgo.com/html/?q={{q}}"
-try:
-    req = urllib.request.Request(url, headers={{"User-Agent": "Mozilla/5.0"}})
-    resp = urllib.request.urlopen(req, timeout=15)
-    html = resp.read().decode("utf-8", errors="replace")
+# ---------------------------------------------------------------------------
+# web_search — multi-tier fallback chain
+#
+# Tier 1: DuckDuckGo HTML scraping (no API key, works out of the box)
+# Tier 2: Brave Search API  (requires BRAVE_API_KEY in .env)
+# Tier 3: Google Custom Search (requires GOOGLE_API_KEY + GOOGLE_CX in .env)
+#
+# Each tier returns a list of {"title", "url", "snippet"} dicts.
+# ---------------------------------------------------------------------------
+
+def _ddg_search(query: str, n: int) -> list[dict]:
+    """Scrape DuckDuckGo HTML results. No API key required."""
+    import urllib.request
+    import urllib.parse
+    import html
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    q = urllib.parse.quote_plus(query)
+    url = f"https://html.duckduckgo.com/html/?q={q}"
+    req = urllib.request.Request(url, headers=headers)
+    resp = urllib.request.urlopen(req, timeout=12)
+    body = resp.read().decode("utf-8", errors="replace")
+
     results = []
-    # Parse result blocks from DDG HTML search results
-    for block in re.findall(r'<a rel="nofollow" class="result__a" href="(.*?)".*?>(.*?)</a>', html, re.DOTALL)[:{n_repr}]:
-        url = block[0]
-        title = re.sub(r"<.*?>", "", block[1]).strip()
-        results.append({{"title": title[:200], "url": url}})
-    print(json.dumps({{"results": results, "count": len(results)}}))
-except Exception as e:
-    print(json.dumps({{"error": str(e), "results": [], "count": 0}}))
-"""
+    # Extract result blocks: <a class="result__a" href="...">title</a>
+    # and snippet: <a class="result__snippet">...</a>
+    link_pattern = re.compile(
+        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+        re.DOTALL,
+    )
+    snippet_pattern = re.compile(
+        r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
+        re.DOTALL,
+    )
+    links = link_pattern.findall(body)
+    snippets = [m.group(1) for m in snippet_pattern.finditer(body)]
+
+    for i, (href, title) in enumerate(links[:n]):
+        # DDG may wrap real URL in a redirect — extract uddg param if present
+        real_url = href
+        uddg_match = re.search(r"uddg=([^&]+)", href)
+        if uddg_match:
+            real_url = urllib.parse.unquote(uddg_match.group(1))
+
+        clean_title = re.sub(r"<[^>]+>", "", title).strip()
+        clean_title = html.unescape(clean_title)
+        snippet = ""
+        if i < len(snippets):
+            snippet = re.sub(r"<[^>]+>", "", snippets[i]).strip()
+            snippet = html.unescape(snippet)
+
+        if real_url and clean_title:
+            results.append({"title": clean_title, "url": real_url, "snippet": snippet})
+
+    return results
+
+
+def _brave_search(query: str, n: int, api_key: str) -> list[dict]:
+    """Brave Search API — requires BRAVE_API_KEY."""
+    import urllib.request
+    import urllib.parse
+    import json
+
+    q = urllib.parse.quote_plus(query)
+    url = f"https://api.search.brave.com/res/v1/web/search?q={q}&count={n}"
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": api_key,
+    })
+    resp = urllib.request.urlopen(req, timeout=12)
+    data = json.loads(resp.read())
+    results = []
+    for item in data.get("web", {}).get("results", [])[:n]:
+        results.append({
+            "title": item.get("title", ""),
+            "url": item.get("url", ""),
+            "snippet": item.get("description", ""),
+        })
+    return results
+
+
+def _google_search(query: str, n: int, api_key: str, cx: str) -> list[dict]:
+    """Google Custom Search API — requires GOOGLE_API_KEY + GOOGLE_CX."""
+    import urllib.request
+    import urllib.parse
+    import json
+
+    params = urllib.parse.urlencode({"key": api_key, "cx": cx, "q": query, "num": min(n, 10)})
+    url = f"https://www.googleapis.com/customsearch/v1?{params}"
+    resp = urllib.request.urlopen(url, timeout=12)
+    data = json.loads(resp.read())
+    results = []
+    for item in data.get("items", [])[:n]:
+        results.append({
+            "title": item.get("title", ""),
+            "url": item.get("link", ""),
+            "snippet": item.get("snippet", ""),
+        })
+    return results
 
 
 def web_search(**kwargs) -> dict:
+    """
+    Search the web using the best available backend.
+
+    Priority:
+      1. Brave Search API  (BRAVE_API_KEY in env)
+      2. Google Custom Search (GOOGLE_API_KEY + GOOGLE_CX in env)
+      3. DuckDuckGo HTML scraping (always available, no key needed)
+    """
     query = kwargs.get("query", "")
-    n = kwargs.get("max_results", 5)
-    code = _WEB_SEARCH_TEMPLATE.format(
-        query_repr=repr(query),
-        n_repr=repr(n),
-    )
-    return _run_code(code=code, language="python", timeout=20)
+    n = int(kwargs.get("max_results", 5))
+
+    if not query:
+        return {"success": False, "error": "query is required"}
+
+    errors = []
+
+    # Tier 1 — Brave
+    brave_key = os.environ.get("BRAVE_API_KEY", "")
+    if brave_key:
+        try:
+            results = _brave_search(query, n, brave_key)
+            if results:
+                return {"success": True, "results": results, "count": len(results), "source": "brave"}
+        except Exception as e:
+            errors.append(f"brave: {e}")
+
+    # Tier 2 — Google
+    google_key = os.environ.get("GOOGLE_API_KEY", "")
+    google_cx = os.environ.get("GOOGLE_CX", "")
+    if google_key and google_cx:
+        try:
+            results = _google_search(query, n, google_key, google_cx)
+            if results:
+                return {"success": True, "results": results, "count": len(results), "source": "google"}
+        except Exception as e:
+            errors.append(f"google: {e}")
+
+    # Tier 3 — DuckDuckGo HTML (always attempted)
+    try:
+        results = _ddg_search(query, n)
+        if results:
+            return {"success": True, "results": results, "count": len(results), "source": "duckduckgo"}
+        return {
+            "success": False,
+            "error": "No results returned from DuckDuckGo",
+            "prior_errors": errors,
+        }
+    except Exception as e:
+        errors.append(f"duckduckgo: {e}")
+        return {
+            "success": False,
+            "error": f"All search backends failed: {'; '.join(errors)}",
+        }
 
 
 def open_url(**kwargs) -> dict:
@@ -644,33 +690,235 @@ def open_url(**kwargs) -> dict:
         return {"success": False, "error": str(e)}
 
 
-_FETCH_TEMPLATE = """\
-import urllib.request, html.parser
-class P(html.parser.HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.text = []
-    def handle_data(self, d):
-        self.text.append(d)
-p = P()
-try:
-    resp = urllib.request.urlopen({url_repr}, timeout=10)
-    p.feed(resp.read().decode("utf-8", errors="replace"))
-    result = " ".join(p.text)[:{n_repr}]
-    print(result)
-except Exception as e:
-    print(f"Error: {{e}}")
-"""
-
-
 def fetch_page(**kwargs) -> dict:
+    """
+    Fetch a webpage and return clean text content.
+
+    Improvements over the old template-based version:
+    - Proper User-Agent so sites don't block us
+    - Strips script/style tags before extracting text
+    - Returns structured metadata (url, title, char_count)
+    - Respects max_chars without cutting mid-word
+    """
+    import urllib.request
+    import urllib.error
+    import html as html_lib
+    import re as _re
+
     url = kwargs.get("url", "")
-    n = kwargs.get("max_chars", 10000)
-    code = _FETCH_TEMPLATE.format(
-        url_repr=repr(url),
-        n_repr=repr(n),
-    )
-    return _run_code(code=code, language="python", timeout=15)
+    max_chars = int(kwargs.get("max_chars", 12000))
+
+    if not url:
+        return {"success": False, "error": "url is required"}
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=15)
+        raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return {"success": False, "error": f"HTTP {e.code}: {e.reason}", "url": url}
+    except Exception as e:
+        return {"success": False, "error": str(e), "url": url}
+
+    # Extract title
+    title_match = _re.search(r"<title[^>]*>(.*?)</title>", raw, _re.IGNORECASE | _re.DOTALL)
+    title = html_lib.unescape(title_match.group(1).strip()) if title_match else ""
+
+    # Remove script, style, nav, footer, header blocks — noise for LLM
+    cleaned = _re.sub(r"<(script|style|nav|footer|header|noscript)[^>]*>.*?</\1>", "", raw,
+                      flags=_re.DOTALL | _re.IGNORECASE)
+
+    # Strip remaining HTML tags
+    text = _re.sub(r"<[^>]+>", " ", cleaned)
+
+    # Collapse whitespace
+    text = _re.sub(r"[ \t]+", " ", text)
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    text = html_lib.unescape(text).strip()
+
+    truncated = len(text) > max_chars
+    if truncated:
+        # Cut at last word boundary
+        cut = text[:max_chars]
+        last_space = cut.rfind(" ")
+        text = cut[:last_space] if last_space > 0 else cut
+
+    return {
+        "success": True,
+        "url": url,
+        "title": title,
+        "content": text,
+        "char_count": len(text),
+        "truncated": truncated,
+    }
+
+
+def detect_ui_elements(**kwargs) -> dict:
+    """
+    Detect UI elements on screen using pytesseract image_to_data.
+
+    Returns structured elements with bounding boxes and center coordinates,
+    so the LLM can call click(x=elem['center_x'], y=elem['center_y']) directly.
+
+    element_type filter:
+      'all'    — return everything with confidence >= min_confidence
+      'button' — heuristic: short text (1-4 words), ALL CAPS, or surrounded by whitespace
+      'text'   — any detected text
+      'input'  — not reliably detectable via OCR; use vision_query instead
+    """
+    try:
+        import pyautogui
+        import pytesseract
+        from PIL import Image
+
+        region = kwargs.get("region")
+        element_type = kwargs.get("element_type", "all")
+        search_text = (kwargs.get("text") or "").lower().strip()
+        min_confidence = float(kwargs.get("min_confidence", 50))
+
+        # Capture screen (or region)
+        offset_x, offset_y = 0, 0
+        if region:
+            img = pyautogui.screenshot(
+                region=(region["left"], region["top"], region["width"], region["height"])
+            )
+            offset_x = region["left"]
+            offset_y = region["top"]
+        else:
+            img = pyautogui.screenshot()
+
+        # Use image_to_data for bounding boxes
+        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+
+        elements = []
+        n_boxes = len(data["text"])
+        for i in range(n_boxes):
+            word = (data["text"][i] or "").strip()
+            conf = float(data["conf"][i])
+
+            if not word or conf < min_confidence:
+                continue
+
+            x = data["left"][i] + offset_x
+            y = data["top"][i] + offset_y
+            w = data["width"][i]
+            h = data["height"][i]
+            center_x = int((x + w // 2) / _SCREEN_SCALE)
+            center_y = int((y + h // 2) / _SCREEN_SCALE)
+
+            elem = {
+                "text": word,
+                "confidence": round(conf, 1),
+                "bbox": {"left": x, "top": y, "width": w, "height": h},
+                "center_x": center_x,
+                "center_y": center_y,
+            }
+
+            # Apply element_type filter
+            if element_type == "button":
+                # Heuristic: short, ALL CAPS or title-case, reasonably sized
+                is_short = len(word.split()) <= 4
+                is_caps = word.isupper() or word.istitle()
+                if not (is_short and (is_caps or len(word) <= 10)):
+                    continue
+            elif element_type == "tab":
+                # Heuristic: tab-like elements are near top of screen/region,
+                # short text, small vertical extent (typically 20-40px tall)
+                is_near_top = (y - offset_y) < 120
+                is_short_text = len(word.split()) <= 8 and len(word) <= 60
+                is_tab_height = h <= 80
+                if not (is_near_top and is_short_text and is_tab_height):
+                    continue
+            elif element_type == "input":
+                # OCR can't reliably detect input fields; pass everything through
+                # and let the LLM figure it out from context
+                pass
+
+            # Apply text search filter
+            if search_text and search_text not in word.lower():
+                continue
+
+            elements.append(elem)
+
+        # Merge adjacent words into phrases (same line, close x positions)
+        merged = _merge_adjacent_elements(elements)
+
+        return {
+            "success": True,
+            "elements": merged,
+            "count": len(merged),
+            "note": (
+                "Each element has center_x/center_y — pass directly to click(). "
+                "For images or icons, use vision_query instead."
+            ),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _merge_adjacent_elements(elements: list[dict]) -> list[dict]:
+    """
+    Merge horizontally adjacent OCR words on the same line into phrases.
+    This reduces 'OK Cancel Apply' (3 elements) into reasonable groups.
+    """
+    if not elements:
+        return elements
+
+    merged = []
+    used = set()
+
+    for i, elem in enumerate(elements):
+        if i in used:
+            continue
+        group = [elem]
+        used.add(i)
+
+        for j, other in enumerate(elements):
+            if j in used or j == i:
+                continue
+            # Same approximate line (top within ±8px) and close horizontally
+            same_line = abs(other["bbox"]["top"] - elem["bbox"]["top"]) <= 8
+            adjacent_x = (
+                other["bbox"]["left"] <=
+                elem["bbox"]["left"] + elem["bbox"]["width"] + 40
+            )
+            if same_line and adjacent_x:
+                group.append(other)
+                used.add(j)
+
+        if len(group) == 1:
+            merged.append(elem)
+        else:
+            # Build a merged phrase element
+            all_text = " ".join(g["text"] for g in group)
+            min_left = min(g["bbox"]["left"] for g in group)
+            min_top = min(g["bbox"]["top"] for g in group)
+            max_right = max(g["bbox"]["left"] + g["bbox"]["width"] for g in group)
+            max_bottom = max(g["bbox"]["top"] + g["bbox"]["height"] for g in group)
+            merged.append({
+                "text": all_text,
+                "confidence": round(sum(g["confidence"] for g in group) / len(group), 1),
+                "bbox": {
+                    "left": min_left,
+                    "top": min_top,
+                    "width": max_right - min_left,
+                    "height": max_bottom - min_top,
+                },
+                "center_x": int((min_left + max_right) // 2 / _SCREEN_SCALE),
+                "center_y": int((min_top + max_bottom) // 2 / _SCREEN_SCALE),
+            })
+
+    return merged
 
 
 def store_memory(**kwargs) -> dict:
@@ -709,9 +957,17 @@ def speak(**kwargs) -> dict:
 
 def minimize_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
-    process = kwargs.get("process", "")
+    process = kwargs.get("process", "") or kwargs.get("process_name", "")
     try:
-        target = _find_window(title, process)
+        import pygetwindow as gw
+        target = None
+        if title:
+            for w in gw.getWindowsWithTitle(title):
+                target = w; break
+        if not target and process:
+            for w in gw.getAllWindows():
+                if process.lower() in w.title.lower():
+                    target = w; break
         if target:
             target.minimize()
             return {"success": True, "status": f"minimized {target.title}"}
@@ -722,9 +978,17 @@ def minimize_window(**kwargs) -> dict:
 
 def maximize_window(**kwargs) -> dict:
     title = kwargs.get("title", "")
-    process = kwargs.get("process", "")
+    process = kwargs.get("process", "") or kwargs.get("process_name", "")
     try:
-        target = _find_window(title, process)
+        import pygetwindow as gw
+        target = None
+        if title:
+            for w in gw.getWindowsWithTitle(title):
+                target = w; break
+        if not target and process:
+            for w in gw.getAllWindows():
+                if process.lower() in w.title.lower():
+                    target = w; break
         if target:
             target.maximize()
             return {"success": True, "status": f"maximized {target.title}"}
@@ -735,6 +999,7 @@ def maximize_window(**kwargs) -> dict:
 
 def double_click(**kwargs) -> dict:
     try:
+        import pyautogui
         x, y = kwargs.get("x"), kwargs.get("y")
         pyautogui.doubleClick(x, y)
         return {"success": True, "status": f"double-clicked ({x}, {y})"}
@@ -744,6 +1009,7 @@ def double_click(**kwargs) -> dict:
 
 def right_click(**kwargs) -> dict:
     try:
+        import pyautogui
         x, y = kwargs.get("x"), kwargs.get("y")
         pyautogui.rightClick(x, y)
         return {"success": True, "status": f"right-clicked ({x}, {y})"}
@@ -753,11 +1019,13 @@ def right_click(**kwargs) -> dict:
 
 def move_mouse(**kwargs) -> dict:
     try:
+        import pyautogui
         x, y = kwargs.get("x"), kwargs.get("y")
+        duration = kwargs.get("duration", 0.2)
         failsafe_was = pyautogui.FAILSAFE
         pyautogui.FAILSAFE = False
         try:
-            pyautogui.moveTo(x, y)
+            pyautogui.moveTo(x, y, duration=duration)
         finally:
             pyautogui.FAILSAFE = failsafe_was
         return {"success": True, "status": f"moved to ({x}, {y})"}
@@ -767,10 +1035,12 @@ def move_mouse(**kwargs) -> dict:
 
 def drag(**kwargs) -> dict:
     try:
+        import pyautogui
         sx, sy = kwargs.get("start_x"), kwargs.get("start_y")
         ex, ey = kwargs.get("end_x"), kwargs.get("end_y")
+        duration = kwargs.get("duration", 0.3)
         pyautogui.moveTo(sx, sy)
-        pyautogui.drag(ex - sx, ey - sy)
+        pyautogui.drag(ex - sx, ey - sy, duration=duration)
         return {"success": True, "status": f"dragged from ({sx},{sy}) to ({ex},{ey})"}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -791,6 +1061,7 @@ def set_volume(**kwargs) -> dict:
 def get_process_info(**kwargs) -> dict:
     name = kwargs.get("name", "")
     try:
+        import psutil
         procs = []
         for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "status", "create_time"]):
             if name.lower() in p.info["name"].lower():
@@ -818,32 +1089,202 @@ def download_file(**kwargs) -> dict:
         import urllib.request
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         urllib.request.urlretrieve(url, path)
-        return {"success": True, "status": f"downloaded to {path}"}
+        size = os.path.getsize(path)
+        return {"success": True, "status": f"downloaded to {path}", "size_bytes": size}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-def detect_ui_elements(**kwargs) -> dict:
+def get_battery(**kwargs) -> dict:
     try:
-        import pytesseract
-        from PIL import Image
-        region = kwargs.get("region")
+        import psutil
+        battery = psutil.sensors_battery()
+        if battery is None:
+            return {"success": True, "battery_percent": None, "plugged_in": None,
+                    "message": "No battery detected (desktop or VM)"}
+        secs = battery.secsleft
+        time_str = None
+        if secs and secs > 0:
+            h, m = divmod(int(secs) // 60, 60)
+            time_str = f"{h}h {m}m remaining" if h else f"{m}m remaining"
+        return {
+            "success": True,
+            "battery_percent": round(battery.percent, 1),
+            "plugged_in": battery.power_plugged,
+            "time_remaining": time_str,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def list_installed_apps(**kwargs) -> dict:
+    query = kwargs.get("query", "").lower()
+    try:
+        db_path = Path(__file__).parent.parent / "indexer" / "db" / "pc_index.db"
+        if not db_path.exists():
+            return {"success": False, "error": "App index not built yet. Run the PC indexer first."}
+        import sqlite3
+        conn = sqlite3.connect(str(db_path))
+        try:
+            if query:
+                cur = conn.execute(
+                    "SELECT name, exe_path FROM apps WHERE LOWER(name) LIKE ? LIMIT 30",
+                    (f"%{query}%",),
+                )
+            else:
+                cur = conn.execute("SELECT name, exe_path FROM apps LIMIT 50")
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+        apps = [{"name": r[0], "exe_path": r[1]} for r in rows]
+        return {"success": True, "apps": apps, "count": len(apps)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def set_brightness(**kwargs) -> dict:
+    level = kwargs.get("level", 50)
+    try:
+        import screen_brightness_control as sbc
+        sbc.set_brightness(max(0, min(100, level)))
+        return {"success": True, "status": f"brightness set to {level}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def minimize_all_except(**kwargs) -> dict:
+    exclude_titles = [t.lower() for t in kwargs.get("exclude_titles", [])]
+    try:
+        import pygetwindow as gw
+        minimized = []
+        for w in gw.getAllWindows():
+            if not w.title.strip() or not w.visible:
+                continue
+            if any(ex in w.title.lower() for ex in exclude_titles):
+                continue
+            try:
+                w.minimize()
+                minimized.append(w.title)
+            except Exception:
+                pass
+        return {"success": True, "minimized": minimized, "count": len(minimized)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def vision_query(**kwargs) -> dict:
+    question = kwargs.get("question", "")
+    region = kwargs.get("region")
+    try:
+        import pyautogui
+        import io
+        import base64
         if region:
-            img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
+            img = pyautogui.screenshot(
+                region=(region["left"], region["top"], region["width"], region["height"])
+            )
         else:
             img = pyautogui.screenshot()
-        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-        elements = []
-        for i in range(len(data["text"])):
-            if data["text"][i].strip():
-                elements.append({
-                    "text": data["text"][i],
-                    "x": data["left"][i], "y": data["top"][i],
-                    "w": data["width"][i], "h": data["height"][i],
-                })
-        return {"success": True, "elements": elements, "count": len(elements)}
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+
+        from brain import ollama_client
+        from settings import LLM_VISION_MODEL, VISION_TIMEOUT
+        result = ollama_client.chat(
+            messages=[
+                {
+                    "role": "user",
+                    "content": question,
+                    "images": [b64],
+                }
+            ],
+            model=LLM_VISION_MODEL,
+            temperature=0.1,
+            timeout=VISION_TIMEOUT,
+            max_retries=1,
+        )
+        answer = result.get("content", "")
+        return {"success": True, "answer": answer, "question": question}
+    except Exception as e:
+        # Fallback: OCR-based answer
+        try:
+            import pyautogui
+            import pytesseract
+            img = pyautogui.screenshot()
+            text = pytesseract.image_to_string(img)
+            return {
+                "success": True,
+                "answer": f"[Vision model unavailable, OCR fallback]\nScreen text:\n{text[:2000]}",
+                "question": question,
+                "fallback": True,
+            }
+        except Exception as ocr_err:
+            return {"success": False, "error": f"vision_query failed: {e}; OCR fallback: {ocr_err}"}
+
+
+def create_file(**kwargs) -> dict:
+    try:
+        path = kwargs.get("path", "")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        Path(path).touch()
+        return {"success": True, "status": f"created {path}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def schedule(**kwargs) -> dict:
+    from tools.comm.schedule_tool import schedule as _sched
+    return _sched(**kwargs)
+
+
+def listen(**kwargs) -> dict:
+    from tools.voice.listen import listen as _listen
+    return _listen(
+        prompt=kwargs.get("prompt", ""),
+        timeout_seconds=kwargs.get("timeout_seconds", 10),
+        speak_prompt=kwargs.get("speak_prompt", True),
+    )
+
+
+def time_calendar(**kwargs) -> dict:
+    from tools.comm.time_calendar import time_calendar as _tc
+    return _tc(**kwargs)
+
+
+def data_analysis(**kwargs) -> dict:
+    data = kwargs.get("data", "")
+    operations = kwargs.get("operations", "describe")
+    code = f"""
+import pandas as pd
+import io
+import json
+
+data = {repr(data)}
+ops = {repr(operations)}
+
+try:
+    df = pd.read_csv(io.StringIO(data))
+except Exception:
+    try:
+        df = pd.DataFrame(eval(data))
+    except Exception as e:
+        print(json.dumps({{"error": f"Could not parse data: {{e}}"}}))
+        raise SystemExit(1)
+
+results = {{}}
+if "describe" in ops or ops == "describe":
+    results["describe"] = df.describe().to_dict()
+if "head" in ops:
+    results["head"] = df.head().to_dict()
+if "correlation" in ops:
+    results["correlation"] = df.corr(numeric_only=True).to_dict()
+if "shape" in ops:
+    results["shape"] = {{"rows": df.shape[0], "cols": df.shape[1], "columns": list(df.columns)}}
+
+print(json.dumps(results, default=str))
+"""
+    return _run_code(code=code, language="python", timeout=30)
 
 
 def update_memory(**kwargs) -> dict:
@@ -853,226 +1294,229 @@ def update_memory(**kwargs) -> dict:
 
 def summarize_session(**kwargs) -> dict:
     from tools.memory import memory
-    return memory(action="summary", limit=kwargs.get("limit", 10))
+    return memory(action="search", query="", limit=kwargs.get("limit", 10))
 
 
-def get_battery(**kwargs) -> dict:
+# ---------------------------------------------------------------------------
+# Clipboard tools
+# ---------------------------------------------------------------------------
+
+def read_clipboard(**kwargs) -> dict:
+    """
+    Read the current contents of the Windows clipboard.
+
+    Tries pyperclip first (cross-platform), then falls back to
+    a PowerShell one-liner so no extra package is required.
+    """
+    # Tier 1 — pyperclip (if installed)
     try:
-        battery = psutil.sensors_battery()
-        if battery is None:
-            return {"success": True, "battery_percent": None, "plugged_in": None, "status": "No battery detected"}
-        return {
-            "success": True,
-            "battery_percent": round(battery.percent, 1),
-            "plugged_in": battery.power_plugged,
-            "charging": battery.power_plugged if battery.power_plugged is not None else False,
-            "status": f"{battery.percent:.0f}% {'plugged in' if battery.power_plugged else 'on battery'}",
-        }
+        import pyperclip
+        text = pyperclip.paste()
+        return {"success": True, "text": text, "length": len(text)}
+    except Exception:
+        pass
+
+    # Tier 2 — PowerShell (Windows, no extra deps)
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+            capture_output=True, text=True, timeout=5
+        )
+        text = result.stdout.rstrip("\n")
+        return {"success": True, "text": text, "length": len(text)}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+def write_clipboard(**kwargs) -> dict:
+    """
+    Write text to the Windows clipboard.
+
+    Tries pyperclip first, then PowerShell fallback.
+    """
+    text = kwargs.get("text", "")
+
+    # Tier 1 — pyperclip
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        return {"success": True, "status": f"copied {len(text)} chars to clipboard"}
+    except Exception:
+        pass
+
+    # Tier 2 — PowerShell
+    try:
+        escaped = text.replace("'", "''")
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", f"Set-Clipboard -Value '{escaped}'"],
+            capture_output=True, timeout=5
+        )
+        return {"success": True, "status": f"copied {len(text)} chars to clipboard"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Toast notification tool
+# ---------------------------------------------------------------------------
+
+def notify(**kwargs) -> dict:
+    """
+    Send a Windows desktop toast notification.
+
+    FRIDAY uses this to proactively alert the user when a long task
+    finishes, something critical is detected, or a scheduled reminder fires.
+
+    Tries win10toast → PowerShell BalloonTip → msg command in that order.
+    """
+    title = kwargs.get("title", "F.R.I.D.A.Y.")
+    message = kwargs.get("message", "")
+    duration = int(kwargs.get("duration", 5))
+
+    if not message:
+        return {"success": False, "error": "message is required"}
+
+    # Tier 1 — win10toast (pip install win10toast)
+    try:
+        from win10toast import ToastNotifier
+        toaster = ToastNotifier()
+        toaster.show_toast(title, message, duration=duration, threaded=True)
+        return {"success": True, "status": f"toast sent: {title} — {message}"}
+    except Exception:
+        pass
+
+    # Tier 2 — PowerShell BalloonTip (works on Win 10/11 without extra packages)
+    try:
+        ps_script = (
+            "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; "
+            "[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; "
+            "$n = New-Object System.Windows.Forms.NotifyIcon; "
+            "$n.Icon = [System.Drawing.SystemIcons]::Information; "
+            "$n.Visible = $true; "
+            f"$n.ShowBalloonTip({duration * 1000}, '{title.replace(chr(39), '')}', "
+            f"'{message.replace(chr(39), '')}', "
+            "[System.Windows.Forms.ToolTipIcon]::Info); "
+            f"Start-Sleep -Seconds {duration}; "
+            "$n.Visible = $false; $n.Dispose()"
+        )
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return {"success": True, "status": f"balloon sent: {title} — {message}"}
+    except Exception:
+        pass
+
+    # Tier 3 — msg command (shows a dialog, always available on Windows)
+    try:
+        subprocess.Popen(
+            ["msg", "*", f"{title}: {message}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return {"success": True, "status": f"msg sent: {title} — {message}", "method": "msg"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def delegate_to_subagent(**kwargs) -> dict:
+    """
+    Delegate a task to a specialized sub-agent and return its result.
+
+    Jarvis calls this tool when a task is better handled by a focused worker:
+      - ResearchAgent     → web searches, page fetching, fact-finding
+      - FileAgent         → reading, writing, searching, organizing files
+      - SystemAgent       → processes, hardware stats, app control
+      - PerceptionAgent   → screen analysis, vision queries, UI detection, OCR
+      - InteractionAgent  → mouse clicks, typing, scrolling, keyboard actions
+      - MemoryAgent       → storing, retrieving, searching preferences and context
+
+    The sub-agent runs its own tool loop and reports back a structured result
+    with a human-readable summary that Jarvis uses in its reply to the user.
+    """
+    from agents.sub_agent_registry import registry
+    from agents.base_agent import SubAgentTask
+
+    agent_name = kwargs.get("agent", "")
+    goal = kwargs.get("goal", "")
+    context = kwargs.get("context", {})
+    timeout = float(kwargs.get("timeout", 120))
+
+    if not goal:
+        return {"success": False, "error": "goal is required for delegate_to_subagent"}
+
+    if agent_name:
+        agent = registry.get(agent_name)
+        if agent is None:
+            available = [a["name"] for a in registry.list_agents()]
+            return {
+                "success": False,
+                "error": f"Unknown sub-agent '{agent_name}'. Available: {available}",
+            }
+    else:
+        agent = registry.route(goal)
+        if agent is None:
+            return {
+                "success": False,
+                "error": "Could not route task to any sub-agent. Specify 'agent' explicitly.",
+            }
+
+    task = SubAgentTask(goal=goal, context=context, timeout=timeout)
+    try:
+        result = agent.run(task)
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Sub-agent '{agent.name}' raised an exception: {e}",
+            "agent": agent.name,
+        }
+
+    return {
+        "success": result.success,
+        "agent": result.agent_name,
+        "summary": result.summary,
+        "data": result.data,
+        "elapsed_s": result.elapsed_s,
+        "tool_calls_count": len(result.tool_calls),
+        "error": result.error or None,
+    }
+
+
 def lock_screen(**kwargs) -> dict:
     try:
-        import ctypes
-        ctypes.windll.user32.LockWorkStation()
-        return {"success": True, "status": "screen locked"}
+        if os.name == "nt":
+            import ctypes
+            ctypes.windll.user32.LockWorkStation()
+            return {"success": True, "status": "screen locked"}
+        else:
+            subprocess.run(["loginctl", "lock-session"], timeout=5)
+            return {"success": True, "status": "screen locked"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 def shutdown(**kwargs) -> dict:
+    confirmed = kwargs.get("_confirmed", False)
+    if not confirmed:
+        return {"success": False, "error": "Requires _confirmed=True after explicit user confirmation"}
     try:
-        import ctypes
-        # Confirm with user first â€” no silent shutdown
-        confirmed = kwargs.get("_confirmed", False)
-        if not confirmed:
-            return {"success": False, "error": "Shutdown requires explicit user confirmation. Call again with _confirmed=True after asking the user."}
-        ctypes.windll.user32.ExitWindowsEx(0x00000001 | 0x00000004, 0)  # EWX_SHUTDOWN | EWX_FORCE
-        return {"success": True, "status": "shutting down"}
+        if os.name == "nt":
+            subprocess.run(["shutdown", "/s", "/t", "10"], timeout=5)
+        else:
+            subprocess.run(["shutdown", "-h", "+1"], timeout=5)
+        return {"success": True, "status": "shutdown scheduled in 10 seconds"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 def restart(**kwargs) -> dict:
+    confirmed = kwargs.get("_confirmed", False)
+    if not confirmed:
+        return {"success": False, "error": "Requires _confirmed=True after explicit user confirmation"}
     try:
-        import ctypes
-        confirmed = kwargs.get("_confirmed", False)
-        if not confirmed:
-            return {"success": False, "error": "Restart requires explicit user confirmation. Call again with _confirmed=True after asking the user."}
-        ctypes.windll.user32.ExitWindowsEx(0x00000002 | 0x00000004, 0)  # EWX_REBOOT | EWX_FORCE
-        return {"success": True, "status": "restarting"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def create_file(**kwargs) -> dict:
-    try:
-        path = kwargs.get("path", "")
-        resolved = _safe_resolve_path(path)
-        if not resolved:
-            return {"success": False, "error": f"Path not allowed: {path}"}
-        os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
-        with open(resolved, "w", encoding="utf-8") as f:
-            pass
-        return {"success": True, "status": f"created {resolved}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def data_analysis(**kwargs) -> dict:
-    return _run_code(
-        code=kwargs.get("data", "") + "\nimport pandas as pd\n" + kwargs.get("operations", "describe()"),
-        language="python",
-        timeout=30,
-    )
-
-
-def list_installed_apps(**kwargs) -> dict:
-    query = kwargs.get("query", "")
-    try:
-        db_path = Path(__file__).parent.parent / "indexer" / "db" / "pc_index.db"
-        if not db_path.exists():
-            return {"success": False, "error": "app index not built yet - try again in a minute"}
-        import sqlite3
-        conn = sqlite3.connect(str(db_path))
-        try:
-            if query:
-                cur = conn.execute("SELECT name, exe_path, version FROM apps WHERE name LIKE ?", (f"%{query}%",))
-            else:
-                cur = conn.execute("SELECT name, exe_path, version FROM apps ORDER BY name")
-            apps = []
-            seen = set()
-            for row_name, exe_path, version in cur.fetchall()[:100]:
-                resolved = _resolve_exe(exe_path, row_name)
-                key = resolved or row_name.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                apps.append({"name": row_name, "path": resolved or "", "version": version or ""})
-        finally:
-            conn.close()
-        return {"success": True, "apps": apps[:50], "count": len(apps)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def set_brightness(**kwargs) -> dict:
-    level = max(0, min(100, int(kwargs.get("level", 50))))
-    try:
-        subprocess.run(
-            ["powershell", "-command",
-             f"(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,{level})"],
-            capture_output=True, timeout=10
-        )
-        return {"success": True, "status": f"brightness set to {level}%"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def minimize_all_except(**kwargs) -> dict:
-    exclude = [s.lower() for s in kwargs.get("exclude_titles", [])]
-    try:
-        minimized = 0
-        skipped = 0
-        for w in gw.getAllWindows():
-            title = w.title.strip().lower()
-            if not title:
-                continue
-            if any(excl in title for excl in exclude):
-                skipped += 1
-                continue
-            try:
-                w.minimize()
-                minimized += 1
-            except Exception:
-                pass
-        return {"success": True, "minimized": minimized, "skipped": skipped, "status": f"minimized {minimized} windows, kept {skipped} open"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def vision_query(**kwargs) -> dict:
-    import base64, io
-    # Strip hallucinated params not in schema (e.g. LLM sometimes emits "image")
-    kwargs = {k: v for k, v in kwargs.items() if k in ("question", "region")}
-    question = kwargs.get("question", "")
-    region = kwargs.get("region")
-    try:
-        if region:
-            img = pyautogui.screenshot(region=(region["left"], region["top"], region["width"], region["height"]))
+        if os.name == "nt":
+            subprocess.run(["shutdown", "/r", "/t", "10"], timeout=5)
         else:
-            img = pyautogui.screenshot()
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        b64 = base64.b64encode(buf.getvalue()).decode()
-
-        import requests
-        from settings import LLM_VISION_MODEL, LLM_BASE_URL, OLLAMA_API_KEY
-        payload = {
-            "model": LLM_VISION_MODEL,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a screen analysis assistant. "
-                        "When describing element locations, ALWAYS provide exact pixel coordinates (x, y) as numbers. "
-                        "For any element the user asks about, return its center coordinates and bounding box "
-                        "in this format: center=(x, y), bbox=(left, top, width, height). "
-                        "Be precise â€” these coordinates will be used for mouse clicks."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": question,
-                    "images": [b64],
-                },
-            ],
-            "stream": False,
-        }
-        headers = {"Content-Type": "application/json"}
-        if OLLAMA_API_KEY:
-            headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
-        url = LLM_BASE_URL.rstrip("/")
-        resp = requests.post(url, json=payload, headers=headers, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        if "choices" in data:
-            answer = data["choices"][0].get("message", {}).get("content", "")
-        else:
-            answer = data.get("message", {}).get("content", "")
-        return {"success": True, "answer": answer.strip()}
+            subprocess.run(["shutdown", "-r", "+1"], timeout=5)
+        return {"success": True, "status": "restart scheduled in 10 seconds"}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-def schedule(**kwargs) -> dict:
-    return _schedule(
-        action=kwargs.get("action", ""),
-        command=kwargs.get("command"),
-        when=kwargs.get("when"),
-        task_id=kwargs.get("task_id"),
-    )
-
-
-def listen(**kwargs) -> dict:
-    return _listen(
-        prompt=kwargs.get("prompt"),
-        timeout_seconds=kwargs.get("timeout_seconds", 10),
-        speak_prompt=kwargs.get("speak_prompt", True),
-    )
-
-
-def time_calendar(**kwargs) -> dict:
-    return _time_calendar(
-        action=kwargs.get("action", ""),
-        subject=kwargs.get("subject", ""),
-        start=kwargs.get("start", ""),
-        end=kwargs.get("end", ""),
-        location=kwargs.get("location", ""),
-        body=kwargs.get("body", ""),
-        all_day=kwargs.get("all_day", False),
-        days=kwargs.get("days", 7),
-        date=kwargs.get("date", ""),
-    )
-

@@ -45,8 +45,13 @@ _MILD_UNCERTAINTY_PHRASES = [
     "i expect",
 ]
 
-# Risk classification delegated to risk_classifier.classify_risk()
-# (duplicate lists removed — single source of truth in risk_classifier)
+# Tools where a higher effective threshold is enforced
+_HIGH_RISK_TOOLS = frozenset(
+    {"execute_code"}
+)
+_MEDIUM_RISK_TOOLS = frozenset(
+    {"browser"}
+)
 
 
 def check(plan: dict) -> tuple[bool, str]:
@@ -67,9 +72,13 @@ def check(plan: dict) -> tuple[bool, str]:
     llm_response = plan.get("llm_response", "")
     tool_name = plan.get("tool_name", "")
     destructive = plan.get("destructive", False)
-    # Server-side risk classification is computed once by executor.py
-    # and passed through the plan dict to avoid re-classification.
-    server_risk = plan.get("_server_risk", "low")
+
+    # Override: independently check the plan for destructive patterns regardless
+    # of what the LLM declared, so an LLM cannot bypass the cap by lying.
+    _destructive_tools = frozenset({"shutdown", "restart", "delete_file", "kill_process"})
+    tool_name_from_plan = plan.get("tool_name", "")
+    if tool_name_from_plan in _destructive_tools:
+        destructive = True
 
     confidence = float(base_confidence)
 
@@ -80,7 +89,7 @@ def check(plan: dict) -> tuple[bool, str]:
         high_count = sum(1 for p in _HIGH_UNCERTAINTY_PHRASES if p in text)
         mild_count = sum(1 for p in _MILD_UNCERTAINTY_PHRASES if p in text)
         if high_count > 0:
-            confidence *= 0.85 ** high_count
+            confidence *= 0.70 ** high_count
             logger.debug(
                 f"confidence_gate: {high_count} high-uncertainty phrase(s) → {confidence:.2f}"
             )
@@ -95,16 +104,12 @@ def check(plan: dict) -> tuple[bool, str]:
         confidence = min(confidence, 0.75)
         logger.debug(f"confidence_gate: destructive=True → capped at {confidence:.2f}")
 
-    # ── Threshold selection — use server-side risk classification ────────────
+    # ── Threshold selection ────────────────────────────────────────────────
     threshold = float(CONFIDENCE_THRESHOLD)
-    if server_risk == "high":
-        threshold = max(threshold, 0.80)
-    elif server_risk == "medium":
+    if tool_name in _HIGH_RISK_TOOLS:
         threshold = max(threshold, 0.72)
-
-    # Explicit user approval bypasses confidence gate entirely
-    if plan.get("approved"):
-        return True, ""
+    elif tool_name in _MEDIUM_RISK_TOOLS:
+        threshold = max(threshold, 0.68)
 
     if confidence >= threshold:
         return True, ""

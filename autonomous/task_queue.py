@@ -182,45 +182,6 @@ def get_all_tasks(since: float = None) -> list[dict]:
     return tasks
 
 
-def get_active_tasks() -> list[dict]:
-    """Return all tasks currently in 'running' status."""
-    conn = _connect()
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    rows = c.execute(
-        "SELECT * FROM autonomous_tasks WHERE status = 'running' ORDER BY created_at ASC"
-    ).fetchall()
-    tasks = []
-    for row in rows:
-        task = dict(row)
-        if task.get("result"):
-            task["result"] = json.loads(task["result"])
-        if task.get("action_log"):
-            task["action_log"] = json.loads(task["action_log"])
-        tasks.append(task)
-    return tasks
-
-
-def get_tasks_by_status(status: str) -> list[dict]:
-    """Return all tasks with the given status."""
-    conn = _connect()
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    rows = c.execute(
-        "SELECT * FROM autonomous_tasks WHERE status = ? ORDER BY created_at ASC",
-        (status,),
-    ).fetchall()
-    tasks = []
-    for row in rows:
-        task = dict(row)
-        if task.get("result"):
-            task["result"] = json.loads(task["result"])
-        if task.get("action_log"):
-            task["action_log"] = json.loads(task["action_log"])
-        tasks.append(task)
-    return tasks
-
-
 def delete_completed_tasks(older_than_days: int = 7):
     """Clean up old completed/failed tasks to prevent DB bloat."""
     conn = _connect()

@@ -18,37 +18,17 @@ logger = logging.getLogger(__name__)
 
 
 _SCHEMAS_PATH = Path(__file__).parent.parent / "tools" / "schemas.json"
-_SCHEMAS_CACHE = None
-
-# Content patterns that are dangerous in write_file payloads
-_DANGEROUS_CONTENT_PATTERNS = [
-    "Startup\\Programs",
-    "CurrentVersion\\Run",
-    "CurrentVersion\\RunOnce",
-    "schtasks",
-    "New-Service",
-    "WinRM",
-    "Enable-PSRemoting",
-]
 
 
 def _get_tool_schema(tool_name: str) -> dict | None:
     """Return the input schema for *tool_name* from schemas.json, or None."""
-    global _SCHEMAS_CACHE
     try:
-        if _SCHEMAS_CACHE is None:
-            with open(_SCHEMAS_PATH, encoding="utf-8") as f:
-                _SCHEMAS_CACHE = json.load(f)
-        entry = _SCHEMAS_CACHE.get(tool_name, {})
+        with open(_SCHEMAS_PATH, encoding="utf-8") as f:
+            all_schemas = json.load(f)
+        entry = all_schemas.get(tool_name, {})
         return entry.get("input", {})
     except Exception:
         return None
-
-
-def _has_dangerous_content(content: str) -> bool:
-    """Check write_file content against persistence/payload patterns."""
-    lower = content.lower()
-    return any(p.lower() in lower for p in _DANGEROUS_CONTENT_PATTERNS)
 
 
 def _validate_args(tool_name: str, args: dict) -> str | None:
@@ -93,7 +73,7 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
         audit_log.log_blocked(tool_name, args, schema_error)
         return {"success": False, "blocked": True, "error": schema_error}
 
-    allowed, reason = check_paths(args, tool_name)
+    allowed, reason = check_paths(args)
     if not allowed:
         audit_log.log_blocked(tool_name, args, reason)
         return {"success": False, "blocked": True, "error": reason}
@@ -106,35 +86,24 @@ def execute(tool_name: str, tool_fn, args: dict, plan: dict = None):
         if not allowed:
             audit_log.log_blocked(tool_name, args, reason)
             return {"success": False, "blocked": True, "error": reason}
-
-    if tool_name == "write_file":
-        content = args.get("content", "")
-        if _has_dangerous_content(content):
-            audit_log.log_blocked(tool_name, args, "Blocked: dangerous content patterns in write_file")
-            return {"success": False, "blocked": True, "error": "Blocked: dangerous content patterns in write_file"}
+        if language not in ("python", "powershell"):
+            audit_log.log_blocked(tool_name, args, f"Unsupported language: {language}")
+            return {
+                "success": False,
+                "blocked": True,
+                "error": f"Unsupported language: {language}",
+            }
 
     logger.info(
         f"Executing {tool_name} (lang={language}) with confidence={plan.get('confidence') if plan else None}"
     )
 
     if plan:
-        # Compute server-side risk once and pass to confidence_gate
-        from safety.risk_classifier import classify_risk, requires_approval
-        server_risk = classify_risk(tool_name, args)
-        plan["_server_risk"] = server_risk
-
         proceed, reason = confidence_check(plan)
         if not proceed:
             logger.warning(f"Action paused: {reason}")
             audit_log.log_blocked(tool_name, args, reason)
             return {"success": False, "blocked": True, "error": reason, "paused": True}
-
-        # A3: Server-side risk classification — block high-risk tools that
-        # haven't been through the approval gate.
-        # Explicit user approval (approved=True) bypasses the gate entirely.
-        if not plan.get("approved") and requires_approval(tool_name, args, autonomous=not plan.get("approved")):
-            audit_log.log_blocked(tool_name, args, "High-risk tool requires user approval")
-            return {"success": False, "blocked": True, "error": "High-risk tool requires user approval", "paused": True}
 
     validate_plan = {**(plan or {}), **args}
     valid, reason = plan_validate(validate_plan)

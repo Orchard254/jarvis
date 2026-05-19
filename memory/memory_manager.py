@@ -5,7 +5,9 @@ Unified memory interface. Routes reads/writes to episodic or semantic layers.
 import logging
 import time
 
+import settings
 from memory import episodic, semantic
+from memory.conversation_history import episodes_to_chat_messages, merge_histories
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +72,28 @@ class MemoryManager:
     def get_context_summary(self) -> str:
         """Returns a short text summary of relevant preferences and frequent commands
         for prompt injection."""
-        try:
-            lines = []
-            prefs = semantic.get_all()
-            if prefs:
-                pref_lines = [f"{k}: {v}" for k, v in list(prefs.items())[:5]]
-                lines.append("User preferences: " + "; ".join(pref_lines))
-            freq = episodic.get_command_frequency(limit=5)
-            if freq:
-                cmd_texts = [entry["command_text"] for entry in freq]
-                lines.append("Frequently used commands: " + "; ".join(cmd_texts))
-            return "\n".join(lines)
-        except Exception as e:
-            logger.error(f"Error in get_context_summary: {e}")
-            return ""  # Return empty string on error to allow system to continue
+        lines = []
+        prefs = semantic.get_all()
+        if prefs:
+            pref_lines = [f"{k}: {v}" for k, v in list(prefs.items())[:5]]
+            lines.append("User preferences: " + "; ".join(pref_lines))
+        freq = episodic.get_command_frequency(limit=5)
+        if freq:
+            cmd_texts = [entry["command_text"] for entry in freq]
+            lines.append("Frequently used commands: " + "; ".join(cmd_texts))
+        return "\n".join(lines)
+
+    def get_conversation_history(self, limit: int | None = None) -> list[dict]:
+        """User/assistant messages from this session's episodic log."""
+        if not settings.LOAD_CONVERSATION_HISTORY:
+            return []
+        n = limit or settings.CONVERSATION_HISTORY_LIMIT
+        episodes = episodic.get_session_events(self.session_id, limit=max(n * 4, 50))
+        return episodes_to_chat_messages(episodes)
+
+    def merge_session_history(self, in_memory: list[dict]) -> list[dict]:
+        """Persisted session turns plus current in-process orchestrator history."""
+        if not settings.LOAD_CONVERSATION_HISTORY:
+            return list(in_memory)
+        persisted = self.get_conversation_history()
+        return merge_histories(persisted, in_memory)

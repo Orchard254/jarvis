@@ -32,7 +32,6 @@ class SystemState:
             "last_result": {},
             "timestamp": "",
         }
-        self.refresh_from_os()
 
     def update(self, tool_name: str, args: dict, result: dict):
         raw_data = result.get("data", {})
