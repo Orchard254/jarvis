@@ -60,8 +60,6 @@ _HW_TTL = 60.0
 _hw_lock = __import__("threading").Lock()
 
 
-
-
 def _hw() -> dict:
     """Return live hardware stats, refreshing every 60 s (thread-safe)."""
     global _hw_cache, _hw_ts
@@ -136,9 +134,6 @@ def _hw() -> dict:
         return hw
 
 
-
-
-
 # ── Prompt cache ──────────────────────────────────────────────────────────────
 _prompt_cache: dict[str, str] = {}
 _PROMPT_DIR = Path(__file__).parent.parent / "prompts"
@@ -178,7 +173,7 @@ def build_stdlib_skills_block() -> str:
     return "\n".join(lines) if lines else "  (no stdlib skills registered)"
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(prompt_file: str = "jarvis", **kwargs) -> str:
     """
     Build the full situational-awareness system prompt.
     Hardware stats are re-read from psutil every 60 s (cached otherwise).
@@ -195,7 +190,7 @@ def build_system_prompt() -> str:
     battery_flag = "  ⚠ LOW — consider plugging in" if hw["battery_warn"] else ""
 
     tool_list = _build_tool_list()
-    prompt_template = _load_prompt("jarvis")
+    prompt_template = _load_prompt(prompt_file)
 
     replacements = {
         "{model}": LLM_MODEL,

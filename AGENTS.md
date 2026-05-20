@@ -11,7 +11,7 @@
 
 ## Sub-agents (via `delegate_to_subagent`)
 
-Six specialists handle domain work. Each has its own prompt file in `prompts/` and agent class in `agents/sub_agents/`.
+Seven specialists handle domain work. Each has its own prompt file in `prompts/` and agent class in `agents/sub_agents/`.
 
 | Agent | Module | Prompt | Best for |
 |-------|--------|--------|----------|
@@ -21,6 +21,8 @@ Six specialists handle domain work. Each has its own prompt file in `prompts/` a
 | **Perception** | `agents/sub_agents/perception_agent.py` | `prompts/perception.yaml` | Screen analysis, vision queries, UI detection, OCR |
 | **Interaction** | `agents/sub_agents/interaction_agent.py` | `prompts/interaction.yaml` | Mouse clicks, typing, scrolling, keyboard actions |
 | **Memory** | `agents/sub_agents/memory_agent.py` | `prompts/memory.yaml` | Store/retrieve/search user preferences and context |
+| **ToolCreator** | `agents/sub_agents/tool_creator_agent.py` | `prompts/tool_creator.yaml` | Writes, tests, and saves custom Python tools on the fly |
+| **Reasoning** | `agents/sub_agents/reasoning_agent.py` | None | Tree of Thoughts engine for evaluating complex paths |
 
 Sub-agents use `_tool_ok()` (`agents/base_agent.py:154`) to call tools through the safety executor. The `_tool_ok` method unwraps the safety envelope so sub-agents see raw tool keys (answer, elements, text, etc.) directly.
 
@@ -35,6 +37,7 @@ Sub-agents use `_tool_ok()` (`agents/base_agent.py:154`) to call tools through t
 - 60 tools — `tools/schemas.json` (schemas) + `tools/adapters.py` (implementations)
 - Safety funnel: `safety/executor.py` — wraps every tool result in `{success, message, data, timestamp}` envelope
 - Verification: `verification/verifier.py` (injected into Execution)
+- **Digital Sandbox**: `tools/system/sandbox.py` (isolated engine) + `tools/custom/sandbox_execute.py` (user-facing tool) — runs untrusted, experimental, or dynamic code in temporary, hardened directories with stripped environments and strict timeouts. Automatically used by `ToolCreatorAgent` to test and validate generated tools before they are registered.
 
 ## Key files
 

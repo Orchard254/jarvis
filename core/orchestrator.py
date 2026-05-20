@@ -70,61 +70,183 @@ class Orchestrator:
         import agents.sub_agents  # noqa: F401 — triggers agent registration
         registry.inject_into_agents(self._execute_wrapper, self._verify_wrapper)
 
+        # Start a background event loop thread for async monitors
+        self._loop = asyncio.new_event_loop()
+        def _run_loop():
+            asyncio.set_event_loop(self._loop)
+            self._loop.run_forever()
+        self._loop_thread = threading.Thread(target=_run_loop, daemon=True, name="jarvis-async-loop")
+        self._loop_thread.start()
+
+        # Schedule async_init to run in the background event loop
+        asyncio.run_coroutine_threadsafe(self.async_init(), self._loop)
+
     async def async_init(self):
-        # Start the event bus after the event loop is running
-        self.event_bus.start()
+        try:
+            # Start the event bus after the event loop is running
+            self.event_bus.start()
 
-        # Start the ProactiveAgent's monitoring loop
-        from agents.sub_agent_registry import registry
-        proactive_agent_instance = registry.get("proactive")
-        if proactive_agent_instance:
-            asyncio.create_task(proactive_agent_instance.run(SubAgentTask(goal="Start proactive monitoring", context={})))
-        else:
-            logger.warning("ProactiveAgent not found in registry, cannot start monitoring.")
+            # Launch ProactiveAgent in a separate shell process
+            self._launch_proactive_shell()
 
+            try:
+                from core.heartbeat_monitor import monitor
+                monitor.start()
+            except Exception:
+                logger.warning("Heartbeat monitor unavailable")
+
+            if getattr(settings, "AMBIENT_MONITORING", True):
+                try:
+                    from autonomous import ambient_monitor
+                    ambient_monitor.start(asyncio.get_running_loop())
+                    import atexit
+                    atexit.register(ambient_monitor.stop)
+                except Exception:
+                    logger.warning("Ambient monitor unavailable")
+
+            # Start Context Recorder
+            try:
+                from autonomous import context_recorder
+                import atexit
+                context_recorder.start(asyncio.get_running_loop())
+                atexit.register(context_recorder.stop)
+            except Exception as e:
+                logger.warning(f"Context recorder unavailable: {e}")
+
+            # Start Clipboard Monitor
+            try:
+                from autonomous import clipboard_monitor
+                clipboard_monitor.start(asyncio.get_running_loop())
+                atexit.register(clipboard_monitor.stop)
+            except Exception:
+                logger.warning("Clipboard monitor unavailable")
+
+            # Start File System Monitor
+            try:
+                from autonomous import file_system_monitor
+                import os
+                jarvis_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                file_system_monitor.start(asyncio.get_running_loop(), path=jarvis_path)
+                atexit.register(file_system_monitor.stop)
+            except Exception:
+                logger.warning("File system monitor unavailable")
+
+            # Start Window Monitor
+            try:
+                from autonomous import window_monitor
+                window_monitor.start(asyncio.get_running_loop())
+                atexit.register(window_monitor.stop)
+            except Exception:
+                logger.warning("Window monitor unavailable")
+
+            self._history_hydrated = False
+        except Exception as e:
+            logger.error("Error in async_init", exc_info=True)
+
+    def stop(self):
+        """Clean teardown of scheduler, learner, event bus, loop thread, and background monitors."""
+        logger.info("Orchestrator: stopping all services...")
+        self.running = False
+
+        # 1. Stop scheduler and learner
+        try:
+            self._scheduler.stop()
+        except Exception as e:
+            logger.warning(f"Orchestrator: failed to stop scheduler: {e}")
+
+        try:
+            self._learner.stop()
+        except Exception as e:
+            logger.warning(f"Orchestrator: failed to stop learner: {e}")
+
+        # 2. Stop monitors
+        for monitor_name in ("ambient_monitor", "context_recorder", "clipboard_monitor", "file_system_monitor", "window_monitor"):
+            try:
+                mod = __import__("autonomous." + monitor_name, fromlist=[monitor_name])
+                if hasattr(mod, "stop"):
+                    mod.stop()
+            except Exception as e:
+                logger.warning(f"Orchestrator: failed to stop monitor '{monitor_name}': {e}")
+
+        # Also heartbeat monitor if available
         try:
             from core.heartbeat_monitor import monitor
-            monitor.start()
+            monitor.stop()
         except Exception:
-            logger.warning("Heartbeat monitor unavailable")
+            pass
 
-        if getattr(settings, "AMBIENT_MONITORING", True):
+        # 2.5 Kill the proactive shell subprocess
+        self._stop_proactive_shell()
+
+        # 3. Stop Event Bus inside the loop
+        if self._loop and self._loop.is_running():
             try:
-                from autonomous import ambient_monitor
-                ambient_monitor.start(asyncio.get_running_loop())
-                import atexit
-                atexit.register(ambient_monitor.stop)
+                fut = asyncio.run_coroutine_threadsafe(self.event_bus.stop(), self._loop)
+                fut.result(timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Orchestrator: failed to stop event bus asynchronously: {e}")
+
+            # 4. Stop the loop and thread
+            try:
+                self._loop.call_soon_threadsafe(self._loop.stop)
+                self._loop_thread.join(timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Orchestrator: failed to stop loop thread: {e}")
+
+    def _launch_proactive_shell(self):
+        import subprocess
+        import os
+        shell_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agents", "proactive_shell.py")
+        if not os.path.exists(shell_path):
+            logger.warning("proactive_shell.py not found, running ProactiveAgent in-process")
+            from agents.sub_agent_registry import registry
+            agent = registry.get("proactive")
+            if agent:
+                asyncio.create_task(agent.run(SubAgentTask(goal="Start proactive monitoring", context={})))
+            return
+        try:
+            self._proactive_proc = subprocess.Popen(
+                [sys.executable, "-u", shell_path],
+                stdin=subprocess.PIPE,
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            )
+            self._proactive_forward_task = asyncio.create_task(self._forward_events_to_shell())
+            logger.info("ProactiveAgent launched in separate shell (PID %d)", self._proactive_proc.pid)
+        except Exception as e:
+            logger.error(f"Failed to launch proactive shell: {e}")
+
+    async def _forward_events_to_shell(self):
+        import json
+        loop = asyncio.get_event_loop()
+        async def _forward(event: dict):
+            try:
+                line = json.dumps(event) + "\n"
+                await loop.run_in_executor(None, self._proactive_proc.stdin.write, line.encode())
+                await loop.run_in_executor(None, self._proactive_proc.stdin.flush)
+            except Exception as e:
+                logger.debug(f"Forward to proactive shell: {e}")
+
+        event_bus.subscribe("system_alert", _forward)
+        event_bus.subscribe("window_focus_changed", _forward)
+        event_bus.subscribe("clipboard_changed", _forward)
+        event_bus.subscribe("file_system_changed", _forward)
+
+    def _stop_proactive_shell(self):
+        proc = getattr(self, "_proactive_proc", None)
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.close()
             except Exception:
-                logger.warning("Ambient monitor unavailable")
-
-
-        # Start Clipboard Monitor
-        try:
-            from autonomous import clipboard_monitor
-            clipboard_monitor.start(asyncio.get_running_loop())
-            atexit.register(clipboard_monitor.stop)
-        except Exception:
-            logger.warning("Clipboard monitor unavailable")
-
-        # Start File System Monitor
-        try:
-            from autonomous import file_system_monitor
-            import os
-            jarvis_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            file_system_monitor.start(asyncio.get_running_loop(), path=jarvis_path)
-            atexit.register(file_system_monitor.stop)
-        except Exception:
-            logger.warning("File system monitor unavailable")
-
-        # Start Window Monitor
-        try:
-            from autonomous import window_monitor
-            window_monitor.start(asyncio.get_running_loop())
-            atexit.register(window_monitor.stop)
-        except Exception:
-            logger.warning("Window monitor unavailable")
-
-        self._history_hydrated = False
+                pass
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            logger.info("Proactive shell terminated")
 
     def _conversation_history_for_jarvis(self) -> list[dict]:
         """In-session deque merged with persisted episodic turns when memory is enabled."""
@@ -350,8 +472,9 @@ class Orchestrator:
             state = self._state.snapshot()
 
             if condition == "window_visible" and target:
-                if target in state.get("active_window", "").lower():
-                    return {"success": True, "message": f"Wait skipped: '{target}' already active", "data": {}, "timestamp": ""}
+                from verification.state_checks import verify_window_visible
+                if verify_window_visible(target):
+                    return {"success": True, "message": f"Wait skipped: '{target}' already visible", "data": {}, "timestamp": ""}
             elif condition == "text_visible" and target:
                 if target in state.get("screen_text", "").lower():
                     return {"success": True, "message": f"Wait skipped: text '{target}' already on screen", "data": {}, "timestamp": ""}
@@ -366,13 +489,13 @@ class Orchestrator:
             tool_name,
             TOOL_REGISTRY[tool_name],
             args,
-            plan={"confidence": 0.80},
+            plan={"confidence": 0.80, "tool_name": tool_name},
         )
         self._state.update(tool_name, args, result)
         return result
 
-    def _verify_wrapper(self, tool_name: str, result: dict, expected: str) -> dict:
-        return verify_action(tool_name, result, expected=expected)
+    def _verify_wrapper(self, tool_name: str, result: dict, expected: str, pre_img=None, post_img=None) -> dict:
+        return verify_action(tool_name, result, expected=expected, pre_img=pre_img, post_img=post_img)
 
     # ── Mode switching ────────────────────────────────────────────────────
 

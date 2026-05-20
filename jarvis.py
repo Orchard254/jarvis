@@ -173,6 +173,7 @@ def main():
         logger.debug(f"Episode prune skipped: {_prune_exc}")
 
     orc = Orchestrator(memory=mem)
+    atexit.register(orc.stop)
 
     print("\n" + "=" * 50)
     print("JARVIS ONLINE. Type a command or 'quit' to exit.")

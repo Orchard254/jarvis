@@ -26,13 +26,55 @@ if os.name == "nt":
     except Exception:
         pass
 
+# Monkeypatch win10toast to prevent ctypes WNDPROC TypeError on modern Python/Windows
+if os.name == "nt":
+    try:
+        import win10toast
+        _orig_on_destroy = win10toast.ToastNotifier.on_destroy
+        def _patched_on_destroy(self, hwnd, msg, wparam, lparam):
+            _orig_on_destroy(self, hwnd, msg, wparam, lparam)
+            return 0  # Force returning 0/integer instead of None to satisfy WNDPROC return type signature
+        win10toast.ToastNotifier.on_destroy = _patched_on_destroy
+    except Exception:
+        pass
+
+
 
 def open_app(**kwargs) -> dict:
     name = kwargs.get("name", "")
+    prev_title = ""
+    try:
+        import pygetwindow as gw
+        win = gw.getActiveWindow()
+        if win:
+            prev_title = win.title
+    except Exception:
+        pass
+
+    def _wait_and_respond(res_dict):
+        import time
+        try:
+            import pygetwindow as gw
+            start_time = time.time()
+            # Poll up to 1.5 seconds at 100ms intervals
+            while time.time() - start_time < 1.5:
+                try:
+                    current_win = gw.getActiveWindow()
+                    if current_win and current_win.title != prev_title and current_win.title.strip():
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        except Exception:
+            pass
+        # 150ms post-focus settling sleep
+        time.sleep(0.15)
+        return res_dict
+
     # Try 1: os.startfile (works for PATH-resolvable names like 'notepad', 'calc')
     try:
         os.startfile(name) if os.name == "nt" else subprocess.Popen([name])
-        return {"success": True, "status": f"launched {name}", "name": name}
+        return _wait_and_respond({"success": True, "status": f"launched {name}", "name": name})
     except Exception:
         pass
     # Try 2: shutil.which (finds system PATH executables)
@@ -40,7 +82,7 @@ def open_app(**kwargs) -> dict:
         which_path = shutil.which(name) or shutil.which(f"{name}.exe")
         if which_path:
             os.startfile(which_path) if os.name == "nt" else subprocess.Popen([which_path])
-            return {"success": True, "status": f"launched {name}", "name": name, "path": which_path}
+            return _wait_and_respond({"success": True, "status": f"launched {name}", "name": name, "path": which_path})
     except Exception:
         pass
     # Try 3: search installed apps via PC index DB
@@ -59,12 +101,13 @@ def open_app(**kwargs) -> dict:
                 if resolved:
                     try:
                         os.startfile(resolved) if os.name == "nt" else subprocess.Popen([resolved])
-                        return {"success": True, "status": f"launched {name}", "name": name, "path": resolved}
+                        return _wait_and_respond({"success": True, "status": f"launched {name}", "name": name, "path": resolved})
                     except Exception:
                         pass
     except Exception:
         pass
     return {"success": False, "error": f"could not find '{name}' in PATH or app index. try list_installed_apps first."}
+
 
 
 def _resolve_exe(exe_path: str | None, app_name: str) -> str | None:
@@ -282,11 +325,42 @@ def click(**kwargs) -> dict:
         return {"success": False, "error": str(e)}
 
 
+def _focus_target_window(target: str) -> dict | None:
+    """If *target* is given and isn't the current foreground window, focus it.
+
+    Returns the focus_window result dict on success/failure, or None if no
+    focus switch was needed.
+    """
+    if not target:
+        return None
+    import time
+    try:
+        import pygetwindow as gw
+        win = gw.getActiveWindow()
+        if win and target.lower() in win.title.lower():
+            return None  # already focused
+    except Exception:
+        pass
+    # Need to switch — delegate to focus_window
+    result = focus_window(title=target)
+    if result.get("success"):
+        time.sleep(0.5)  # let the OS finish the focus transition
+    return result
+
+
 def type_text(**kwargs) -> dict:
     try:
         import pyautogui
         text = kwargs.get("text", "")
+        target = kwargs.get("target", "")
         interval = kwargs.get("interval", 0.02)
+
+        # Ensure the intended window is in the foreground before typing
+        if target:
+            focus_result = _focus_target_window(target)
+            if focus_result and not focus_result.get("success"):
+                return {"success": False, "error": f"Could not focus target window '{target}': {focus_result.get('error', '?')}"}
+
         pyautogui.write(text, interval=interval)
         if kwargs.get("enter"):
             pyautogui.press("enter")
@@ -299,6 +373,14 @@ def press_keys(**kwargs) -> dict:
     try:
         import pyautogui
         raw = kwargs.get("keys", "")
+        target = kwargs.get("target", "")
+
+        # Ensure the intended window is in the foreground before pressing keys
+        if target:
+            focus_result = _focus_target_window(target)
+            if focus_result and not focus_result.get("success"):
+                return {"success": False, "error": f"Could not focus target window '{target}': {focus_result.get('error', '?')}"}
+
         keys = raw.lower().replace(" ", "").split("+")
         if len(keys) == 1 and len(keys[0]) == 1:
             pyautogui.write(keys[0])
@@ -709,7 +791,7 @@ def fetch_page(**kwargs) -> dict:
     import re as _re
 
     url = kwargs.get("url", "")
-    max_chars = int(kwargs.get("max_chars", 12000))
+    max_chars = int(kwargs.get("max_chars", 10000))
 
     if not url:
         return {"success": False, "error": "url is required"}
@@ -1063,24 +1145,43 @@ def set_volume(**kwargs) -> dict:
 
 def get_process_info(**kwargs) -> dict:
     name = kwargs.get("name", "")
+    sort_by = kwargs.get("sort_by", "")
+    limit = min(kwargs.get("limit", 20), 100)
     try:
         import psutil
         procs = []
         for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "status", "create_time"]):
-            if name.lower() in p.info["name"].lower():
+            if not name or name.lower() in p.info["name"].lower():
                 procs.append(p.info)
-        return {"success": True, "processes": procs[:10], "count": len(procs)}
+        if sort_by == "cpu":
+            procs.sort(key=lambda x: x.get("cpu_percent", 0), reverse=True)
+        elif sort_by == "memory":
+            procs.sort(key=lambda x: x.get("memory_percent", 0), reverse=True)
+        return {"success": True, "processes": procs[:limit], "count": len(procs)}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 def kill_process(**kwargs) -> dict:
+    pid = kwargs.get("pid")
     name = kwargs.get("name", "")
-    if not re.match(r"^[a-zA-Z0-9._\-, ]+$", name):
-        return {"success": False, "error": f"Invalid process name: {name!r}"}
+    force = kwargs.get("force", True)
     try:
-        subprocess.run(["taskkill", "/IM", f"{name}.exe", "/F"], capture_output=True, timeout=5)
-        return {"success": True, "status": f"killed {name}"}
+        if pid:
+            args = ["taskkill", "/PID", str(pid)]
+            if force:
+                args.append("/F")
+            subprocess.run(args, capture_output=True, timeout=5)
+            return {"success": True, "status": f"killed PID {pid}"}
+        if name:
+            if not re.match(r"^[a-zA-Z0-9._\-, ]+$", name):
+                return {"success": False, "error": f"Invalid process name: {name!r}"}
+            args = ["taskkill", "/IM", f"{name}.exe"]
+            if force:
+                args.append("/F")
+            subprocess.run(args, capture_output=True, timeout=5)
+            return {"success": True, "status": f"killed {name}"}
+        return {"success": False, "error": "Either 'name' or 'pid' is required"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1577,3 +1678,293 @@ def query_ui(**kwargs) -> dict:
     if fn:
         return fn(question=goal)
     return {"success": False, "error": "vision_query not registered"}
+
+
+def list_elements(**kwargs) -> dict:
+    """
+    Lists all accessible, named UI elements and control types inside the active window.
+    """
+    try:
+        import uiautomation as auto
+        win = auto.GetForegroundControl()
+        if win:
+            win = win.GetTopLevelControl()
+        if not win or not win.Exists(0, 0):
+            return {"success": False, "error": "Could not find active foreground window."}
+            
+        elements = []
+        target_types = {
+            auto.ControlType.ButtonControl: "Button",
+            auto.ControlType.TextControl: "Text",
+            auto.ControlType.EditControl: "Edit",
+            auto.ControlType.ListItemControl: "ListItem",
+            auto.ControlType.TabItemControl: "TabItem",
+            auto.ControlType.MenuItemControl: "MenuItem",
+            auto.ControlType.DocumentControl: "Document",
+            auto.ControlType.HyperlinkControl: "Hyperlink",
+            auto.ControlType.CheckBoxControl: "CheckBox",
+            auto.ControlType.RadioButtonControl: "RadioButton",
+            auto.ControlType.ComboBoxControl: "ComboBox"
+        }
+        
+        auto.SetGlobalSearchTimeout(1)
+        for control, depth in auto.WalkControl(win):
+            try:
+                name = control.Name or ""
+                # Filter elements that have a name/text or are an edit/input control
+                if name.strip() or control.ControlType in (auto.ControlType.EditControl, auto.ControlType.DocumentControl):
+                    rect = control.BoundingRectangle
+                    if rect and rect.width() > 0 and rect.height() > 0:
+                        elements.append({
+                            "name": name,
+                            "control_type": target_types.get(control.ControlType, "Control"),
+                            "automation_id": control.AutomationId or "",
+                            "bounds": {
+                                "left": rect.left,
+                                "top": rect.top,
+                                "right": rect.right,
+                                "bottom": rect.bottom,
+                                "center_x": rect.left + (rect.width() // 2),
+                                "center_y": rect.top + (rect.height() // 2)
+                            }
+                        })
+            except Exception:
+                pass
+                
+        return {"success": True, "window_title": win.Name, "elements": elements}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def click_element(**kwargs) -> dict:
+    """
+    Clicks a named UI element inside the active window.
+    """
+    target_text = kwargs.get("text", "").strip()
+    target_control_type = kwargs.get("control_type", "").strip()
+    
+    if not target_text:
+        return {"success": False, "error": "text parameter is required"}
+        
+    try:
+        import uiautomation as auto
+        import pyautogui
+        
+        # Get active window to start search
+        win = auto.GetForegroundControl()
+        if win:
+            win = win.GetTopLevelControl()
+        if not win or not win.Exists(0, 0):
+            return {"success": False, "error": "Could not find active foreground window."}
+            
+        # Ensure window is focused/foreground
+        try:
+            win.SetActive()
+            win.SetFocus()
+        except Exception:
+            pass
+            
+        auto.SetGlobalSearchTimeout(1)
+        found_element = None
+        target_types = {
+            auto.ControlType.ButtonControl: "Button",
+            auto.ControlType.TextControl: "Text",
+            auto.ControlType.EditControl: "Edit",
+            auto.ControlType.ListItemControl: "ListItem",
+            auto.ControlType.TabItemControl: "TabItem",
+            auto.ControlType.MenuItemControl: "MenuItem",
+            auto.ControlType.DocumentControl: "Document",
+            auto.ControlType.HyperlinkControl: "Hyperlink",
+            auto.ControlType.CheckBoxControl: "CheckBox",
+            auto.ControlType.RadioButtonControl: "RadioButton",
+            auto.ControlType.ComboBoxControl: "ComboBox"
+        }
+        
+        # We walk controls to find a match
+        for control, depth in auto.WalkControl(win):
+            try:
+                name = control.Name or ""
+                auto_id = control.AutomationId or ""
+                ctrl_type_str = target_types.get(control.ControlType, "Control")
+                
+                # Check control type filter if supplied
+                if target_control_type and target_control_type.lower() not in ctrl_type_str.lower():
+                    continue
+                    
+                # Match target_text (case-insensitive substring or regex)
+                is_match = False
+                if target_text.lower() in name.lower() or target_text.lower() in auto_id.lower():
+                    is_match = True
+                else:
+                    try:
+                        if re.search(target_text, name, re.IGNORECASE) or re.search(target_text, auto_id, re.IGNORECASE):
+                            is_match = True
+                    except Exception:
+                        pass
+                        
+                if is_match:
+                    rect = control.BoundingRectangle
+                    if rect and rect.width() > 0 and rect.height() > 0:
+                        found_element = control
+                        break
+            except Exception:
+                pass
+                
+        if not found_element:
+            return {
+                "success": False, 
+                "error": f"Could not find element matching '{target_text}' with control_type '{target_control_type}' inside the window '{win.Name}'."
+            }
+            
+        # Get coordinates
+        rect = found_element.BoundingRectangle
+        cx = rect.left + (rect.width() // 2)
+        cy = rect.top + (rect.height() // 2)
+        
+        # Focus control if possible
+        try:
+            found_element.SetFocus()
+        except Exception:
+            pass
+            
+        # Click
+        failsafe_was = pyautogui.FAILSAFE
+        pyautogui.FAILSAFE = False
+        try:
+            pyautogui.click(cx, cy)
+        finally:
+            pyautogui.FAILSAFE = failsafe_was
+            
+        return {
+            "success": True, 
+            "status": f"Clicked element '{found_element.Name}' at screen coordinates ({cx}, {cy})",
+            "element_name": found_element.Name,
+            "control_type": target_types.get(found_element.ControlType, "Control"),
+            "x": cx,
+            "y": cy
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def type_in_element(**kwargs) -> dict:
+    """
+    Types text into a specific named input element inside the active window.
+    """
+    target_text = kwargs.get("text", "").strip()
+    content = kwargs.get("content", "")
+    enter = kwargs.get("enter", False)
+    
+    if not target_text:
+        return {"success": False, "error": "text parameter is required"}
+        
+    try:
+        import uiautomation as auto
+        import pyautogui
+        
+        # Get active window
+        win = auto.GetForegroundControl()
+        if win:
+            win = win.GetTopLevelControl()
+        if not win or not win.Exists(0, 0):
+            return {"success": False, "error": "Could not find active foreground window."}
+            
+        # Ensure window is focused/foreground
+        try:
+            win.SetActive()
+            win.SetFocus()
+        except Exception:
+            pass
+            
+        auto.SetGlobalSearchTimeout(1)
+        found_element = None
+        target_types = {
+            auto.ControlType.ButtonControl: "Button",
+            auto.ControlType.TextControl: "Text",
+            auto.ControlType.EditControl: "Edit",
+            auto.ControlType.ListItemControl: "ListItem",
+            auto.ControlType.TabItemControl: "TabItem",
+            auto.ControlType.MenuItemControl: "MenuItem",
+            auto.ControlType.DocumentControl: "Document",
+            auto.ControlType.HyperlinkControl: "Hyperlink",
+            auto.ControlType.CheckBoxControl: "CheckBox",
+            auto.ControlType.RadioButtonControl: "RadioButton",
+            auto.ControlType.ComboBoxControl: "ComboBox"
+        }
+        
+        # Edit-like or input-like controls are preferred if we're typing, but we search all
+        for control, depth in auto.WalkControl(win):
+            try:
+                name = control.Name or ""
+                auto_id = control.AutomationId or ""
+                ctrl_type_str = target_types.get(control.ControlType, "Control")
+                
+                # Match target_text
+                is_match = False
+                if target_text.lower() in name.lower() or target_text.lower() in auto_id.lower():
+                    is_match = True
+                else:
+                    try:
+                        if re.search(target_text, name, re.IGNORECASE) or re.search(target_text, auto_id, re.IGNORECASE):
+                            is_match = True
+                    except Exception:
+                        pass
+                        
+                if is_match:
+                    rect = control.BoundingRectangle
+                    if rect and rect.width() > 0 and rect.height() > 0:
+                        found_element = control
+                        # If it's an Edit/Document control, we found our target, we can stop searching.
+                        # Otherwise we keep searching to see if there's a better Edit control match.
+                        if control.ControlType in (auto.ControlType.EditControl, auto.ControlType.DocumentControl):
+                            break
+            except Exception:
+                pass
+                
+        if not found_element:
+            return {
+                "success": False,
+                "error": f"Could not find input element matching '{target_text}' inside the window '{win.Name}'."
+            }
+            
+        # Get coordinates
+        rect = found_element.BoundingRectangle
+        cx = rect.left + (rect.width() // 2)
+        cy = rect.top + (rect.height() // 2)
+        
+        # Focus and click control to place cursor
+        try:
+            found_element.SetFocus()
+        except Exception:
+            pass
+            
+        failsafe_was = pyautogui.FAILSAFE
+        pyautogui.FAILSAFE = False
+        try:
+            pyautogui.click(cx, cy)
+            # Give it a tiny sleep to let focus shift
+            import time
+            time.sleep(0.05)
+            
+            # Select all and clear before typing if it is an edit control
+            # Let's send ctrl+a and backspace to clear existing content (if any)
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.press("backspace")
+            time.sleep(0.05)
+            
+            # Type content
+            pyautogui.write(content, interval=0.02)
+            if enter:
+                pyautogui.press("enter")
+        finally:
+            pyautogui.FAILSAFE = failsafe_was
+            
+        return {
+            "success": True,
+            "status": f"Typed content into element '{found_element.Name}'",
+            "element_name": found_element.Name,
+            "control_type": target_types.get(found_element.ControlType, "Control"),
+            "content_length": len(content)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

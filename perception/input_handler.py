@@ -38,8 +38,13 @@ class InputHandler:
         self._wake_busy.set()
         try:
             logger.info("Wake word triggered — listening...")
+            from output.sounds import play_chime
+            play_chime("wake")
+            print("\n🎤 [LISTENING...]")
+            
             text = stt.listen(timeout=8.0)
             if text:
+                play_chime("success")
                 self.route(text, source="voice")
         finally:
             self._wake_busy.clear()

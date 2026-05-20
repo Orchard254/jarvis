@@ -34,6 +34,7 @@ class MemoryAgent(SubAgentBase):
         "retrieve_memory",
         "search_memory",
         "forget_memory",
+        "recall_memory",
     ]
 
     def run(self, task: SubAgentTask) -> SubAgentResult:
@@ -114,6 +115,23 @@ class MemoryAgent(SubAgentBase):
                     errors.append(f"forget_memory: {result.get('error', '?')}")
             else:
                 errors.append("Need 'key' to forget memory")
+                
+        elif operation == "recall":
+            ok, result = self._tool_ok("recall_memory", query=query)
+            tool_log.append({"tool": "recall_memory", "query": query, **result})
+            if ok:
+                past_screens = result.get("results", [])
+                records.extend(past_screens)
+                if past_screens:
+                    # Summarize the first best hit for the agent
+                    best_hit = past_screens[0]
+                    win_title = best_hit.get("window_title", "Unknown window")
+                    content_preview = best_hit.get("text", "")[:200]
+                    summary = f"Found past screen match in '{win_title}': {content_preview}..."
+                else:
+                    summary = f"No past screen context found matching '{query}'"
+            else:
+                errors.append(f"recall_memory: {result.get('error', '?')}")
 
         elif operation == "context":
             ok, result = self._tool_ok("retrieve_memory", key="__context_summary")
@@ -147,6 +165,8 @@ class MemoryAgent(SubAgentBase):
         g = goal.lower()
         if any(w in g for w in ("remember", "store", "save", "set ", "add ")):
             return "store"
+        if any(w in g for w in ("look at yesterday", "was i reading", "what was that", "screen context")):
+            return "recall"
         if any(w in g for w in ("retrieve", "get ", "what", "recall", "fetch")):
             return "retrieve"
         if any(w in g for w in ("search", "find", "look up")):

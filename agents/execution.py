@@ -5,6 +5,7 @@ Does not converse with the user. Returns BATCH_TOOL_RESULT / validation errors o
 
 from __future__ import annotations
 
+import contextlib
 import concurrent.futures
 import json
 import logging
@@ -42,6 +43,20 @@ INTERACTION_TOOLS = frozenset(
         "scroll",
         "set_volume",
         "set_brightness",
+        "click_element",
+        "type_in_element",
+    }
+)
+
+VISUAL_VERIFY_TOOLS = frozenset(
+    {
+        "click",
+        "double_click",
+        "right_click",
+        "type_text",
+        "press_keys",
+        "click_element",
+        "type_in_element",
     }
 )
 
@@ -83,16 +98,22 @@ def _load_schemas() -> dict:
     with _SCHEMA_LOCK:
         if _SCHEMA_CACHE:
             return _SCHEMA_CACHE
-        from pathlib import Path
-        schemas_path = Path(__file__).parent.parent / "tools" / "schemas.json"
         try:
-            with open(schemas_path, encoding="utf-8") as f:
-                raw = json.load(f)
-            raw.pop("$schema", None)
-            _SCHEMA_CACHE = raw
+            from tools import ALL_SCHEMAS
+            _SCHEMA_CACHE = ALL_SCHEMAS
         except Exception as e:
-            logger.warning(f"Could not load tool schemas: {e}")
-            _SCHEMA_CACHE = {}
+            logger.warning(f"Could not load tool schemas from tools module: {e}")
+            # Fallback: read schemas.json directly (custom tools won't be validated)
+            from pathlib import Path
+            schemas_path = Path(__file__).parent.parent / "tools" / "schemas.json"
+            try:
+                with open(schemas_path, encoding="utf-8") as f:
+                    raw = json.load(f)
+                raw.pop("$schema", None)
+                _SCHEMA_CACHE = raw
+            except Exception as e2:
+                logger.warning(f"Could not load tool schemas from file: {e2}")
+                _SCHEMA_CACHE = {}
         return _SCHEMA_CACHE
 
 
@@ -206,9 +227,10 @@ def _call_by_idx(plan: dict, idx: int) -> dict | None:
 
 def _summarize_output(tool_name: str, result: dict) -> str:
     if not result.get("success"):
-        err = result.get("error", "unknown error")
+        err = result.get("message", "unknown error")
         return f"{tool_name} failed: {str(err)[:200]}"
-    content = result.get("output") or result.get("result") or result.get("content") or ""
+    data = result.get("data", {})
+    content = data.get("output") or data.get("result") or data.get("content") or ""
     if isinstance(content, str):
         content = content[:500]
     elif isinstance(content, dict):
@@ -327,25 +349,31 @@ def _execute_single_call(
     fail_counts: dict,
     pc_state_fn,
     iteration: int,
+    log_lock=None,
+    fail_lock=None,
 ) -> dict:
     tool_name = call["tool"]
     args = call.get("params", {})
     call_idx = call["call_idx"]
     truncated_call_idx = min(call_idx, 9999)
+    # Null-safe context managers — callers in parallel mode pass real locks;
+    # sequential callers get no-op contexts with zero overhead.
+    _log_ctx = log_lock if log_lock is not None else contextlib.nullcontext()
+    _fail_ctx = fail_lock if fail_lock is not None else contextlib.nullcontext()
 
     # Fast schema validation (no LLM)
     validation_error = validate_tool_call(tool_name, args)
     if validation_error:
         logger.warning(f"Execution rejected {tool_name}: {validation_error[:200]}")
-        tool_log.append(
-            {
-                "tool": tool_name,
-                "args": args,
-                "result": {"success": False, "error": f"schema rejected: {validation_error}"},
-                "call_id": f"batch_{truncated_call_idx}",
-                "cached": False,
-            }
-        )
+        _log_entry = {
+            "tool": tool_name,
+            "args": args,
+            "result": {"success": False, "error": f"schema rejected: {validation_error}"},
+            "call_id": f"batch_{truncated_call_idx}",
+            "cached": False,
+        }
+        with _log_ctx:
+            tool_log.append(_log_entry)
         return {
             "call_idx": call_idx,
             "call_id": f"call_{truncated_call_idx}",
@@ -358,18 +386,19 @@ def _execute_single_call(
     if cached_result is not None:
         logger.info(f"  ✓ {tool_name} (cached)")
         result = cached_result
-        tool_log.append(
-            {
-                "tool": tool_name,
-                "args": args,
-                "result": result,
-                "call_id": f"batch_{truncated_call_idx}",
-                "cached": True,
-            }
-        )
+        # Run verify_fn *outside* the lock — it may block on I/O.
         _log_tool_call(iteration, tool_name, args, True, 0, cached=True)
         verification = verify_fn(tool_name, result, user_input)
-        tool_log[-1]["verification"] = verification.get("status", "")
+        _log_entry = {
+            "tool": tool_name,
+            "args": args,
+            "result": result,
+            "call_id": f"batch_{truncated_call_idx}",
+            "cached": True,
+        }
+        with _log_ctx:
+            tool_log.append(_log_entry)
+            _log_entry["verification"] = verification.get("status", "")
         return {
             "call_idx": call_idx,
             "call_id": f"call_{truncated_call_idx}",
@@ -385,6 +414,15 @@ def _execute_single_call(
     _reflex_execute = wrap_reflex(execute_fn)
     for attempt in range(1, MAX_CALL_RETRIES + 1):
         logger.info(f"Batch {iteration}: calling {tool_name} (call_idx={call_idx}, attempt={attempt})")
+        
+        pre_img = None
+        if tool_name in VISUAL_VERIFY_TOOLS:
+            try:
+                from verification.visual_verifier import capture_screenshot
+                pre_img = capture_screenshot()
+            except Exception:
+                pass
+
         _t0 = time.time()
         print(f"  🔧 {tool_name}...", end="", flush=True)
         result = _reflex_execute(tool_name, args)
@@ -392,7 +430,23 @@ def _execute_single_call(
         ok_str = "✓" if result.get("success") else "✗"
         print(f"\r  🔧 {tool_name} {ok_str}" + " " * 10, flush=True)
 
-        verification = verify_fn(tool_name, result, user_input)
+        post_img = None
+        if tool_name in VISUAL_VERIFY_TOOLS and result.get("success"):
+            try:
+                time.sleep(0.15)
+                from verification.visual_verifier import capture_screenshot
+                post_img = capture_screenshot()
+            except Exception:
+                pass
+
+        import inspect
+        sig = inspect.signature(verify_fn)
+        verify_kwargs = {}
+        if "pre_img" in sig.parameters:
+            verify_kwargs["pre_img"] = pre_img
+        if "post_img" in sig.parameters:
+            verify_kwargs["post_img"] = post_img
+        verification = verify_fn(tool_name, result, user_input, **verify_kwargs)
         v_ok = verification.get("status") != "FAILED"
         if result.get("success") and v_ok:
             _log_tool_call(
@@ -401,15 +455,14 @@ def _execute_single_call(
             break
 
         # Capture error for structured retry feedback
-        last_error = result.get("error") or verification.get("summary", "verification failed")
+        last_error = result.get("message") or result.get("error") or verification.get("summary", "verification failed")
 
         if attempt < MAX_CALL_RETRIES and tool_name != "delegate_to_subagent":
             logger.info(f"  retry {tool_name} ({attempt}/{MAX_CALL_RETRIES}): {last_error}")
-            # On retry, inject the error back into args if the tool supports it
-            # (allows execute_code to see its own stderr on retry)
             if tool_name in ("execute_code", "run_python") and "code" in args:
-                stderr = result.get("error", "")
-                stdout = result.get("output", "")
+                data = result.get("data", {})
+                stderr = result.get("message", "") or data.get("stderr", "")
+                stdout = data.get("output", "") or data.get("result", "") or data.get("content", "")
                 hint = (
                     f"\n# --- Previous attempt failed ---\n"
                     f"# stderr: {stderr[:300]}\n"
@@ -429,32 +482,38 @@ def _execute_single_call(
                 cached=False,
             )
 
-    tool_log.append(
-        {
-            "tool": tool_name,
-            "args": args,
-            "result": result,
-            "call_id": f"batch_{truncated_call_idx}",
-            "cached": False,
-        }
-    )
     cache.set(tool_name, args, result)
-    tool_log[-1]["verification"] = verification.get("status", "")
-
     if tool_name in ToolResultCache.WRITE_TOOLS:
         cache.invalidate_tool(tool_name)
         if tool_name == "execute_code":
             cache.clear()
 
     tool_failed = not result.get("success") or verification.get("status") == "FAILED"
-    if tool_failed:
-        fail_counts[tool_name] = fail_counts.get(tool_name, 0) + 1
-    else:
-        fail_counts[tool_name] = 0
 
-    if tool_failed and fail_counts[tool_name] >= 2:
+    # Use a direct dict reference so we never rely on tool_log[-1] across threads.
+    _log_entry = {
+        "tool": tool_name,
+        "args": args,
+        "result": result,
+        "call_id": f"batch_{truncated_call_idx}",
+        "cached": False,
+    }
+    with _log_ctx:
+        tool_log.append(_log_entry)
+        _log_entry["verification"] = verification.get("status", "")
+
+    _hit_guard = False
+    with _fail_ctx:
+        if tool_failed:
+            fail_counts[tool_name] = fail_counts.get(tool_name, 0) + 1
+        else:
+            fail_counts[tool_name] = 0
+        # Capture guard flag inside the lock so the read is atomic with the write.
+        _hit_guard = tool_failed and fail_counts[tool_name] >= 2
+
+    if _hit_guard:
         _log_guard(tool_name, iteration, f"FAIL-LOOP GUARD: '{tool_name}' failed twice in a row")
-        tool_log[-1]["blocked"] = "fail-loop_guard"
+        _log_entry["blocked"] = "fail-loop_guard"
         return {
             "call_idx": call_idx,
             "call_id": f"call_{truncated_call_idx}",
@@ -473,9 +532,15 @@ def _execute_single_call(
 
     if verification.get("status") == "FAILED":
         res["verification"] = "FAILED"
-        res["retry_directive"] = (
-            "Verification FAILED — try a different tool or parameters."
-        )
+        if verification.get("method") == "visual_diff":
+            res["retry_directive"] = (
+                "Visual verification detected no screen changes. Target element may have been obscured or coordinate was wrong. "
+                "Recovery Recommendation: Backtrack or try alternative keyboard/mouse navigation (e.g., press Alt/Tab to change focus, or use press_keys with shortcut keys, or click_element on parent menu first)."
+            )
+        else:
+            res["retry_directive"] = (
+                "Verification FAILED — try a different tool or parameters."
+            )
 
     if not result.get("success"):
         res["error"] = result.get("error", last_error or "unknown error")
@@ -514,18 +579,23 @@ def execute_batch_plan(
     _fail_lock = threading.Lock()
 
     def _run_one(call: dict) -> dict:
-        with _tool_log_lock, _fail_lock:
-            return _execute_single_call(
-                call,
-                execute_fn,
-                verify_fn,
-                user_input,
-                cache,
-                tool_log,
-                fail_counts,
-                pc_state_fn,
-                iteration,
-            )
+        # Do NOT hold locks here — that would serialise all "parallel" threads
+        # for the entire duration of the blocking tool call.  Instead, pass the
+        # locks into _execute_single_call so only the tiny critical sections
+        # (tool_log.append and fail_counts update) are gated.
+        return _execute_single_call(
+            call,
+            execute_fn,
+            verify_fn,
+            user_input,
+            cache,
+            tool_log,
+            fail_counts,
+            pc_state_fn,
+            iteration,
+            log_lock=_tool_log_lock,
+            fail_lock=_fail_lock,
+        )
 
     if mode == "parallel":
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(calls), 1)) as pool:
@@ -620,6 +690,10 @@ def run_plan(
             validation_errors=validation_errors,
         )
 
+    # Execute directly — no executor-LLM pre-call gate.
+    # The per-call retry loop inside execute_batch_plan already handles failures;
+    # adding a full LLM round-trip *before* every tool call costs 0.5-3 s each
+    # and returns PASS almost 100 % of the time.
     results = execute_batch_plan(
         plan,
         execute_fn,
@@ -711,26 +785,66 @@ def run_native_tool_calls(
             verification = verify_fn(name, result, user_input)
         else:
             for attempt in range(1, MAX_CALL_RETRIES + 1):
+                pre_img = None
+                if name in VISUAL_VERIFY_TOOLS:
+                    try:
+                        from verification.visual_verifier import capture_screenshot
+                        pre_img = capture_screenshot()
+                    except Exception:
+                        pass
+
                 _t0 = time.time()
                 print(f"  🔧 {name}...", end="", flush=True)
                 result = execute_fn(name, args)
                 _elapsed = (time.time() - _t0) * 1000
                 ok_str = "✓" if result.get("success") else "✗"
                 print(f"\r  🔧 {name} {ok_str}" + " " * 10, flush=True)
-                verification = verify_fn(name, result, user_input)
+
+                post_img = None
+                if name in VISUAL_VERIFY_TOOLS and result.get("success"):
+                    try:
+                        time.sleep(0.15)
+                        from verification.visual_verifier import capture_screenshot
+                        post_img = capture_screenshot()
+                    except Exception:
+                        pass
+
+                import inspect
+                sig = inspect.signature(verify_fn)
+                verify_kwargs = {}
+                if "pre_img" in sig.parameters:
+                    verify_kwargs["pre_img"] = pre_img
+                if "post_img" in sig.parameters:
+                    verify_kwargs["post_img"] = post_img
+                verification = verify_fn(name, result, user_input, **verify_kwargs)
                 if result.get("success") and verification.get("status") != "FAILED":
                     _log_tool_call(iteration, name, args, True, _elapsed, cached=False)
                     break
 
                 last_error = result.get("error", "")
                 if attempt < MAX_CALL_RETRIES and name != "delegate_to_subagent":
-                    # Inject stderr context on retry for code execution tools
+                    # BUG FIX: align retry hint with _execute_single_call — include
+                    # stdout and use the richer message format so the LLM has full
+                    # context when rewriting failing code on the next attempt.
                     if name in ("execute_code", "run_python") and "code" in args:
-                        stderr = result.get("error", "")
+                        data = result.get("data", {})
+                        stderr = (
+                            result.get("message", "")
+                            or data.get("stderr", "")
+                            or result.get("error", "")
+                        )
+                        stdout = (
+                            data.get("output", "")
+                            or data.get("result", "")
+                            or data.get("content", "")
+                        )
                         args = {
                             **args,
                             "_retry_hint": (
-                                f"\n# Retry {attempt}: previous error was: {stderr[:300]}\n"
+                                f"\n# --- Previous attempt failed ---\n"
+                                f"# stderr: {stderr[:300]}\n"
+                                f"# stdout: {stdout[:200]}\n"
+                                f"# Fix the error above and retry.\n"
                             ),
                         }
                     time.sleep(0.3)

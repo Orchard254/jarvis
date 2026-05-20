@@ -17,18 +17,32 @@ from safety.tool_guard import check_paths
 logger = logging.getLogger(__name__)
 
 
-_SCHEMAS_PATH = Path(__file__).parent.parent / "tools" / "schemas.json"
+_all_schemas_cache: dict | None = None
 
 
 def _get_tool_schema(tool_name: str) -> dict | None:
-    """Return the input schema for *tool_name* from schemas.json, or None."""
-    try:
-        with open(_SCHEMAS_PATH, encoding="utf-8") as f:
-            all_schemas = json.load(f)
-        entry = all_schemas.get(tool_name, {})
-        return entry.get("input", {})
-    except Exception:
-        return None
+    """Return the input schema for *tool_name*, or None.
+
+    Uses the consolidated ALL_SCHEMAS dict from tools/__init__ (includes
+    custom drop-in tools) and caches it for the process lifetime.
+    Falls back to reading schemas.json from disk if the import fails.
+    """
+    global _all_schemas_cache
+    if _all_schemas_cache is None:
+        try:
+            from tools import ALL_SCHEMAS
+            _all_schemas_cache = ALL_SCHEMAS
+        except Exception:
+            try:
+                _schemas_path = Path(__file__).parent.parent / "tools" / "schemas.json"
+                with open(_schemas_path, encoding="utf-8") as f:
+                    _all_schemas_cache = json.load(f)
+                _all_schemas_cache.pop("$schema", None)
+            except Exception:
+                _all_schemas_cache = {}
+    entry = _all_schemas_cache.get(tool_name, {})
+    return entry.get("input", {})
+
 
 
 def _validate_args(tool_name: str, args: dict) -> str | None:

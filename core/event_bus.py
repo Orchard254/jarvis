@@ -8,8 +8,13 @@ logger = logging.getLogger(__name__)
 class EventBus:
     def __init__(self):
         self._listeners = {}
-        self._queue = asyncio.Queue()
+        self._queue = None
         self._running = False
+
+    def _get_queue(self) -> asyncio.Queue:
+        if self._queue is None:
+            self._queue = asyncio.Queue()
+        return self._queue
 
     async def publish(self, event_type: str, payload: dict, source: str, context: dict = None):
         event = {
@@ -21,7 +26,7 @@ class EventBus:
             "context": context or {}
         }
         logger.debug(f"EventBus: Publishing event {event_type} from {source}")
-        await self._queue.put(event)
+        await self._get_queue().put(event)
 
     def subscribe(self, event_type: str, listener_func):
         if event_type not in self._listeners:
@@ -30,9 +35,10 @@ class EventBus:
         logger.debug(f"EventBus: Listener subscribed to {event_type}")
 
     async def _process_events(self):
+        q = self._get_queue()
         while self._running:
             try:
-                event = await self._queue.get()
+                event = await q.get()
                 logger.debug(f"EventBus: Processing event {event['event_type']}")
                 if event["event_type"] in self._listeners:
                     for listener in self._listeners[event["event_type"]]:
@@ -41,7 +47,7 @@ class EventBus:
                             asyncio.create_task(listener(event))
                         except Exception as e:
                             logger.error(f"EventBus: Error in listener for {event['event_type']}: {e}")
-                self._queue.task_done()
+                q.task_done()
             except asyncio.CancelledError:
                 logger.info("EventBus: Event processing cancelled.")
                 break
@@ -57,7 +63,8 @@ class EventBus:
     async def stop(self):
         if self._running:
             self._running = False
-            await self._queue.join() # Wait for all pending events to be processed
+            if self._queue is not None:
+                await self._queue.join() # Wait for all pending events to be processed
             logger.info("EventBus: Stopped event processing.")
 
 # Global instance for easy access, or pass explicitly via dependency injection

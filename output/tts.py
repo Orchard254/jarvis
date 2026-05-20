@@ -110,6 +110,7 @@ def speak(text: str, blocking: bool = True) -> bool:
 
     # ── Mute STT immediately on entry, before ANY try/except ─────────────────
     settings.IS_SPEAKING.set()
+    print("\n🔊 [SPEAKING...]")
 
     try:
         engine = settings.TTS_ENGINE.lower().strip()

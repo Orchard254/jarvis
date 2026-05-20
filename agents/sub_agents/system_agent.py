@@ -53,6 +53,49 @@ class SystemAgent(SubAgentBase):
 
         action = ctx.get("action", "auto")
 
+        if action == "auto":
+            goal_lower = goal.lower()
+            import re
+            
+            # set volume
+            if "volume" in goal_lower or "vol" in goal_lower:
+                match = re.search(r'(?:volume|vol)\D*(\d+)', goal_lower)
+                if match:
+                    action = "set_volume"
+                    ctx["level"] = int(match.group(1))
+            
+            # set brightness
+            elif "brightness" in goal_lower or "bright" in goal_lower:
+                match = re.search(r'(?:brightness|bright)\D*(\d+)', goal_lower)
+                if match:
+                    action = "set_brightness"
+                    ctx["level"] = int(match.group(1))
+            
+            # kill process / close app
+            elif "kill" in goal_lower or "terminate" in goal_lower or "stop" in goal_lower:
+                match = re.search(r'(?:kill|terminate|stop)\s+(?:all\s+)?([a-zA-Z0-9._\-]+)', goal_lower)
+                if match:
+                    action = "kill_process"
+                    ctx["process_name"] = match.group(1)
+            
+            # open app
+            elif "open" in goal_lower or "launch" in goal_lower or "start" in goal_lower:
+                match = re.search(r'(?:open|launch|start)\s+([a-zA-Z0-9._\-]+)', goal_lower)
+                if match:
+                    action = "open_app"
+                    ctx["app_name"] = match.group(1)
+            
+            # close app
+            elif "close" in goal_lower:
+                match = re.search(r'close\s+([a-zA-Z0-9._\-]+)', goal_lower)
+                if match:
+                    action = "close_app"
+                    ctx["app_name"] = match.group(1)
+                    
+            # battery
+            elif "battery" in goal_lower:
+                action = "battery"
+
         # ── SYSTEM STATS ──────────────────────────────────────────────────────
         if action in ("stats", "auto", "health_check"):
             ok, result = self._tool_ok("get_system_stats")

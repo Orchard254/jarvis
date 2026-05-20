@@ -27,22 +27,29 @@ class ProactiveAgent(SubAgentBase):
         "execute_proactive_plan",
     ]
 
-    def __init__(self):
+    def __init__(self, event_source="event_bus"):
         super().__init__()
         self._event_queue = asyncio.Queue()
         self._is_monitoring = False
         self._last_ambient_check = 0.0
-        self._ambient_check_interval = 120  # seconds between ambient state checks
+        self._ambient_check_interval = 120
+        self._debounce_window = 2.0
+        self._last_cooldown = {}
+        self._cooldown_secs = {"file_system_changed": 120, "clipboard_changed": 60, "window_focus_changed": 60}
+        self._event_source = event_source
 
     async def _event_listener(self, event: dict):
         await self._event_queue.put(event)
 
     async def _monitor_loop(self):
         self._is_monitoring = True
-        event_bus.subscribe("system_alert", self._event_listener)
-        event_bus.subscribe("window_focus_changed", self._event_listener)
-        event_bus.subscribe("clipboard_changed", self._event_listener)
-        event_bus.subscribe("file_system_changed", self._event_listener)
+        if self._event_source == "event_bus":
+            event_bus.subscribe("system_alert", self._event_listener)
+            event_bus.subscribe("window_focus_changed", self._event_listener)
+            event_bus.subscribe("clipboard_changed", self._event_listener)
+            event_bus.subscribe("file_system_changed", self._event_listener)
+        elif self._event_source == "stdin":
+            asyncio.create_task(self._stdin_reader())
         logger.info("ProactiveAgent: monitoring loop started")
 
         while self._is_monitoring:
@@ -53,10 +60,39 @@ class ProactiveAgent(SubAgentBase):
                     self._last_ambient_check = now
                     await self._check_ambient_state()
 
-                # Process queued events
+                # Process queued events with coalescing + per-type cooldown
                 try:
                     event = await asyncio.wait_for(self._event_queue.get(), timeout=30)
-                    logger.info(f"ProactiveAgent: event {event['event_type']} from {event['source']}")
+
+                    # Coalesce: drain any additional events that arrived within the debounce window
+                    await asyncio.sleep(self._debounce_window)
+                    coalesced = [event]
+                    while not self._event_queue.empty():
+                        try:
+                            coalesced.append(self._event_queue.get_nowait())
+                            self._event_queue.task_done()
+                        except asyncio.QueueEmpty:
+                            break
+
+                    # Pick the most significant event from the batch
+                    event = self._pick_event(coalesced)
+
+                    # Per-type cooldown check
+                    etype = event["event_type"]
+                    now = time.time()
+                    last = self._last_cooldown.get(etype, 0)
+                    if now - last < self._cooldown_secs.get(etype, 0):
+                        continue
+
+                    self._last_cooldown[etype] = now
+
+                    # Quick heuristic: skip LLM for low-significance events
+                    if not self._is_actionable(event):
+                        logger.info(f"ProactiveAgent: skipped {etype} ({len(coalesced)} coalesced) — not actionable")
+                        self._event_queue.task_done()
+                        continue
+
+                    logger.info(f"ProactiveAgent: event {etype} ({len(coalesced)} coalesced)")
                     await self._process_event(event)
                     self._event_queue.task_done()
                 except asyncio.TimeoutError:
@@ -96,9 +132,38 @@ class ProactiveAgent(SubAgentBase):
         except Exception as e:
             logger.debug(f"ProactiveAgent: ambient check error: {e}")
 
+    def _pick_event(self, events: list) -> dict:
+        """From a coalesced batch, return the most significant event."""
+        priority = {"system_alert": 3, "clipboard_changed": 2, "window_focus_changed": 1, "file_system_changed": 0}
+        return max(events, key=lambda e: (priority.get(e.get("event_type", ""), -1), e.get("timestamp", 0)))
+
+    async def _stdin_reader(self):
+        import sys, json
+        loop = asyncio.get_event_loop()
+        while self._is_monitoring:
+            try:
+                line = await loop.run_in_executor(None, sys.stdin.readline)
+                if not line:
+                    break
+                event = json.loads(line.strip())
+                await self._event_queue.put(event)
+            except json.JSONDecodeError:
+                continue
+            except Exception as e:
+                logger.error(f"ProactiveAgent: stdin read error: {e}")
+
+    def _is_actionable(self, event: dict) -> bool:
+        """Quick heuristic: skip LLM for low-significance events."""
+        etype = event["event_type"]
+        if etype == "system_alert":
+            return True
+        if etype in ("file_system_changed", "clipboard_changed"):
+            return False
+        return True
+
     async def _process_event(self, event: dict):
         """Decide whether to act on an event, and execute if warranted."""
-        system_prompt = build_system_prompt(agent_name=self.name, prompt_file="proactive.yaml")
+        system_prompt = build_system_prompt(agent_name=self.name, prompt_file="proactive")
 
         # Include current ambient state so the LLM has full context
         try:
@@ -118,7 +183,7 @@ class ProactiveAgent(SubAgentBase):
         ]
 
         try:
-            llm_result = await ollama_client.chat_stream(
+            llm_result = ollama_client.chat_stream(
                 messages=messages,
                 temperature=0.3,
                 reasoning_effort="medium",
@@ -138,8 +203,10 @@ class ProactiveAgent(SubAgentBase):
                         logger.info(f"ProactiveAgent: {tool} -> {result.get('success', False)}")
                     except Exception as exc:
                         logger.error(f"ProactiveAgent: {tool} failed: {exc}")
-            elif content and "NO_ACTION" not in content.upper():
-                self._tool("notify", title="F.R.I.D.A.Y.", message=content)
+            elif content and "NO_ACTION" not in content.upper() and len(content) < 200:
+                # Only notify for short natural-language messages, not unparseable plan dumps
+                if not any(c in content for c in ("|", "```", "BATCH_TOOL_PLAN", "Step", "|------")):
+                    self._tool("notify", title="F.R.I.D.A.Y.", message=content)
 
         except Exception as e:
             logger.error(f"ProactiveAgent: LLM call failed: {e}")

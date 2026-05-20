@@ -710,5 +710,38 @@
       },
       "required": ["goal"]
     }
+  },
+
+  "click_element": {
+    "stage": 5, "description": "Clicks a named UI element (button, tab, menu, checkbox) inside the active window using native Windows accessibility APIs.",
+    "input": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Text, regex, or name of the target UI element to click" },
+        "control_type": { "type": "string", "description": "Optional control type filter (e.g. 'Button', 'MenuItem', 'TabItem', 'CheckBox')" }
+      },
+      "required": ["text"]
+    }
+  },
+
+  "type_in_element": {
+    "stage": 5, "description": "Focuses a specific named text field or editor inside the active window and types text into it.",
+    "input": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Text box/editor name, label, or automation ID" },
+        "content": { "type": "string", "description": "Content to type into the field" },
+        "enter": { "type": "boolean", "description": "Press Enter after typing (default false)" }
+      },
+      "required": ["text", "content"]
+    }
+  },
+
+  "list_elements": {
+    "stage": 5, "description": "Lists all accessible, named UI elements and control types inside the active window to help target them.",
+    "input": {
+      "type": "object",
+      "properties": {}
+    }
   }
 }

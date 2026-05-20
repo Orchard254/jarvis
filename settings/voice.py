@@ -12,7 +12,7 @@ CONTINUOUS_MODE = get_env_bool("CONTINUOUS_MODE", False)
 
 TTS_ENGINE = get_env_str("TTS_ENGINE", "edge")
 TTS_ENABLED = get_env_bool("TTS_ENABLED", True)
-VOICE_ENABLED = False # Disabled for sandbox environment
+VOICE_ENABLED = get_env_bool("VOICE_ENABLED", False)
 DESKTOP_TOAST_ENABLED = get_env_bool("DESKTOP_TOAST_ENABLED", False)
 
 # Edge TTS

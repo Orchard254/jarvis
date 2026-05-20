@@ -12,7 +12,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
+def verify_action(tool_name: str, result: dict, expected: str = "", pre_img=None, post_img=None) -> dict:
     state = result.get("data", {})
 
     # Tier 0: result.success check
@@ -24,7 +24,7 @@ def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
         }
 
     # Tier 1: OS-level state verification (expected vs actual) for window/app tools
-    app_tools = {"open_app", "close_app", "focus_window", "switch_window", "launch"}
+    app_tools = {"open_app", "close_app", "focus_window"}
     if tool_name in app_tools:
         from verification.state_checks import verify_process_running, verify_window_visible
 
@@ -66,25 +66,35 @@ def verify_action(tool_name: str, result: dict, expected: str = "") -> dict:
             }
 
     # Tier 3: post-action state check for interaction tools
-    interaction_tools = {"click", "double_click", "right_click", "type_text", "press_keys"}
-    if tool_name in interaction_tools and expected:
-        from verification.state_checks import verify_window_visible
-        # If the expected outcome mentions a window that should appear/disappear,
-        # check its state
-        for prefix in ("close ", "kill ", "exit "):
-            if expected.lower().startswith(prefix):
-                target = expected[len(prefix):].strip().split()[0]
-                if verify_window_visible(target):
-                    return {
-                        "status": "FAILED",
-                        "method": "post_action_check",
-                        "summary": f"Action was to close '{target}' but window is still visible.",
-                    }
+    interaction_tools = {"click", "double_click", "right_click", "type_text", "press_keys", "click_element", "type_in_element"}
+    if tool_name in interaction_tools:
+        if pre_img is not None and post_img is not None:
+            from verification.visual_verifier import verify_visual_state
+            if not verify_visual_state(pre_img, post_img, tool_name):
                 return {
-                    "status": "CONFIRMED",
-                    "method": "post_action_check",
-                    "summary": f"Window '{target}' is no longer visible — action verified.",
+                    "status": "FAILED",
+                    "method": "visual_diff",
+                    "summary": "Visual verification detected no screen changes. Target element may have been obscured or coordinate was wrong."
                 }
+
+        if expected:
+            from verification.state_checks import verify_window_visible
+            # If the expected outcome mentions a window that should appear/disappear,
+            # check its state
+            for prefix in ("close ", "kill ", "exit "):
+                if expected.lower().startswith(prefix):
+                    target = expected[len(prefix):].strip().split()[0]
+                    if verify_window_visible(target):
+                        return {
+                            "status": "FAILED",
+                            "method": "post_action_check",
+                            "summary": f"Action was to close '{target}' but window is still visible.",
+                        }
+                    return {
+                        "status": "CONFIRMED",
+                        "method": "post_action_check",
+                        "summary": f"Window '{target}' is no longer visible — action verified.",
+                    }
 
     return {
         "status": "CONFIRMED",
@@ -100,19 +110,15 @@ _FAILURE_PATTERNS = re.compile(
 
 
 def _check_output_for_failures(result: dict) -> str:
-    """
-    Check the tool's own output and error fields for failure signals.
-    Returns a human-readable summary if failures found, or empty string if clean.
-    This avoids false positives from unrelated errors in the shared application log.
-    """
     try:
         outputs = []
 
-        error_field = result.get("error", "")
+        error_field = result.get("message", "")
         if error_field:
             outputs.append(error_field)
 
-        output_field = result.get("output", "")
+        data = result.get("data", {})
+        output_field = data.get("output", "") or data.get("result", "") or data.get("content", "")
         if output_field:
             outputs.append(output_field)
 

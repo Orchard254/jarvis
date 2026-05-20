@@ -11,7 +11,10 @@ TOOL_REGISTRY.
 """
 
 import json
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # ── Load tool schemas from JSON registry ──────────────────────────────────────
 _SCHEMAS_PATH = Path(__file__).parent / "schemas.json"
@@ -69,6 +72,17 @@ for name in _SCHEMA_REGISTRY:
     elif name == "execute_code":
         TOOL_REGISTRY[name] = execute_code
 
+# Warn at startup about any tools defined in schemas.json that have no
+# Python implementation — they will appear in the LLM's tool list but fail
+# with "Unknown tool" when called, which is very hard to debug at runtime.
+_missing_impls = set(_SCHEMA_REGISTRY) - set(TOOL_REGISTRY)
+if _missing_impls:
+    logger.warning(
+        "Tools declared in schemas.json with no registered implementation "
+        "(will return 'Unknown tool' if the LLM calls them): %s",
+        sorted(_missing_impls),
+    )
+
 
 # ── Merge custom drop-in tools ───────────────────────────────────────────────
 from tools.custom import get_custom_schemas, get_custom_tools
@@ -79,3 +93,15 @@ _CUSTOM_SCHEMAS = get_custom_schemas()
 if _CUSTOM_REGISTRY:
     TOOL_REGISTRY.update(_CUSTOM_REGISTRY)
     TOOL_SCHEMAS.extend(_CUSTOM_SCHEMAS)
+
+# Expose consolidated schemas (standard + custom) in schemas.json format for validation
+ALL_SCHEMAS = dict(_SCHEMA_REGISTRY)
+for custom_schema in _CUSTOM_SCHEMAS:
+    func_data = custom_schema.get("function", {})
+    name = func_data.get("name")
+    if name:
+        ALL_SCHEMAS[name] = {
+            "description": func_data.get("description", ""),
+            "input": func_data.get("parameters", {"type": "object", "properties": {}}),
+        }
+

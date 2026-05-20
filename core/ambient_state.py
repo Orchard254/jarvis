@@ -36,6 +36,7 @@ class AmbientState:
             # Window
             "active_window_title": None,
             "active_window_process": None,
+            "last_non_terminal_window": None,
             # Clipboard
             "clipboard_content": None,
             "clipboard_last_changed": None,
@@ -56,6 +57,24 @@ class AmbientState:
         self._data["current_time"] = datetime.now().isoformat()
         logger.info("AmbientState initialized")
 
+    def is_terminal_window(self, title: str) -> bool:
+        if not title:
+            return False
+        title_lower = title.lower()
+        terminal_keywords = [
+            "powershell",
+            "cmd.exe",
+            "command prompt",
+            "terminal",
+            "git bash",
+            "conhost",
+            "jarvis",
+            "pycmd",
+            "bash",
+            "wsl"
+        ]
+        return any(kw in title_lower for kw in terminal_keywords)
+
     # ── Setters (called by monitors) ────────────────────────────────────────
 
     def _refresh_active_window(self):
@@ -69,8 +88,7 @@ class AmbientState:
             user32.GetWindowTextW(hwnd, buf, length)
             title = buf.value
             if title and title != self._data.get("active_window_title"):
-                self._data["active_window_title"] = title
-                self._data["last_updated"] = time.time()
+                self.set("active_window_title", title)
         except Exception:
             pass
 
@@ -79,6 +97,9 @@ class AmbientState:
             if key not in ("current_time", "uptime_since"):
                 self._data["last_updated"] = time.time()
             self._data[key] = value
+            if key == "active_window_title" and value:
+                if not self.is_terminal_window(value):
+                    self._data["last_non_terminal_window"] = value
 
     def set_many(self, updates: dict):
         with self._lock:
@@ -86,6 +107,9 @@ class AmbientState:
                 if k not in ("current_time", "uptime_since"):
                     self._data["last_updated"] = time.time()
                 self._data[k] = v
+                if k == "active_window_title" and v:
+                    if not self.is_terminal_window(v):
+                        self._data["last_non_terminal_window"] = v
 
     # ── Getters ─────────────────────────────────────────────────────────────
 
@@ -95,8 +119,8 @@ class AmbientState:
 
     def snapshot(self) -> dict:
         """Return a copy of all current state."""
-        if not self._data.get("active_window_title"):
-            self._refresh_active_window()
+        self._refresh_active_window()
+        self._try_refresh_apps({})
         with self._lock:
             snap = dict(self._data)
             snap["current_time"] = datetime.now().isoformat()

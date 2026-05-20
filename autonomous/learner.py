@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 # Tools too dangerous for autonomous practice (write, destructive, communication)
 _DANGEROUS_TOOLS = {
     "shutdown", "restart", "lock_screen", "kill_process",
-    "delete_file", "write_file", "move_file", "create_file",
-    "execute_code", "run_python",
     "send_message", "speak",
     "write_clipboard",
     "manage_app", "query_system", "query_ui",  # intent-level stubs
@@ -42,18 +40,21 @@ _SAFE_DEFAULTS = {
     "target": "notepad",
     "title": "Untitled - Notepad",
     "text": "hello world",
-    "path": ".",
+    "path": "test_auto_learner.txt",
     "query": "python",
     "url": "https://example.com",
     "message": "auto-learner test",
     "action": "get_time",
     "what": "running_apps",
     "key": "test_key",
-    "source": "clipboard",
+    "source": "test_auto_source.txt",
+    "destination": "test_auto_dest.txt",
     "direction": "down",
     "clicks": 1,
     "x": 100,
     "y": 100,
+    "code": "print('hello from sandboxed auto-learner code practice!')",
+    "content": "hello from the auto-learner practice!",
 }
 
 
@@ -248,6 +249,54 @@ class AutoLearner:
 
         logger.info("Auto-learner: practicing '%s' with %s", tool, safe_params)
         try:
+            # Intercept dangerous execution and file-system tools and redirect them to the Digital Sandbox
+            if tool in ("execute_code", "run_python", "write_file", "create_file", "move_file", "delete_file"):
+                logger.info("Auto-learner: Intercepting '%s' and redirecting to the Digital Sandbox...", tool)
+                from tools.system.sandbox import execute_sandboxed
+                success = False
+                notes = ""
+                
+                if tool in ("execute_code", "run_python"):
+                    code_to_run = safe_params.get("code", "")
+                    lang = safe_params.get("language", "python") if tool == "execute_code" else "python"
+                    res = execute_sandboxed(code=code_to_run, language=lang, timeout=10)
+                    success = res.get("success", False)
+                    notes = f"[SANDBOX PRACTICE] stdout: {res.get('stdout', '').strip()[:100]} | stderr: {res.get('stderr', '').strip()[:100]}"
+                
+                elif tool == "write_file":
+                    path = safe_params.get("path", "test_file.txt")
+                    content = safe_params.get("content", "")
+                    code = f"import os\npath = {repr(path)}\ncontent = {repr(content)}\nos.makedirs(os.path.dirname(path) or '.', exist_ok=True)\nwith open(os.path.basename(path), 'w', encoding='utf-8') as f:\n    f.write(content)\nprint('WRITE_SUCCESS')"
+                    res = execute_sandboxed(code=code, language="python", timeout=10)
+                    success = res.get("success", False) and "WRITE_SUCCESS" in res.get("stdout", "")
+                    notes = f"[SANDBOX PRACTICE] {res.get('stdout', '').strip()[:150]}"
+                    
+                elif tool == "create_file":
+                    path = safe_params.get("path", "test_file.txt")
+                    code = f"import os\npath = {repr(path)}\nos.makedirs(os.path.dirname(path) or '.', exist_ok=True)\nwith open(os.path.basename(path), 'w') as f:\n    pass\nprint('CREATE_SUCCESS')"
+                    res = execute_sandboxed(code=code, language="python", timeout=10)
+                    success = res.get("success", False) and "CREATE_SUCCESS" in res.get("stdout", "")
+                    notes = f"[SANDBOX PRACTICE] {res.get('stdout', '').strip()[:150]}"
+                    
+                elif tool == "move_file":
+                    source = safe_params.get("source", "source.txt")
+                    destination = safe_params.get("destination", "dest.txt")
+                    code = f"import os, shutil\nsrc = os.path.basename({repr(source)})\ndst = os.path.basename({repr(destination)})\nwith open(src, 'w') as f:\n    f.write('dummy')\nshutil.move(src, dst)\nprint('MOVE_SUCCESS')"
+                    res = execute_sandboxed(code=code, language="python", timeout=10)
+                    success = res.get("success", False) and "MOVE_SUCCESS" in res.get("stdout", "")
+                    notes = f"[SANDBOX PRACTICE] {res.get('stdout', '').strip()[:150]}"
+                    
+                elif tool == "delete_file":
+                    path = safe_params.get("path", "test_file.txt")
+                    code = f"import os\npath = os.path.basename({repr(path)})\nwith open(path, 'w') as f:\n    f.write('dummy')\nos.remove(path)\nprint('DELETE_SUCCESS')"
+                    res = execute_sandboxed(code=code, language="python", timeout=10)
+                    success = res.get("success", False) and "DELETE_SUCCESS" in res.get("stdout", "")
+                    notes = f"[SANDBOX PRACTICE] {res.get('stdout', '').strip()[:150]}"
+                
+                self._record_result(tool, success, notes=notes)
+                return {"tool": tool, "practiced": True, "success": success, "notes": notes}
+            
+            # Non-dangerous tools proceed via normal tool execution
             result = self._tool_fn(tool, safe_params)
             success = result.get("success", False)
             notes = str(result.get("data", result.get("message", result.get("error", ""))))[:200]

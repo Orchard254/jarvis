@@ -14,7 +14,15 @@ try:
     import speech_recognition as sr
 
     _recognizer = sr.Recognizer()
-    _recognizer.dynamic_energy_threshold = False  # use fixed threshold from calibration
+    # Dynamic sensitivity calibration for adaptive background noise tracking
+    _recognizer.dynamic_energy_threshold = True
+    _recognizer.dynamic_energy_threshold_damping = 0.15
+    _recognizer.dynamic_energy_ratio = 1.5
+    
+    # Map configurable silence and threshold settings from .env
+    _recognizer.energy_threshold = settings.SILENCE_THRESHOLD
+    _recognizer.pause_threshold = settings.SILENCE_DURATION
+
     _stt_available = True
 except ImportError:
     _stt_available = False
@@ -95,6 +103,14 @@ def _capture(timeout: float, phrase_limit: int) -> tuple:
 def _transcribe(audio) -> str:
     """Try Google STT, fall back to Whisper local. Returns text or ''."""
     try:
+        # Apply mathematical DSP Speech Noise Reduction (High-pass + Noise-gate)
+        from perception.dsp import reduce_noise
+        cleaned_bytes = reduce_noise(audio.frame_data, audio.sample_rate, audio.sample_width)
+        audio = sr.AudioData(cleaned_bytes, audio.sample_rate, audio.sample_width)
+    except Exception as exc:
+        logger.warning(f"STT: failed to apply noise reduction filter — {exc}")
+
+    try:
         text = _recognizer.recognize_google(audio, language=STT_LANGUAGE)
         logger.info(f"STT: '{text}'")
         return text.strip()
@@ -120,6 +136,7 @@ def listen(timeout: float = 5.0) -> str:
     audio, err = _capture(timeout, 10)
     if err:
         return ""
+    print("⚙️ [TRANSCRIBING...]")
     return _transcribe(audio)
 
 
@@ -134,6 +151,7 @@ def transcribe_once(timeout: float = 10.0) -> str:
     audio, err = _capture(timeout, 15)
     if err:
         return ""
+    print("⚙️ [TRANSCRIBING...]")
     return _transcribe(audio)
 
 

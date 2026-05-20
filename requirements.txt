@@ -15,6 +15,7 @@ pywin32
 psutil
 pillow
 win10toast
+uiautomation
 
 # Voice I/O
 SpeechRecognition

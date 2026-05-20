@@ -18,10 +18,17 @@ class FileSystemEventPublisher(FileSystemEventHandler):
         self.main_loop = main_loop
 
     def on_any_event(self, event):
-        # Ignore events from the logs directory to prevent excessive logging
         import os
-        logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs")
-        if event.src_path.startswith(logs_dir) or event.src_path.endswith("memory.db") or event.src_path.endswith("memory.db-wal") or "__pycache__" in event.src_path:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        logs_dir = os.path.join(root, "logs")
+        IGNORED = [
+            logs_dir, "__pycache__", ".git", ".chroma",
+            ".db-journal", ".db-wal", ".db-shm",
+            "chroma.sqlite3", "header.bin", "data_level0.bin",
+            "length.bin", "link_lists.bin",
+            "recall_db", "pc_index.db",
+        ]
+        if any(pat in event.src_path for pat in IGNORED):
             return
         logger.info(f"File system event: {event.event_type} - {event.src_path}")
 

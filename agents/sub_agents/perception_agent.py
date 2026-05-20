@@ -85,6 +85,44 @@ class PerceptionAgent(SubAgentBase):
             ctx["region"] = {"left": 0, "top": 0, "width": 1920, "height": 80}
             self._log.info(f"Using default tab bar region: {ctx['region']}")
 
+        # Phase 0.5 — Native UI Tree (100% accurate, fast)
+        native_elements = []
+        skip_native = "read_ui_tree" in failed_approaches
+        if not skip_native:
+            self._log.info(f"[{task.task_id}] Trying native read_ui_tree...")
+            rt_params = {"window_title": target_window} if target_window else {}
+            ok_rt, rt_res = self._tool_ok("read_ui_tree", **rt_params)
+            tool_log.append({"tool": "read_ui_tree", **rt_res})
+            if ok_rt and rt_res.get("elements"):
+                native_elements = rt_res["elements"]
+                self._record_approach(task_type, "read_ui_tree", True)
+                self._log.info(f"[{task.task_id}] Native UI tree found {len(native_elements)} elements.")
+                
+                # If we have a specific search term, try to filter immediately
+                search_text = ctx.get("search_text") or self._extract_search_term(goal)
+                if search_text:
+                    matches = [e for e in native_elements if search_text.lower() in e.get("text", "").lower()]
+                    if matches:
+                        return SubAgentResult(
+                            success=True,
+                            summary=f"Found {len(matches)} exact native match(es) for '{search_text}'.",
+                            data={"source": "native_tree", "elements": matches, "active_window": target_window or ""},
+                            tool_calls=tool_log,
+                            elapsed_s=round(time.time() - start, 2),
+                            agent_name=self.name,
+                        )
+                # If no specific search text, but we got a lot of elements, we can just return them all
+                return SubAgentResult(
+                    success=True,
+                    summary=f"Native UI scan retrieved {len(native_elements)} interactable elements.",
+                    data={"source": "native_tree", "elements": native_elements, "active_window": target_window or ""},
+                    tool_calls=tool_log,
+                    elapsed_s=round(time.time() - start, 2),
+                    agent_name=self.name,
+                )
+            else:
+                self._record_approach(task_type, "read_ui_tree", False, "no elements or unsupported window")
+
         # Phase 1 — vision_query with gemma3 (best effort)
         # Skip vision if it has failed before for this task type
         skip_vision = "vision_query" in failed_approaches

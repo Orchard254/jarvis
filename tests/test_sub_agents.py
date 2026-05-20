@@ -85,3 +85,20 @@ def test_memory_agent():
     result = agent.run(task)
     assert isinstance(result, SubAgentResult)
     assert isinstance(result.success, bool)
+
+
+def test_system_agent_auto_detection():
+    agent = _make_agent("system")
+    task1 = SubAgentTask(goal="Set system volume to 40 percent")
+    result1 = agent.run(task1)
+    assert result1.success is True
+    assert len(result1.tool_calls) > 0
+    assert result1.tool_calls[0]["tool"] == "set_volume"
+    assert result1.tool_calls[0]["level"] == 40
+
+    task2 = SubAgentTask(goal="Change brightness to 80")
+    result2 = agent.run(task2)
+    assert result2.success is True
+    assert len(result2.tool_calls) > 0
+    assert result2.tool_calls[0]["tool"] == "set_brightness"
+    assert result2.tool_calls[0]["level"] == 80
