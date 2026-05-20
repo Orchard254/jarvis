@@ -13,12 +13,13 @@ from settings import ITERATION_CAPS, MAX_CONTEXT_TOKENS, TOOL_LOOP_HISTORY_MESSA
 from brain import ollama_client
 from brain.context_manager import prune_history
 from brain.prompt_builder import build_system_prompt, build_state_context, get_pruned_schemas
-from brain.response_parser import parse_batch_plan, validate_tool_calls
+from brain.response_parser import parse_batch_plan, parse_intent_plan, validate_tool_calls
 from brain.structured_log import (
     loop_complete as _log_complete,
     loop_iteration as _log_iteration,
 )
 from brain.tool_result_cache import get_cache
+from brain.intent_engine import run_intents
 from agents.execution import run_native_tool_calls, run_plan
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,16 @@ def _build_auto_memory_context(user_input: str) -> str:
     This runs on every turn so FRIDAY always "knows" the user without being asked.
     """
     lines: list[str] = []
+
+    # ── Ambient state (always-on computer awareness) ─────────────────────────
+    try:
+        from core.ambient_state import get_state
+        ambient = get_state()
+        ctx = ambient.format_context()
+        if ctx:
+            lines.append(ctx)
+    except Exception as e:
+        logger.debug(f"auto_memory: ambient state unavailable — {e}")
 
     # ── Semantic preferences ────────────────────────────────────────────────
     try:
@@ -245,6 +256,46 @@ def run(
                 )
         else:
             logger.info("Jarvis response: no native tool_calls")
+
+        # Try INTENT_PLAN first, then BATCH_TOOL_PLAN, then native tool_calls
+        intent_plan, intent_err = parse_intent_plan(content)
+        if intent_plan:
+            logger.info(
+                f"INTENT_PLAN: {json.dumps(intent_plan, default=str)[:500]}"
+            )
+            messages.append({"role": "assistant", "content": content})
+
+            intent_result = run_intents(
+                intent_plan.get("intents", []),
+                execute_fn,
+                verify_fn,
+                user_input,
+                tool_log,
+            )
+
+            directive = (
+                f"The intent engine executed your plan and returned:\n{intent_result.summary}\n\n"
+                "Summarize results for the user. Cite specific findings, errors, and next steps."
+            )
+            messages.append({"role": "user", "content": directive})
+            _tool_count = len(tool_log) - _tool_count_before
+            _log_iteration(
+                iteration, _llm_latency, _tool_count, intent_result.success
+            )
+            continue
+
+        if intent_err:
+            messages.append({"role": "assistant", "content": content})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Your INTENT_PLAN could not be parsed: {intent_err}\n\n"
+                        "Fix the JSON and output a corrected INTENT_PLAN."
+                    ),
+                }
+            )
+            continue
 
         batch_plan, plan_err = parse_batch_plan(content, _tool_names)
         if batch_plan:

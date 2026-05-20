@@ -180,6 +180,9 @@ def focus_window(**kwargs) -> dict:
                 import ctypes
                 hwnd = target._hWnd
                 ctypes.windll.user32.BringWindowToTop(hwnd)
+                # SwitchToThisWindow is less restricted than SetForegroundWindow
+                # and works across UIPI boundaries on modern Windows.
+                ctypes.windll.user32.SwitchToThisWindow(hwnd, True)
                 ctypes.windll.user32.SetForegroundWindow(hwnd)
             except Exception:
                 pass
@@ -1520,3 +1523,57 @@ def restart(**kwargs) -> dict:
         return {"success": True, "status": "restart scheduled in 10 seconds"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ── Intent-level tool routers (forward BATCH_TOOL_PLAN calls to concrete tools) ─
+
+def manage_app(**kwargs) -> dict:
+    """Route manage_app to the right tool based on action param."""
+    action = (kwargs.get("action") or "").lower()
+    name = kwargs.get("name", "")
+    from tools import TOOL_REGISTRY
+    if action == "open":
+        fn = TOOL_REGISTRY.get("open_app")
+        return fn(name=name) if fn else {"success": False, "error": "open_app not registered"}
+    if action == "close":
+        fn = TOOL_REGISTRY.get("close_app")
+        return fn(name=name) if fn else {"success": False, "error": "close_app not registered"}
+    if action == "focus":
+        fn = TOOL_REGISTRY.get("focus_window")
+        return fn(title=name) if fn else {"success": False, "error": "focus_window not registered"}
+    if action == "list" or name in ("running", "running_apps", "processes"):
+        fn = TOOL_REGISTRY.get("list_running_apps")
+        return fn() if fn else {"success": False, "error": "list_running_apps not registered"}
+    return {"success": False, "error": f"manage_app: unknown action '{action}'"}
+
+
+def query_system(**kwargs) -> dict:
+    """Route query_system to the right info tool based on 'what' param."""
+    what = (kwargs.get("what") or "").lower()
+    from tools import TOOL_REGISTRY
+    if what in ("running_apps", "processes", "apps"):
+        fn = TOOL_REGISTRY.get("list_running_apps")
+        return fn() if fn else {"success": False, "error": "list_running_apps not registered"}
+    if what in ("battery", "power"):
+        fn = TOOL_REGISTRY.get("get_battery")
+        return fn() if fn else {"success": False, "error": "get_battery not registered"}
+    if what in ("stats", "system", "cpu", "memory", "ram", "disk"):
+        fn = TOOL_REGISTRY.get("get_system_stats")
+        return fn() if fn else {"success": False, "error": "get_system_stats not registered"}
+    if what in ("time", "date", "calendar"):
+        fn = TOOL_REGISTRY.get("time_calendar")
+        return fn(action=what) if fn else {"success": False, "error": "time_calendar not registered"}
+    if what in ("active_window", "window", "foreground"):
+        fn = TOOL_REGISTRY.get("get_active_window")
+        return fn() if fn else {"success": False, "error": "get_active_window not registered"}
+    return {"success": False, "error": f"query_system: unknown query '{what}'"}
+
+
+def query_ui(**kwargs) -> dict:
+    """Route query_ui to vision/screen analysis."""
+    from tools import TOOL_REGISTRY
+    goal = kwargs.get("goal", "")
+    fn = TOOL_REGISTRY.get("vision_query")
+    if fn:
+        return fn(question=goal)
+    return {"success": False, "error": "vision_query not registered"}

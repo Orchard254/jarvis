@@ -145,6 +145,19 @@ class PerceptionAgent(SubAgentBase):
             du_params["search_text"] = search_text
         element_type = ctx.get("element_type")
         if element_type:
+            # Map invalid element types to valid ones
+            VALID = {"button", "text", "input", "tab", "all"}
+            ET_MAP = {
+                "toggle": "button", "radio": "button", "checkbox": "button",
+                "switch": "button", "slider": "button", "dropdown": "button",
+                "list": "text", "label": "text", "paragraph": "text",
+                "field": "input", "textbox": "input", "search": "input",
+                "dialog": "all", "window": "all", "panel": "all",
+            }
+            if element_type not in VALID:
+                mapped = ET_MAP.get(element_type.lower(), "all")
+                self._log.info(f"[{task.task_id}] mapping element_type '{element_type}' -> '{mapped}'")
+                element_type = mapped
             du_params["element_type"] = element_type
         if region:
             du_params["region"] = region
@@ -203,8 +216,8 @@ class PerceptionAgent(SubAgentBase):
     @staticmethod
     def _extract_window(goal: str) -> str:
         patterns = [
+            r"(?:the\s+)?['\"]?([A-Z]\w+(?:[\s-][A-Z]\w+)*)['\"]?\s+(?:window|app|application|browser|editor|terminal|dialog)",
             r"\b(?:in|on|of|inside)\s+(?:the\s+)?['\"]?([A-Z]\w+(?:[\s-][A-Z]\w+)*)['\"]?",
-            r"(?:the\s+)?['\"]?([A-Z]\w+(?:[\s-][A-Z]\w+)*)['\"]?\s+(?:window|app|application|browser|editor|terminal)",
             r"([A-Z]\w+)\s+(?:window|tab|editor)\s+(?:is|shows|has|displays)",
             r"([A-Z]\w+)\s+(?:tabs?|tab\s+bar|tab\s+strip)",
         ]

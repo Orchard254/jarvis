@@ -148,6 +148,8 @@ def _monitor_loop(main_loop: asyncio.AbstractEventLoop):
     logger.info("ambient_monitor: loop started")
     if _psutil is not None:
         _psutil.cpu_percent(interval=None)
+    from core.ambient_state import get_state
+    ambient = get_state()
 
     while not _stop_event.is_set():
         now = time.time()
@@ -167,5 +169,26 @@ def _monitor_loop(main_loop: asyncio.AbstractEventLoop):
             _check_disk(main_loop)
         except Exception:
             pass
+
+        # Update ambient state with current system readings
+        try:
+            if _psutil is not None:
+                ambient.set_many({
+                    "cpu_percent": _psutil.cpu_percent(interval=None),
+                    "ram_percent": _psutil.virtual_memory().percent,
+                    "ram_free_mb": _psutil.virtual_memory().available // (1024 ** 2),
+                })
+                root = "C:\\" if platform.system() == "Windows" else "/"
+                try:
+                    du = _psutil.disk_usage(root)
+                    ambient.set_many({"disk_percent": du.percent, "disk_free_gb": du.free / (1024 ** 3)})
+                except Exception:
+                    pass
+                battery = _psutil.sensors_battery()
+                if battery is not None:
+                    ambient.set_many({"battery_percent": battery.percent, "battery_plugged": bool(battery.power_plugged)})
+        except Exception:
+            pass
+
         _stop_event.wait(MONITOR_INTERVAL)
     logger.info("ambient_monitor: loop stopped")

@@ -95,6 +95,16 @@ class InteractionAgent(SubAgentBase):
             if action:
                 actions = [action]
 
+        # Accept bare x/y from context as a click action
+        if not actions:
+            x = ctx.get("x")
+            y = ctx.get("y")
+            if x is not None and y is not None:
+                try:
+                    actions = [{"tool": "click", "params": {"x": int(x), "y": int(y)}}]
+                except (ValueError, TypeError):
+                    pass
+
         if not actions:
             return SubAgentResult(
                 success=False,

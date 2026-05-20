@@ -95,6 +95,78 @@ def _validate_batch_plan(plan: dict, valid_tool_names: set) -> tuple:
     return plan, None
 
 
+def _validate_intent_plan(plan: dict) -> tuple:
+    """Validate a parsed INTENT_PLAN dict. Returns (plan, None) or (None, error_str)."""
+    intents = plan.get("intents", [])
+    if not intents or not isinstance(intents, list):
+        return None, "INTENT_PLAN missing 'intents' array"
+
+    for i, intent in enumerate(intents):
+        if not isinstance(intent, dict):
+            return None, f"intents[{i}] is not an object"
+        action = intent.get("action")
+        if not isinstance(action, str) or not action.strip():
+            return None, f"intents[{i}]: missing or empty 'action'"
+        params = intent.get("params", {})
+        if not isinstance(params, dict):
+            return None, f"intents[{i}]: 'params' must be an object"
+
+    plan.setdefault("execution_policy", "sequential")
+    return plan, None
+
+
+def _looks_like_intent_plan(obj) -> bool:
+    if not isinstance(obj, dict):
+        return False
+    intents = obj.get("intents")
+    if not isinstance(intents, list) or not intents:
+        return False
+    if not isinstance(intents[0], dict):
+        return False
+    if not isinstance(intents[0].get("action"), str):
+        return False
+    return True
+
+
+def parse_intent_plan(content: str) -> tuple:
+    """
+    Extract and validate an INTENT_PLAN from LLM response text.
+
+    Format: INTENT_PLAN {"intents": [{"action": "...", "params": {...}}], "execution": "sequential"}
+
+    Returns (plan_dict | None, error_str | None).
+    """
+    if not content:
+        return None, None
+
+    idx = content.find("INTENT_PLAN")
+    if idx >= 0:
+        json_start = idx + len("INTENT_PLAN")
+        while json_start < len(content) and content[json_start] in (' ', '\t', '\n', '\r'):
+            json_start += 1
+        parsed = _parse_json_object(content, json_start)
+        if parsed:
+            plan, _ = parsed
+            return _validate_intent_plan(plan)
+        return None, "Invalid INTENT_PLAN JSON"
+
+    search_start = 0
+    while search_start < len(content):
+        brace_pos = content.find('{', search_start)
+        if brace_pos < 0:
+            break
+        parsed = _parse_json_object(content, brace_pos)
+        if parsed is not None:
+            plan, end = parsed
+            if _looks_like_intent_plan(plan):
+                return _validate_intent_plan(plan)
+            search_start = end
+        else:
+            search_start = brace_pos + 1
+
+    return None, None
+
+
 def parse_batch_plan(content: str, valid_tool_names: set) -> tuple:
     """
     Extract and validate a BATCH_TOOL_PLAN from LLM response text.

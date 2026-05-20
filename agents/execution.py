@@ -20,6 +20,7 @@ from brain.structured_log import (
     tool_call as _log_tool_call,
 )
 from brain.tool_result_cache import ToolResultCache
+from safety.reflexes import wrap as wrap_reflex
 
 logger = logging.getLogger(__name__)
 
@@ -381,11 +382,12 @@ def _execute_single_call(
     verification = {}
     last_error = None
 
+    _reflex_execute = wrap_reflex(execute_fn)
     for attempt in range(1, MAX_CALL_RETRIES + 1):
         logger.info(f"Batch {iteration}: calling {tool_name} (call_idx={call_idx}, attempt={attempt})")
         _t0 = time.time()
         print(f"  🔧 {tool_name}...", end="", flush=True)
-        result = execute_fn(tool_name, args)
+        result = _reflex_execute(tool_name, args)
         _elapsed = (time.time() - _t0) * 1000
         ok_str = "✓" if result.get("success") else "✗"
         print(f"\r  🔧 {tool_name} {ok_str}" + " " * 10, flush=True)

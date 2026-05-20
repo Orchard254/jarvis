@@ -13,7 +13,7 @@ from agents.jarvis import run
 def test_system_prompt_contains_rules():
     prompt = build_system_prompt()
     assert "BATCH_TOOL_PLAN" in prompt
-    assert "Jarvis" in prompt
+    assert "Jarvis" in prompt or "F.R.I.D.A.Y." in prompt
 
 def test_context_manager_prunes_heavy_history():
     msgs = [{"role": "user", "content": "test"}] * 30

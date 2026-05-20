@@ -17,6 +17,8 @@ import settings
 from core.event_bus import event_bus
 from autonomous.approval_gate import ApprovalGate
 from autonomous.scheduler import Scheduler
+from autonomous.learner import AutoLearner
+
 from agents.jarvis import run as tool_loop_run
 from agents.base_agent import SubAgentTask
 from safety import executor as safety
@@ -27,7 +29,7 @@ from tools import TOOL_REGISTRY
 from indexer.state_monitor import read_pc_state
 from verification.verifier import verify_action
 
-from core.classifier import classify, is_special_command
+from core.classifier import is_special_command
 from core.console import cli_input
 from core.reporter import report
 from core.system_state import SystemState
@@ -48,6 +50,15 @@ class Orchestrator:
         self._history_hydrated = False
         self._scheduler = Scheduler(self.handle)
         self._scheduler.start()
+
+        self._learner = AutoLearner(
+            TOOL_REGISTRY, self._execute_wrapper,
+            idle_threshold_minutes=settings.AUTO_LEARNER_IDLE_MINUTES,
+            min_practice_interval_minutes=settings.AUTO_LEARNER_INTERVAL_MINUTES,
+        )
+        if settings.ENABLE_AUTO_LEARNER:
+            self._learner.start()
+
         self.running = True
 
         self.event_bus = event_bus
@@ -100,10 +111,18 @@ class Orchestrator:
             from autonomous import file_system_monitor
             import os
             jarvis_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            file_system_monitor.start(asyncio.get_running_loop(), path=jarvis_path) # Monitor the project directory
+            file_system_monitor.start(asyncio.get_running_loop(), path=jarvis_path)
             atexit.register(file_system_monitor.stop)
         except Exception:
             logger.warning("File system monitor unavailable")
+
+        # Start Window Monitor
+        try:
+            from autonomous import window_monitor
+            window_monitor.start(asyncio.get_running_loop())
+            atexit.register(window_monitor.stop)
+        except Exception:
+            logger.warning("Window monitor unavailable")
 
         self._history_hydrated = False
 
@@ -159,16 +178,6 @@ class Orchestrator:
             return "\n".join(f"{t.id}: {t.name} - {t.status.value} ({t.progress}%)" for t in active)
         return None
 
-    def _handle_simple_intent(self, text: str) -> str | None:
-        intent = classify(text)
-        if intent is None:
-            return None
-        logger.info(f"Classifier matched: {intent.label}")
-        result = self._execute_wrapper(intent.tool_name, intent.args)
-        if result.get("success"):
-            return intent.format_result(result)
-        return None
-
     # ── Main entry point ──────────────────────────────────────────────────
 
     def handle(self, user_input: str) -> str:
@@ -181,11 +190,6 @@ class Orchestrator:
                 self._update_history(user_input, special)
                 return special
 
-            simple = self._handle_simple_intent(text)
-            if simple is not None:
-                self._update_history(user_input, simple)
-                return simple
-
             if self._memory:
                 self._memory.write_episodic("command", command_text=user_input)
 
@@ -193,12 +197,30 @@ class Orchestrator:
             if settings.ENABLE_SKILLS:
                 match = search_by_intent(text)
                 if match and match.get("skill_id"):
-                    skill_hint = (
-                        f"Saved skill found for intent '{text}':\n"
-                        f"  code: {match.get('code', '')[:500]}\n"
-                        f"  language: {match.get('language', 'python')}\n"
-                        f"Execute this code via execute_code — do NOT assume it already ran."
-                    )
+                    code = match.get("code", "")
+                    language = match.get("language", "python")
+                    try:
+                        skill_result = self._execute_wrapper(
+                            "execute_code",
+                            {"code": code, "language": language, "timeout": 30},
+                        )
+                        if skill_result and skill_result.get("success"):
+                            skill_hint = (
+                                f"✅ Auto-ran saved skill for intent '{text}' ({language}):\n"
+                                f"  result: {str(skill_result.get('stdout', skill_result.get('result', '')))[:500]}"
+                            )
+                        else:
+                            skill_hint = (
+                                f"⚠ Saved skill for intent '{text}' failed:\n"
+                                f"  error: {skill_result.get('error', 'unknown')[:300]}\n"
+                                f"  code: {code[:300]}"
+                            )
+                    except Exception as e:
+                        skill_hint = (
+                            f"⚠ Saved skill for intent '{text}' raised exception:\n"
+                            f"  error: {e}\n"
+                            f"  code: {code[:300]}"
+                        )
                     memory_context = f"{skill_hint}\n\n{memory_context}" if memory_context else skill_hint
 
             # Run tool loop with a timeout guard

@@ -35,6 +35,8 @@ def stop() -> dict:
 def _monitor_loop(main_loop: asyncio.AbstractEventLoop):
     global _last_clipboard_content
     logger.info("clipboard_monitor: loop started")
+    from core.ambient_state import get_state
+    ambient = get_state()
     while not _stop_event.is_set():
         try:
             current_clipboard_content = pyperclip.paste()
@@ -42,6 +44,7 @@ def _monitor_loop(main_loop: asyncio.AbstractEventLoop):
             if current_clipboard_content and current_clipboard_content != _last_clipboard_content:
                 logger.info(f"Clipboard content changed.")
                 event_payload = {"content": current_clipboard_content}
+                ambient.set("clipboard_content", current_clipboard_content)
                 asyncio.run_coroutine_threadsafe(event_bus.publish("clipboard_changed", event_payload, "clipboard_monitor"), main_loop)
                 _last_clipboard_content = current_clipboard_content
         except Exception as e:

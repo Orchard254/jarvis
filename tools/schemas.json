@@ -22,7 +22,7 @@
     }
   },
   "focus_window": {
-    "stage": 1, "description": "Bring a window to the foreground by title or process name",
+    "stage": 5, "description": "Bring a window to the foreground by title or process name",
     "input": {
       "type": "object",
       "properties": {
@@ -103,7 +103,7 @@
     }
   },
   "read_screen": {
-    "stage": 1, "description": "Extract visible text from the screen via OCR",
+    "stage": 5, "description": "Extract visible text from the screen via OCR",
     "input": {
       "type": "object",
       "properties": {
@@ -113,7 +113,7 @@
     }
   },
   "click": {
-    "stage": 1, "description": "Click at screen coordinates or on a UI element",
+    "stage": 5, "description": "Click at screen coordinates or on a UI element",
     "input": {
       "type": "object",
       "properties": {
@@ -125,7 +125,7 @@
     }
   },
   "double_click": {
-    "stage": 1, "description": "Double-click at screen coordinates",
+    "stage": 5, "description": "Double-click at screen coordinates",
     "input": {
       "type": "object",
       "properties": {
@@ -136,7 +136,7 @@
     }
   },
   "right_click": {
-    "stage": 1, "description": "Right-click at screen coordinates",
+    "stage": 5, "description": "Right-click at screen coordinates",
     "input": {
       "type": "object",
       "properties": {
@@ -147,7 +147,7 @@
     }
   },
   "move_mouse": {
-    "stage": 1, "description": "Move the mouse cursor to screen coordinates",
+    "stage": 5, "description": "Move the mouse cursor to screen coordinates",
     "input": {
       "type": "object",
       "properties": {
@@ -159,7 +159,7 @@
     }
   },
   "drag": {
-    "stage": 1, "description": "Drag the mouse from one point to another (click-hold-move-release)",
+    "stage": 5, "description": "Drag the mouse from one point to another (click-hold-move-release)",
     "input": {
       "type": "object",
       "properties": {
@@ -173,7 +173,7 @@
     }
   },
   "type_text": {
-    "stage": 1, "description": "Type text into the currently focused window",
+    "stage": 5, "description": "Type text into the currently focused window",
     "input": {
       "type": "object",
       "properties": {
@@ -184,7 +184,7 @@
     }
   },
   "press_keys": {
-    "stage": 1, "description": "Press keyboard shortcuts (e.g. Ctrl+C, Alt+Tab)",
+    "stage": 5, "description": "Press keyboard shortcuts (e.g. Ctrl+C, Alt+Tab)",
     "input": {
       "type": "object",
       "properties": {
@@ -322,7 +322,7 @@
     }
   },
   "detect_ui_elements": {
-    "stage": 3, "description": "Detect UI elements on screen via OCR. Returns bounding boxes and center_x/center_y for each element — pass center_x/center_y directly to click(). Use vision_query for images/icons.",
+    "stage": 5, "description": "Detect UI elements on screen via OCR. Returns bounding boxes and center_x/center_y for each element — pass center_x/center_y directly to click(). Use vision_query for images/icons.",
     "input": {
       "type": "object",
       "properties": {
@@ -558,7 +558,7 @@
   },
 
   "vision_query": {
-    "stage": 3, "description": "Capture the screen and ask gemma3:27b a visual question about what it shows. Use this when you need to read UI text, detect dialogs, find element positions, or describe visual content.",
+    "stage": 5, "description": "Capture the screen and ask gemma3:27b a visual question about what it shows. Use this when you need to read UI text, detect dialogs, find element positions, or describe visual content.",
     "input": {
       "type": "object",
       "properties": {
@@ -675,6 +675,40 @@
         "timeout_ms": { "type": "integer", "description": "Max time to wait for the condition (defaults to 2x ms)." }
       },
       "required": []
+    }
+  },
+
+  "manage_app": {
+    "stage": 1, "description": "Manage an application window: open, close, focus, clear, or clear_and_close. Handles safety (focus, retry) internally.",
+    "input": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Application name (e.g. 'Notepad', 'Chrome')" },
+        "action": { "type": "string", "enum": ["open", "close", "focus", "clear", "clear_and_close"], "description": "Action to perform" }
+      },
+      "required": ["name", "action"]
+    }
+  },
+
+  "query_system": {
+    "stage": 1, "description": "Query system information: battery, stats, time, date, active_window, running_apps.",
+    "input": {
+      "type": "object",
+      "properties": {
+        "what": { "type": "string", "description": "What to query: 'battery', 'stats', 'time', 'date', 'active_window', 'running_apps'" }
+      },
+      "required": ["what"]
+    }
+  },
+
+  "query_ui": {
+    "stage": 1, "description": "Analyze what's on screen. Pass a question about the UI, dialogs, text, or element positions.",
+    "input": {
+      "type": "object",
+      "properties": {
+        "goal": { "type": "string", "description": "What to look for on screen (e.g. 'Is there a save dialog?', 'Find the search box coordinates')" }
+      },
+      "required": ["goal"]
     }
   }
 }
